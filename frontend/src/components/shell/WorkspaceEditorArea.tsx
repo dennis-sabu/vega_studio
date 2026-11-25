@@ -53,6 +53,8 @@ import type {
   EditorSettings,
 } from "@/types/editor";
 import type { OpenFileTab } from "@/types/explorer";
+import type { AIContextAttachment } from "@/types/ai";
+import type { OpenCodeContextAttachment } from "@/types/opencode";
 import type { WorkspaceSummary } from "@/types/project";
 import type { CenterTabId, ShellLayoutState } from "@/types/shell";
 
@@ -95,6 +97,15 @@ interface WorkspaceEditorAreaProps {
   onToggleBottomPanel: () => void;
   onToggleRightPanel: () => void;
   onOpenHome: () => void;
+  onSendContextToAI?: (
+    ctx: OpenCodeContextAttachment,
+    suggestedPrompt?: string
+  ) => void;
+  onAskNativeAi?: (
+    ctx: AIContextAttachment,
+    suggestedPrompt?: string
+  ) => void;
+  onRegisterEditorHandle?: (handle: MonacoEditorHandle | null) => void;
 }
 
 const TAB_META: Record<
@@ -155,8 +166,18 @@ export function WorkspaceEditorArea({
   onToggleBottomPanel,
   onToggleRightPanel,
   onOpenHome,
+  onSendContextToAI,
+  onAskNativeAi,
+  onRegisterEditorHandle,
 }: WorkspaceEditorAreaProps) {
   const monacoHandleRef = useRef<MonacoEditorHandle | null>(null);
+  const attachMonacoRef = useCallback(
+    (inst: MonacoEditorHandle | null) => {
+      monacoHandleRef.current = inst;
+      onRegisterEditorHandle?.(inst);
+    },
+    [onRegisterEditorHandle]
+  );
   const [tabMenu, setTabMenu] = useState<TabContextMenuState | null>(null);
   const [statusData, setStatusData] = useState<StatusResponse | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
@@ -691,7 +712,7 @@ export function WorkspaceEditorArea({
           ) : (
             <div className="relative flex min-h-0 flex-1 flex-col">
               <MonacoEditorSurface
-                ref={monacoHandleRef}
+                ref={attachMonacoRef}
                 activeTab={activeFileTab}
                 settings={editorSettings}
                 pendingReveal={pendingReveal}
@@ -699,6 +720,8 @@ export function WorkspaceEditorArea({
                 onCursorChange={onCursorChange}
                 onSaveShortcut={(uid) => void onSaveFileTab(uid)}
                 onConsumeReveal={onConsumeReveal}
+                onSendContextToAI={onSendContextToAI}
+                onAskNativeAi={onAskNativeAi}
               />
               {activeFileTab.loading && (
                 <div className="absolute inset-0 z-20 flex items-center justify-center gap-2.5 bg-[#06070c]/88 text-xs text-[#e8ebf7]/70 backdrop-blur-[2px]">

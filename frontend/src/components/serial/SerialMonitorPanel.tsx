@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Send,
   SlidersHorizontal,
+  Sparkles,
   Stethoscope,
   Trash2,
   Unplug,
@@ -72,6 +73,7 @@ interface SerialMonitorPanelProps {
   onClearOutput: () => void;
   onClearError: () => void;
   onOpenSdkDoctor: () => void;
+  onAnalyzeSerialInAi?: (recentLinesText: string, portLabel: string) => void;
 }
 
 const LOG_TIME = new Intl.DateTimeFormat(undefined, {
@@ -167,6 +169,7 @@ export function SerialMonitorPanel({
   onClearOutput,
   onClearError,
   onOpenSdkDoctor,
+  onAnalyzeSerialInAi,
 }: SerialMonitorPanelProps) {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [showFramingBar, setShowFramingBar] = useState(false);
@@ -453,6 +456,33 @@ export function SerialMonitorPanel({
               <span>Clear</span>
             </button>
           </Tooltip>
+
+          {onAnalyzeSerialInAi && (
+            <Tooltip
+              label="Send last 35 serial lines to Native VEGA AI"
+              side="top"
+            >
+              <button
+                type="button"
+                disabled={logs.length === 0}
+                onClick={() => {
+                  const recent = logs
+                    .slice(-35)
+                    .map((l) => `[${l.stream}] ${l.text}`)
+                    .join("\n")
+                    .slice(0, 6000);
+                  onAnalyzeSerialInAi(
+                    recent,
+                    activePort || selectedPort || "UART"
+                  );
+                }}
+                className="inline-flex h-6 items-center gap-1 rounded border border-[#7aa2ff]/30 bg-[#7aa2ff]/12 px-2 font-mono text-[10px] text-[#e8ebf7] hover:bg-[#7aa2ff]/22 disabled:opacity-40"
+              >
+                <Sparkles className="h-2.5 w-2.5 text-[#7aa2ff]" />
+                <span className="hidden md:inline">Analyze AI</span>
+              </button>
+            </Tooltip>
+          )}
         </div>
       </div>
 

@@ -9,17 +9,23 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.routers import ai as ai_router
 from app.routers import boards as boards_router
 from app.routers import build as build_router
 from app.routers import explorer as explorer_router
 from app.routers import git as git_router
+from app.routers import github as github_router
 from app.routers import health as health_router
+from app.routers import opencode as opencode_router
 from app.routers import projects as projects_router
 from app.routers import sdk as sdk_router
 from app.routers import serial as serial_router
 from app.routers import terminal as terminal_router
 from app.routers import upload as upload_router
+from app.services.ai_service import get_ai_service
 from app.services.build_service import get_build_service
+from app.services.github_service import get_github_service
+from app.services.opencode_service import get_opencode_service
 from app.services.serial_service import get_serial_service
 from app.services.terminal_service import get_terminal_service
 from app.services.upload_service import get_upload_service
@@ -44,6 +50,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     get_upload_service().shutdown()
     get_serial_service().shutdown()
     get_terminal_service().shutdown()
+    get_github_service().shutdown()
+    get_opencode_service().shutdown()
+    get_ai_service().shutdown()
     logger.info("VEGA Studio Backend shutting down")
 
 
@@ -75,6 +84,9 @@ def create_app() -> FastAPI:
     application.include_router(serial_router.router)
     application.include_router(terminal_router.router)
     application.include_router(git_router.router)
+    application.include_router(github_router.router)
+    application.include_router(opencode_router.router)
+    application.include_router(ai_router.router)
 
     return application
 

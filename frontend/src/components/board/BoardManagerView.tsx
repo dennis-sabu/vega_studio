@@ -118,7 +118,7 @@ export function BoardManagerView({
   const CompatIcon = compatStyle?.icon ?? HelpCheckFallback;
 
   return (
-    <div className="h-full overflow-y-auto px-5 py-5">
+    <div className="vega-scroll h-full overflow-y-auto px-5 py-5">
       <div className="mx-auto max-w-5xl space-y-5">
         {/* Header Card */}
         <section className="rounded-2xl border border-white/[0.08] bg-[#0d0f18]/85 p-5 shadow-[0_14px_38px_rgba(0,0,0,0.38)] backdrop-blur-md">

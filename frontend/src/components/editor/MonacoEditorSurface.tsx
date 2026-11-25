@@ -24,12 +24,21 @@ import type {
   EditorSettings,
 } from "@/types/editor";
 import type { OpenFileTab } from "@/types/explorer";
+import type { AICodeApplyMode, AIContextAttachment } from "@/types/ai";
+import type { OpenCodeContextAttachment } from "@/types/opencode";
 
 export interface MonacoEditorHandle {
   triggerFind: () => void;
   triggerReplace: () => void;
   focusEditor: () => void;
   syncDirtyState: (uid: string) => void;
+  getSelectionSnippet: () => {
+    text: string;
+    startLine: number;
+    endLine: number;
+  } | null;
+  getFullText: () => string | null;
+  applyCodeEdit: (mode: AICodeApplyMode, code: string) => boolean;
 }
 
 interface MonacoEditorSurfaceProps {
@@ -40,6 +49,14 @@ interface MonacoEditorSurfaceProps {
   onCursorChange: (pos: EditorCursorPosition) => void;
   onSaveShortcut: (uid: string) => void;
   onConsumeReveal?: (nonce: number) => void;
+  onSendContextToAI?: (
+    ctx: OpenCodeContextAttachment,
+    suggestedPrompt?: string
+  ) => void;
+  onAskNativeAi?: (
+    ctx: AIContextAttachment,
+    suggestedPrompt?: string
+  ) => void;
 }
 
 export const MonacoEditorSurface = forwardRef<
@@ -54,6 +71,8 @@ export const MonacoEditorSurface = forwardRef<
     onCursorChange,
     onSaveShortcut,
     onConsumeReveal,
+    onSendContextToAI,
+    onAskNativeAi,
   },
   ref
 ) {
@@ -67,15 +86,21 @@ export const MonacoEditorSurface = forwardRef<
   const [initializing, setInitializing] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
 
+  const activeTabRef = useRef(activeTab);
   const onDirtyChangeRef = useRef(onDirtyChange);
   const onCursorChangeRef = useRef(onCursorChange);
   const onSaveShortcutRef = useRef(onSaveShortcut);
   const onConsumeRevealRef = useRef(onConsumeReveal);
+  const onSendContextToAIRef = useRef(onSendContextToAI);
+  const onAskNativeAiRef = useRef(onAskNativeAi);
   useEffect(() => {
+    activeTabRef.current = activeTab;
     onDirtyChangeRef.current = onDirtyChange;
     onCursorChangeRef.current = onCursorChange;
     onSaveShortcutRef.current = onSaveShortcut;
     onConsumeRevealRef.current = onConsumeReveal;
+    onSendContextToAIRef.current = onSendContextToAI;
+    onAskNativeAiRef.current = onAskNativeAi;
   });
 
   useImperativeHandle(
@@ -99,6 +124,49 @@ export const MonacoEditorSurface = forwardRef<
       syncDirtyState(uid: string) {
         onDirtyChangeRef.current(uid, isTabModelDirty(uid));
       },
+      getSelectionSnippet() {
+        const editor = editorRef.current;
+        const model = editor?.getModel();
+        const sel = editor?.getSelection();
+        if (!editor || !model || !sel || sel.isEmpty()) return null;
+        return {
+          text: model.getValueInRange(sel),
+          startLine: sel.startLineNumber,
+          endLine: sel.endLineNumber,
+        };
+      },
+      getFullText() {
+        const editor = editorRef.current;
+        return editor?.getModel()?.getValue() ?? null;
+      },
+      applyCodeEdit(mode: AICodeApplyMode, code: string) {
+        const editor = editorRef.current;
+        const model = editor?.getModel();
+        if (!editor || !model) return false;
+        let range: MonacoType.IRange;
+        if (mode === "replace_file") {
+          range = model.getFullModelRange();
+        } else if (mode === "replace_selection") {
+          const sel = editor.getSelection();
+          if (!sel || sel.isEmpty()) return false;
+          range = sel;
+        } else {
+          const pos = editor.getPosition() ?? { lineNumber: 1, column: 1 };
+          range = {
+            startLineNumber: pos.lineNumber,
+            startColumn: pos.column,
+            endLineNumber: pos.lineNumber,
+            endColumn: pos.column,
+          };
+        }
+        editor.pushUndoStop();
+        const ok = editor.executeEdits("vega-native-ai", [
+          { range, text: code, forceMoveMarkers: true },
+        ]);
+        editor.pushUndoStop();
+        editor.focus();
+        return ok;
+      },
     }),
     []
   );
@@ -111,6 +179,7 @@ export const MonacoEditorSurface = forwardRef<
 
     let cursorDisposable: MonacoType.IDisposable | null = null;
     let selectionDisposable: MonacoType.IDisposable | null = null;
+    const actionDisposables: MonacoType.IDisposable[] = [];
     let resizeObserver: ResizeObserver | null = null;
     let rafLayoutId: number | null = null;
 
@@ -165,6 +234,143 @@ export const MonacoEditorSurface = forwardRef<
           }
         });
 
+        const buildSelectionAttachment = () => {
+          const tab = activeTabRef.current;
+          const model = editor.getModel();
+          const sel = editor.getSelection();
+          if (!tab || !model || !sel || sel.isEmpty()) return null;
+          const raw = model.getValueInRange(sel);
+          const truncated = raw.length > 4000;
+          const snippet = truncated ? raw.slice(0, 4000) : raw;
+          return {
+            kind: "selection" as const,
+            title: `${tab.name}:${sel.startLineNumber}-${sel.endLineNumber}`,
+            relative_path: tab.path,
+            start_line: sel.startLineNumber,
+            end_line: sel.endLineNumber,
+            language: tab.monacoLanguage || tab.language || null,
+            snippet,
+            truncated,
+          };
+        };
+
+        actionDisposables.push(
+          editor.addAction({
+            id: "vega.opencode.explainSelection",
+            label: "Explain Selection in OpenCode",
+            precondition: "editorHasSelection",
+            contextMenuGroupId: "9_cutcopypaste",
+            contextMenuOrder: 10,
+            run: () => {
+              const ctx = buildSelectionAttachment();
+              if (ctx) {
+                onSendContextToAIRef.current?.(
+                  ctx,
+                  `Explain this selection from ${ctx.relative_path ?? ctx.title}:`
+                );
+              }
+            },
+          }),
+          editor.addAction({
+            id: "vega.opencode.fixSelection",
+            label: "Fix Selection in OpenCode",
+            precondition: "editorHasSelection",
+            contextMenuGroupId: "9_cutcopypaste",
+            contextMenuOrder: 11,
+            run: () => {
+              const ctx = buildSelectionAttachment();
+              if (ctx) {
+                onSendContextToAIRef.current?.(
+                  ctx,
+                  `Review and suggest a fix for this code in ${ctx.relative_path ?? ctx.title}:`
+                );
+              }
+            },
+          }),
+          editor.addAction({
+            id: "vega.opencode.sendFile",
+            label: "Send File to OpenCode",
+            contextMenuGroupId: "9_cutcopypaste",
+            contextMenuOrder: 12,
+            run: () => {
+              const tab = activeTabRef.current;
+              const model = editor.getModel();
+              if (!tab || !model) return;
+              const raw = model.getValue();
+              const truncated = raw.length > 4000;
+              const snippet = truncated ? raw.slice(0, 4000) : raw;
+              onSendContextToAIRef.current?.(
+                {
+                  kind: "file",
+                  title: tab.name,
+                  relative_path: tab.path,
+                  language: tab.monacoLanguage || tab.language || null,
+                  snippet,
+                  truncated,
+                },
+                `Inspect ${tab.path}:`
+              );
+            },
+          }),
+          editor.addAction({
+            id: "vega.nativeAi.explainSelection",
+            label: "Explain Selection (Native VEGA AI)",
+            precondition: "editorHasSelection",
+            contextMenuGroupId: "9_cutcopypaste",
+            contextMenuOrder: 14,
+            run: () => {
+              const ctx = buildSelectionAttachment();
+              if (ctx) {
+                onAskNativeAiRef.current?.(
+                  ctx,
+                  `Explain this selection from ${ctx.relative_path ?? ctx.title} in the context of VEGA firmware:`
+                );
+              }
+            },
+          }),
+          editor.addAction({
+            id: "vega.nativeAi.fixSelection",
+            label: "Review / Suggest Fix (Native VEGA AI)",
+            precondition: "editorHasSelection",
+            contextMenuGroupId: "9_cutcopypaste",
+            contextMenuOrder: 15,
+            run: () => {
+              const ctx = buildSelectionAttachment();
+              if (ctx) {
+                onAskNativeAiRef.current?.(
+                  ctx,
+                  `Review and suggest embedded C/RISC-V fixes for this selection in ${ctx.relative_path ?? ctx.title}:`
+                );
+              }
+            },
+          }),
+          editor.addAction({
+            id: "vega.nativeAi.askFile",
+            label: "Ask Native VEGA AI about File",
+            contextMenuGroupId: "9_cutcopypaste",
+            contextMenuOrder: 16,
+            run: () => {
+              const tab = activeTabRef.current;
+              const model = editor.getModel();
+              if (!tab || !model) return;
+              const raw = model.getValue();
+              const truncated = raw.length > 6000;
+              const snippet = truncated ? raw.slice(0, 6000) : raw;
+              onAskNativeAiRef.current?.(
+                {
+                  kind: "file",
+                  title: tab.name,
+                  relative_path: tab.path,
+                  language: tab.monacoLanguage || tab.language || null,
+                  snippet,
+                  truncated,
+                },
+                `Analyze ${tab.path} for VEGA firmware development:`
+              );
+            },
+          })
+        );
+
         const emitCursor = () => {
           const pos = editor.getPosition();
           const sel = editor.getSelection();
@@ -209,6 +415,7 @@ export const MonacoEditorSurface = forwardRef<
       resizeObserver?.disconnect();
       cursorDisposable?.dispose();
       selectionDisposable?.dispose();
+      for (const d of actionDisposables) d.dispose();
       contentListenerRef.current?.dispose();
       contentListenerRef.current = null;
 

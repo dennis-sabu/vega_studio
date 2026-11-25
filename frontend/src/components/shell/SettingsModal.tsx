@@ -3,6 +3,7 @@
 import type { ComponentProps } from "react";
 import { useEffect, useState } from "react";
 import {
+  Bot,
   Cpu,
   SlidersHorizontal,
   Sparkles,
@@ -10,6 +11,8 @@ import {
   Type,
   X,
 } from "lucide-react";
+import { AiProviderSettingsPanel } from "@/components/ai/AiProviderSettingsPanel";
+import { OpenCodeSettingsPanel } from "@/components/opencode/OpenCodeSettingsPanel";
 import { SdkConfigForm } from "@/components/sdk/SdkConfigForm";
 import {
   SegmentedPill,
@@ -23,7 +26,7 @@ import {
 } from "@/lib/glyphAnimalsEngine";
 import type { EditorSettings } from "@/types/editor";
 
-export type SettingsCategory = "appearance" | "editor" | "sdk";
+export type SettingsCategory = "appearance" | "editor" | "sdk" | "ai" | "opencode";
 
 interface SettingsModalProps {
   open: boolean;
@@ -32,6 +35,8 @@ interface SettingsModalProps {
   tweaks: AtmosphereTweaks;
   editorSettings: EditorSettings;
   sdkConfigProps: ComponentProps<typeof SdkConfigForm>;
+  aiConfigProps: ComponentProps<typeof AiProviderSettingsPanel>;
+  opencodeConfigProps: ComponentProps<typeof OpenCodeSettingsPanel>;
   onClose: () => void;
   onSpeciesChange: (species: SpeciesKey) => void;
   onTweaksChange: (partial: Partial<AtmosphereTweaks>) => void;
@@ -202,7 +207,6 @@ const GLASS_SLIDERS: SliderSpec[] = [
 
 const FUTURE_SETTINGS_SECTIONS = [
   { label: "Board & Serial", phase: "Phases 7–9", icon: Cpu },
-  { label: "AI & OpenCode", phase: "Phases 12–13", icon: Sparkles },
 ];
 
 export function SettingsModal({
@@ -212,6 +216,8 @@ export function SettingsModal({
   tweaks,
   editorSettings,
   sdkConfigProps,
+  aiConfigProps,
+  opencodeConfigProps,
   onClose,
   onSpeciesChange,
   onTweaksChange,
@@ -355,6 +361,10 @@ export function SettingsModal({
                   onResetEditorSettings();
                 } else if (activeCategory === "sdk") {
                   void sdkConfigProps.onReset();
+                } else if (activeCategory === "ai") {
+                  void aiConfigProps.onResetConfig();
+                } else if (activeCategory === "opencode") {
+                  void opencodeConfigProps.onReset();
                 } else {
                   onResetTweaks();
                 }
@@ -434,6 +444,38 @@ export function SettingsModal({
                 <span>SDK &amp; Toolchain</span>
               </button>
 
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmReset(false);
+                  setActiveCategory("ai");
+                }}
+                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+                  activeCategory === "ai"
+                    ? "bg-white/10 text-[#e8ebf7]"
+                    : "text-[#e8ebf7]/60 hover:bg-white/[0.05] hover:text-[#e8ebf7]"
+                }`}
+              >
+                <Bot className="h-3.5 w-3.5 text-[#7aa2ff]" />
+                <span>Native VEGA AI</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmReset(false);
+                  setActiveCategory("opencode");
+                }}
+                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+                  activeCategory === "opencode"
+                    ? "bg-white/10 text-[#e8ebf7]"
+                    : "text-[#e8ebf7]/60 hover:bg-white/[0.05] hover:text-[#e8ebf7]"
+                }`}
+              >
+                <Sparkles className="h-3.5 w-3.5 text-[#7aa2ff]" />
+                <span>AI &amp; OpenCode</span>
+              </button>
+
               {FUTURE_SETTINGS_SECTIONS.map(({ label, phase, icon: Icon }) => (
                 <button
                   key={label}
@@ -456,7 +498,7 @@ export function SettingsModal({
             <p className="px-2 font-mono text-[10px] leading-relaxed text-[#e8ebf7]/35">
               {activeCategory === "editor"
                 ? "Applies immediately to all open code editor tabs."
-                : activeCategory === "sdk"
+                : activeCategory === "sdk" || activeCategory === "ai" || activeCategory === "opencode"
                 ? "Persisted in local app storage across IDE restarts."
                 : "Double-click any slider name to reset it."}
             </p>
@@ -464,7 +506,11 @@ export function SettingsModal({
 
           {/* Right Customization Content */}
           <div className="vega-scroll flex-1 space-y-4 overflow-y-auto p-5">
-            {activeCategory === "sdk" ? (
+            {activeCategory === "ai" ? (
+              <AiProviderSettingsPanel {...aiConfigProps} />
+            ) : activeCategory === "opencode" ? (
+              <OpenCodeSettingsPanel {...opencodeConfigProps} />
+            ) : activeCategory === "sdk" ? (
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#7aa2ff]/20 bg-[#7aa2ff]/[0.07] px-4 py-3">
                   <div>
@@ -732,6 +778,10 @@ export function SettingsModal({
               ? "Editor preferences save locally and apply immediately"
               : activeCategory === "sdk"
               ? "VEGA SDK settings persist in application data directory"
+              : activeCategory === "ai"
+              ? "API keys are stored securely in OS Credential Store — never SQLite"
+              : activeCategory === "opencode"
+              ? "OpenCode configuration persists in application data directory"
               : hoveredHint ??
                 "Hover a slider for details · Double-click a label to reset"}
           </span>

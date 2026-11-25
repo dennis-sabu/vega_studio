@@ -1,8 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AiCodeApplyModal } from "@/components/ai/AiCodeApplyModal";
+import type { MonacoEditorHandle } from "@/components/editor/MonacoEditorSurface";
 import { UnsavedChangesDialog } from "@/components/editor/UnsavedChangesDialog";
 import { GitConfirmDialog } from "@/components/git/GitConfirmDialog";
+import { GitHubConfirmDialog } from "@/components/git/GitHubConfirmDialog";
 import { NewProjectDialog } from "@/components/project/NewProjectDialog";
 import { OpenProjectDialog } from "@/components/project/OpenProjectDialog";
 import { AppToolbar } from "@/components/shell/AppToolbar";
@@ -30,6 +33,9 @@ import { useEditorSettings } from "@/hooks/useEditorSettings";
 import { useEditorTabs } from "@/hooks/useEditorTabs";
 import { useFileExplorer } from "@/hooks/useFileExplorer";
 import { useGitIntegration } from "@/hooks/useGitIntegration";
+import { useGitHubIntegration } from "@/hooks/useGitHubIntegration";
+import { useNativeAi } from "@/hooks/useNativeAi";
+import { useOpenCode } from "@/hooks/useOpenCode";
 import { useSdkDoctor } from "@/hooks/useSdkDoctor";
 import { useSerialMonitor } from "@/hooks/useSerialMonitor";
 import { useTerminalManager } from "@/hooks/useTerminalManager";
@@ -49,7 +55,12 @@ import {
   type AtmosphereTweaks,
   type SpeciesKey,
 } from "@/lib/glyphAnimalsEngine";
-import type { BuildOperation } from "@/types/build";
+import type {
+  AIContextAttachment,
+  PendingCodeApplyProposal,
+} from "@/types/ai";
+import type { BuildDiagnostic, BuildOperation } from "@/types/build";
+import type { OpenCodeContextAttachment } from "@/types/opencode";
 import type { CreateProjectPayload } from "@/types/project";
 import type { ShellLogEntry } from "@/types/shell";
 
@@ -112,6 +123,7 @@ export function IdeShell() {
   } = useShellLayout();
 
   const canvasRef = useRef<GlyphAnimalsCanvasHandle | null>(null);
+  const monacoBridgeRef = useRef<MonacoEditorHandle | null>(null);
   const [species, setSpecies] = useState<SpeciesKey>("moths");
   const [tweaks, setTweaks] = useState<AtmosphereTweaks>(
     () => SPECIES_MAP.moths.defaults
@@ -124,6 +136,11 @@ export function IdeShell() {
   const [openProjectOpen, setOpenProjectOpen] = useState(false);
   const [composerFocused, setComposerFocused] = useState(false);
   const [confirmUploadNonce, setConfirmUploadNonce] = useState(0);
+  const [pendingCodeApply, setPendingCodeApply] = useState<{
+    proposal: PendingCodeApplyProposal;
+    selectionText: string | null;
+    fileText: string | null;
+  } | null>(null);
 
   const [logs, setLogs] = useState<ShellLogEntry[]>(() => [
     createLogEntry(
@@ -285,6 +302,236 @@ export function IdeShell() {
     },
     onLog: (level, message) => appendLog("SHELL", level, message),
   });
+
+  const githubIntegration = useGitHubIntegration({
+    projectDir: workspace.activeProject?.project_dir ?? null,
+    enabled: isConnected,
+    onRefreshGit: () => {
+      void gitIntegration.refreshAll();
+      void explorer.refreshAll();
+      for (const tab of editorTabs.openFileTabs) {
+        if (!tab.isDirty) {
+          void editorTabs.reloadTabFromDisk(tab.uid);
+        }
+      }
+    },
+    onLog: (message) => appendLog("SHELL", "info", message),
+  });
+
+  const openCodeAgent = useOpenCode({
+    projectDir: workspace.activeProject?.project_dir ?? null,
+    isBackendConnected: isConnected,
+    onLog: (level, message) => appendLog("SHELL", level, message),
+    onAfterSessionComplete: () => {
+      void explorer.refreshAll();
+      void gitIntegration.refreshAll();
+      for (const tab of editorTabs.openFileTabs) {
+        if (!tab.isDirty) {
+          void editorTabs.reloadTabFromDisk(tab.uid);
+        }
+      }
+    },
+  });
+
+  const sendContextToOpenCode = useCallback(
+    (ctx: OpenCodeContextAttachment, suggestedPrompt?: string) => {
+      openCodeAgent.addContext(ctx);
+      if (suggestedPrompt && !openCodeAgent.draftPrompt.trim()) {
+        openCodeAgent.setDraftPrompt(suggestedPrompt);
+      }
+      setComposerFocused(false);
+      setSettingsOpen(false);
+      setMode("workspace");
+      setRightTab("opencode");
+    },
+    [openCodeAgent, setMode, setRightTab]
+  );
+
+  const handleExplainDiagnostic = useCallback(
+    (diag: BuildDiagnostic) => {
+      const location = diag.relative_path
+        ? `${diag.relative_path}${diag.line ? `:${diag.line}` : ""}`
+        : "Build Diagnostic";
+      sendContextToOpenCode(
+        {
+          kind: "build_error",
+          title: `${diag.severity.toUpperCase()} in ${location}`,
+          relative_path: diag.relative_path,
+          start_line: diag.line,
+          end_line: diag.line,
+          snippet: diag.raw_line || diag.message,
+        },
+        `Explain and help fix this ${diag.severity}: ${diag.message}`
+      );
+    },
+    [sendContextToOpenCode]
+  );
+
+  const nativeAi = useNativeAi({
+    projectDir: workspace.activeProject?.project_dir ?? null,
+    isBackendConnected: isConnected,
+    onLog: (level, message) => appendLog("SHELL", level, message),
+  });
+
+  const registerEditorHandle = useCallback((h: MonacoEditorHandle | null) => {
+    monacoBridgeRef.current = h;
+  }, []);
+
+  const askNativeAiWithContext = useCallback(
+    (ctx: AIContextAttachment, suggestedPrompt?: string) => {
+      nativeAi.addAttachment(ctx);
+      if (suggestedPrompt && !nativeAi.draftPrompt.trim()) {
+        nativeAi.setDraftPrompt(suggestedPrompt);
+      }
+      setComposerFocused(false);
+      setSettingsOpen(false);
+      setMode("workspace");
+      setRightTab("native-ai");
+    },
+    [nativeAi, setMode, setRightTab]
+  );
+
+  const handleExplainDiagnosticNativeAi = useCallback(
+    (diag: BuildDiagnostic) => {
+      const location = diag.relative_path
+        ? `${diag.relative_path}${diag.line ? `:${diag.line}` : ""}`
+        : "Build Diagnostic";
+      askNativeAiWithContext(
+        {
+          kind: "build_error",
+          title: `${diag.severity.toUpperCase()} in ${location}`,
+          relative_path: diag.relative_path,
+          start_line: diag.line,
+          end_line: diag.line,
+          snippet: diag.raw_line || diag.message,
+        },
+        `Explain and help fix this ${diag.severity} for VEGA firmware: ${diag.message}`
+      );
+    },
+    [askNativeAiWithContext]
+  );
+
+  const handleDebugBuildNativeAi = useCallback(() => {
+    const diags = buildSystem.diagnostics
+      .slice(0, 10)
+      .map(
+        (d) =>
+          `[${d.severity}] ${d.relative_path ?? d.file_path ?? "?"}:${d.line ?? "?"} ${d.message}`
+      )
+      .join("\n");
+    const tailLog = buildSystem.logs
+      .slice(-30)
+      .map((l) => l.text)
+      .join("\n");
+    const snippet = [diags, tailLog].filter(Boolean).join("\n\n---\n").slice(0, 6500);
+    askNativeAiWithContext(
+      {
+        kind: "build_output",
+        title: `Build ${buildSystem.latestBuild?.status ?? "failure"} diagnostics`,
+        snippet: snippet || "Build failed with no diagnostic lines captured.",
+      },
+      "Analyze this VEGA firmware build failure and suggest what to check or fix."
+    );
+  }, [askNativeAiWithContext, buildSystem.diagnostics, buildSystem.latestBuild, buildSystem.logs]);
+
+  const handleAnalyzeSerialAi = useCallback(
+    (recentLinesText: string, portLabel: string) => {
+      askNativeAiWithContext(
+        {
+          kind: "serial_output",
+          title: `Serial (${portLabel})`,
+          snippet: recentLinesText,
+        },
+        `Analyze this USB-UART serial output from ${portLabel} on VEGA ARIES V3:`
+      );
+    },
+    [askNativeAiWithContext]
+  );
+
+  const handleAnalyzeTerminalAi = useCallback(
+    (selectedText: string, sessionLabel: string) => {
+      askNativeAiWithContext(
+        {
+          kind: "terminal_output",
+          title: `Terminal: ${sessionLabel}`,
+          snippet: selectedText,
+        },
+        "Analyze this selected terminal output in the context of our VEGA project:"
+      );
+    },
+    [askNativeAiWithContext]
+  );
+
+  const attachActiveFileToAi = useCallback(() => {
+    const tabPath = editorTabs.activeFileTabPath;
+    if (!tabPath) return;
+    const tab = editorTabs.openFileTabs.find((t) => t.path === tabPath);
+    const content = monacoBridgeRef.current?.getFullText() ?? tab?.savedContent ?? "";
+    const truncated = content.length > 6000;
+    nativeAi.addAttachment({
+      kind: "file",
+      title: tab?.name ?? tabPath,
+      relative_path: tabPath,
+      language: tab?.monacoLanguage || tab?.language || null,
+      snippet: truncated ? content.slice(0, 6000) : content,
+      truncated,
+    });
+  }, [editorTabs.activeFileTabPath, editorTabs.openFileTabs, nativeAi]);
+
+  const attachSelectionToAi = useCallback(() => {
+    const tabPath = editorTabs.activeFileTabPath;
+    const sel = monacoBridgeRef.current?.getSelectionSnippet();
+    if (!tabPath || !sel) return;
+    const tab = editorTabs.openFileTabs.find((t) => t.path === tabPath);
+    const truncated = sel.text.length > 6000;
+    nativeAi.addAttachment({
+      kind: "selection",
+      title: `${tab?.name ?? tabPath}:${sel.startLine}-${sel.endLine}`,
+      relative_path: tabPath,
+      start_line: sel.startLine,
+      end_line: sel.endLine,
+      language: tab?.monacoLanguage || tab?.language || null,
+      snippet: truncated ? sel.text.slice(0, 6000) : sel.text,
+      truncated,
+    });
+  }, [editorTabs.activeFileTabPath, editorTabs.openFileTabs, nativeAi]);
+
+  const attachBuildErrorsToAi = useCallback(() => {
+    const snippet = buildSystem.diagnostics
+      .slice(0, 12)
+      .map(
+        (d) =>
+          `[${d.severity}] ${d.relative_path ?? d.file_path ?? "?"}:${d.line ?? "?"} ${d.message}`
+      )
+      .join("\n");
+    if (!snippet) return;
+    nativeAi.addAttachment({
+      kind: "build_error",
+      title: `Build Diagnostics (${buildSystem.diagnostics.length})`,
+      snippet,
+    });
+  }, [buildSystem.diagnostics, nativeAi]);
+
+  const attachProjectSummaryToAi = useCallback(() => {
+    const proj = workspace.activeProject;
+    if (!proj) return;
+    const board = boardManager.projectBoardStatus?.board;
+    const summaryText = [
+      `Project: ${proj.project.name}`,
+      `Target: board=${proj.project.target.board ?? "unset"}, arch=${proj.project.target.arch}, machine=${proj.project.target.machine}`,
+      board
+        ? `Board Specs: ${board.name} (${board.core}, ${board.cpu_frequency_mhz}MHz, ${board.sram_kb}KB SRAM, sensors: ${board.sensors.join(", ")})`
+        : "",
+      `SDK Overall: ${sdkDoctor.report?.overall_status ?? "not checked"}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    nativeAi.addAttachment({
+      kind: "project_summary",
+      title: `${proj.project.name} Board & SDK`,
+      snippet: summaryText,
+    });
+  }, [boardManager.projectBoardStatus, nativeAi, sdkDoctor.report, workspace.activeProject]);
 
   const openSettingsCategory = useCallback((cat: SettingsCategory) => {
     setSettingsCategory(cat);
@@ -743,6 +990,40 @@ export function IdeShell() {
                       void gitIntegration.loadMoreHistory(),
                     onClearFeedback: gitIntegration.clearFeedback,
                     onOpenProject: openOpenProjectDialog,
+                    githubProps: {
+                      status: githubIntegration.status,
+                      loading: githubIntegration.loading,
+                      actionPending: githubIntegration.actionPending,
+                      error: githubIntegration.error,
+                      notice: githubIntegration.notice,
+                      remoteRepoDetail: githubIntegration.remoteRepoDetail,
+                      loadingRemoteRepoDetail:
+                        githubIntegration.loadingRemoteRepoDetail,
+                      onClearFeedback: githubIntegration.clearFeedback,
+                      onRefreshStatus: () =>
+                        void githubIntegration.refreshStatus(),
+                      onSignInWithGitHub: (proto) =>
+                        void githubIntegration.signInWithGitHub(proto),
+                      onCancelOperation: () =>
+                        void githubIntegration.cancelOperation(),
+                      onAddRemote: githubIntegration.addRemote,
+                      onRequestUpdateRemote:
+                        githubIntegration.requestUpdateRemote,
+                      onRequestRemoveRemote:
+                        githubIntegration.requestRemoveRemote,
+                      onRequestCreateRepo:
+                        githubIntegration.requestCreateRepo,
+                      onRequestPublish: () =>
+                        void githubIntegration.requestPublish(),
+                      onFetchRemote: (remote) =>
+                        void githubIntegration.fetchRemote(remote),
+                      onRequestPull: (remote) =>
+                        void githubIntegration.requestPull(remote),
+                      onRequestPush: (remote) =>
+                        void githubIntegration.requestPush(remote),
+                      onInspectRemoteInfo: (remote) =>
+                        void githubIntegration.inspectRemoteInfo(remote),
+                    },
                   }}
                   sdkReport={sdkDoctor.report}
                   sdkRunning={sdkDoctor.runningDiagnostics}
@@ -893,6 +1174,9 @@ export function IdeShell() {
                   onToggleBottomPanel={toggleBottomPanel}
                   onToggleRightPanel={toggleRightPanel}
                   onOpenHome={() => setMode("home")}
+                  onSendContextToAI={sendContextToOpenCode}
+                  onAskNativeAi={askNativeAiWithContext}
+                  onRegisterEditorHandle={registerEditorHandle}
                 />
               )}
 
@@ -936,6 +1220,7 @@ export function IdeShell() {
                       onOpenDiagnosticsTab: () => setBottomTab("diagnostics"),
                       onOpenSdkDoctor: openSdkDoctor,
                       onOpenBoardManager: openBoardManager,
+                      onDebugWithNativeAi: handleDebugBuildNativeAi,
                     }}
                     terminalPanelProps={{
                       isBackendConnected: isConnected,
@@ -972,6 +1257,7 @@ export function IdeShell() {
                       onSyncSession: terminalManager.syncSessionSummary,
                       onUpdateCwd: terminalManager.updateSessionCwd,
                       onClearError: terminalManager.clearError,
+                      onAnalyzeSelectionInAi: handleAnalyzeTerminalAi,
                     }}
                     uploadPanelProps={{
                       hasActiveProject: Boolean(workspace.activeProject),
@@ -1049,6 +1335,7 @@ export function IdeShell() {
                       onClearOutput: () => void serialMonitor.clearOutput(),
                       onClearError: serialMonitor.clearError,
                       onOpenSdkDoctor: openSdkDoctor,
+                      onAnalyzeSerialInAi: handleAnalyzeSerialAi,
                     }}
                     buildDiagnostics={buildSystem.diagnostics}
                     onSelectTab={setBottomTab}
@@ -1056,6 +1343,8 @@ export function IdeShell() {
                     onCollapse={toggleBottomPanel}
                     onClearLogs={() => setLogs([])}
                     onOpenDiagnosticLocation={handleOpenDiagnosticLocation}
+                    onExplainDiagnostic={handleExplainDiagnostic}
+                    onExplainDiagnosticNativeAi={handleExplainDiagnosticNativeAi}
                     onOpenSdkDoctor={openSdkDoctor}
                   />
                 </>
@@ -1080,6 +1369,109 @@ export function IdeShell() {
                   width={effectiveDimensions.rightPanelWidth}
                   onSelectTab={setRightTab}
                   onCollapse={toggleRightPanel}
+                  nativeAiProps={{
+                    activeProject: workspace.activeProject,
+                    activeBoardId: boardManager.activeProjectBoardId,
+                    activeFilePath: editorTabs.activeFileTabPath,
+                    hasSelection: editorTabs.cursorPosition.selectionLength > 0,
+                    hasBuildDiagnostics: buildSystem.diagnostics.length > 0,
+                    isBackendConnected: isConnected,
+                    providersState: nativeAi.providersState,
+                    activeProviderStatus: nativeAi.activeProviderStatus,
+                    conversations: nativeAi.conversations,
+                    activeConversationId: nativeAi.activeConversationId,
+                    conversationDetail: nativeAi.conversationDetail,
+                    activeConversation: nativeAi.activeConversation,
+                    isCrossProjectConversation: nativeAi.isCrossProjectConversation,
+                    wsState: nativeAi.wsState,
+                    draftPrompt: nativeAi.draftPrompt,
+                    pendingAttachments: nativeAi.pendingAttachments,
+                    contextPreview: nativeAi.contextPreview,
+                    loading: nativeAi.loading,
+                    actionPending: nativeAi.actionPending,
+                    error: nativeAi.error,
+                    notice: nativeAi.notice,
+                    onDraftPromptChange: nativeAi.setDraftPrompt,
+                    onSelectConversation: nativeAi.selectConversation,
+                    onCreateConversation: () => {
+                      void nativeAi.createNewConversation();
+                    },
+                    onClearConversation: () => {
+                      void nativeAi.clearCurrentConversation();
+                    },
+                    onDeleteConversation: (id) => {
+                      void nativeAi.removeConversation(id);
+                    },
+                    onToggleTools: (allow) => {
+                      void nativeAi.toggleConversationTools(allow);
+                    },
+                    onSendPrompt: () => {
+                      void nativeAi.sendPrompt();
+                    },
+                    onRetryLast: () => {
+                      void nativeAi.retryLastTurn();
+                    },
+                    onStopGeneration: () => {
+                      void nativeAi.stopGeneration();
+                    },
+                    onRemoveAttachment: nativeAi.removeAttachment,
+                    onAttachActiveFile: attachActiveFileToAi,
+                    onAttachSelection: attachSelectionToAi,
+                    onAttachBuildErrors: attachBuildErrorsToAi,
+                    onAttachProjectSummary: attachProjectSummaryToAi,
+                    onPreviewContext: () => {
+                      void nativeAi.loadContextPreview();
+                    },
+                    onDismissPreview: () => nativeAi.setContextPreview(null),
+                    onProposeCodeApply: (code, language, mode) => {
+                      const sel = monacoBridgeRef.current?.getSelectionSnippet();
+                      const full = monacoBridgeRef.current?.getFullText() ?? activeFileTab?.savedContent ?? null;
+                      setPendingCodeApply({
+                        proposal: { code, language, mode },
+                        selectionText: sel?.text ?? null,
+                        fileText: full,
+                      });
+                    },
+                    onOpenSettings: () => openSettingsCategory("ai"),
+                    onRefresh: () => {
+                      void nativeAi.refreshState();
+                    },
+                    onClearFeedback: nativeAi.clearFeedback,
+                  }}
+                  opencodeProps={{
+                    activeProject: workspace.activeProject,
+                    isBackendConnected: isConnected,
+                    info: openCodeAgent.info,
+                    sessions: openCodeAgent.sessions,
+                    activeSessionId: openCodeAgent.activeSessionId,
+                    sessionDetail: openCodeAgent.sessionDetail,
+                    activeSessionSummary: openCodeAgent.activeSessionSummary,
+                    isCrossProjectSession: openCodeAgent.isCrossProjectSession,
+                    wsState: openCodeAgent.wsState,
+                    draftPrompt: openCodeAgent.draftPrompt,
+                    pendingContexts: openCodeAgent.pendingContexts,
+                    selectedModel: openCodeAgent.selectedModel,
+                    loading: openCodeAgent.loading,
+                    actionPending: openCodeAgent.actionPending,
+                    error: openCodeAgent.error,
+                    notice: openCodeAgent.notice,
+                    onDraftPromptChange: openCodeAgent.setDraftPrompt,
+                    onRemoveContext: openCodeAgent.removeContext,
+                    onSelectModel: openCodeAgent.setSelectedModel,
+                    onSelectSession: openCodeAgent.selectSession,
+                    onCreateSession: () => { void openCodeAgent.createSession(); },
+                    onSendPrompt: () => { void openCodeAgent.sendPrompt(); },
+                    onInterrupt: () => { void openCodeAgent.interruptSession(); },
+                    onReplyPermission: (reqId, decision) => {
+                      void openCodeAgent.replyPermission(reqId, decision);
+                    },
+                    onTerminateSession: (sessionId) => {
+                      void openCodeAgent.terminateSession(sessionId);
+                    },
+                    onRefresh: () => { void openCodeAgent.refreshInfoAndSessions(); },
+                    onOpenSettings: () => openSettingsCategory("opencode"),
+                    onClearFeedback: openCodeAgent.clearFeedback,
+                  }}
                 />
               </>
             )}
@@ -1160,6 +1552,31 @@ export function IdeShell() {
           onSave: sdkDoctor.saveConfig,
           onReset: sdkDoctor.resetConfig,
         }}
+        aiConfigProps={{
+          providersState: nativeAi.providersState,
+          isBackendConnected: isConnected,
+          saving: nativeAi.savingConfig,
+          testing: nativeAi.testingConnection,
+          loading: nativeAi.loading,
+          testResult: nativeAi.testResult,
+          onRefresh: () => void nativeAi.refreshState(),
+          onSaveConfig: nativeAi.saveConfig,
+          onResetConfig: nativeAi.resetConfig,
+          onSaveCredential: nativeAi.saveCredential,
+          onRemoveCredential: nativeAi.removeCredential,
+          onTestConnection: nativeAi.runConnectionTest,
+        }}
+        opencodeConfigProps={{
+          configState: openCodeAgent.configState,
+          hasElectronBrowse: sdkDoctor.hasElectronBrowse,
+          isBackendConnected: isConnected,
+          saving: openCodeAgent.savingConfig,
+          loading: openCodeAgent.loading,
+          onBrowseFile: sdkDoctor.browseFile,
+          onRefresh: () => void openCodeAgent.refreshInfoAndSessions(),
+          onSave: openCodeAgent.saveConfig,
+          onReset: openCodeAgent.resetConfig,
+        }}
         onClose={() => setSettingsOpen(false)}
         onSpeciesChange={handleSpeciesChange}
         onTweaksChange={handleTweaksChange}
@@ -1171,11 +1588,59 @@ export function IdeShell() {
 
       <UnsavedChangesDialog prompt={editorTabs.unsavedPrompt} />
 
+      <AiCodeApplyModal
+        proposal={pendingCodeApply?.proposal ?? null}
+        projectDir={workspace.activeProject?.project_dir ?? null}
+        activeFilePath={editorTabs.activeFileTabPath}
+        activeFileDirty={Boolean(activeFileTab?.isDirty)}
+        existingSelectionText={pendingCodeApply?.selectionText ?? null}
+        existingFileContent={pendingCodeApply?.fileText ?? null}
+        onCancel={() => setPendingCodeApply(null)}
+        onConfirmApply={(proposal) => {
+          const applied = monacoBridgeRef.current?.applyCodeEdit(
+            proposal.mode,
+            proposal.code
+          );
+          if (applied && activeFileTab) {
+            appendLog(
+              "SHELL",
+              "info",
+              `Applied Native AI suggestion (${proposal.mode}) to ${activeFileTab.path} buffer (unsaved).`
+            );
+          }
+          setPendingCodeApply(null);
+        }}
+      />
+
       <GitConfirmDialog
         dialog={gitIntegration.confirmDialog}
         pending={gitIntegration.actionPending}
         onCancel={() => gitIntegration.setConfirmDialog(null)}
         onConfirm={() => void gitIntegration.executeConfirmedAction()}
+      />
+
+      <GitHubConfirmDialog
+        dialog={githubIntegration.confirmDialog}
+        pending={githubIntegration.actionPending}
+        onCancel={githubIntegration.closeConfirmDialog}
+        onConfirmUpdateRemote={(name, url) =>
+          void githubIntegration.confirmUpdateRemote(name, url)
+        }
+        onConfirmRemoveRemote={(name) =>
+          void githubIntegration.confirmRemoveRemote(name)
+        }
+        onConfirmCreateRepo={(payload) =>
+          void githubIntegration.confirmCreateRepo(payload)
+        }
+        onConfirmPublish={(payload) =>
+          void githubIntegration.confirmPublish(payload)
+        }
+        onConfirmPull={(remote) =>
+          void githubIntegration.confirmPull(remote)
+        }
+        onConfirmPush={(remote, setUpstream) =>
+          void githubIntegration.confirmPush(remote, setUpstream)
+        }
       />
 
       <NewProjectDialog

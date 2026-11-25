@@ -23,6 +23,7 @@ export interface XtermSurfaceHandle {
   focusTerminal: () => void;
   fitTerminal: () => void;
   copySelection: () => Promise<boolean>;
+  getSelectionText: () => string;
   pasteClipboard: () => Promise<boolean>;
   clearScreen: () => void;
 }
@@ -160,6 +161,9 @@ export const XtermSurface = forwardRef<XtermSurfaceHandle, XtermSurfaceProps>(
           } catch {
             return false;
           }
+        },
+        getSelectionText() {
+          return termRef.current?.getSelection() ?? "";
         },
         async pasteClipboard() {
           const term = termRef.current;

@@ -5,12 +5,14 @@ import {
   Activity,
   AlertCircle,
   AlertTriangle,
+  Bot,
   ChevronDown,
   FileCode2,
   Hammer,
   Maximize2,
   Minimize2,
   ScrollText,
+  Sparkles,
   Stethoscope,
   Terminal,
   Trash2,
@@ -44,6 +46,8 @@ interface BottomPanelProps {
     line: number,
     column?: number
   ) => void;
+  onExplainDiagnostic?: (diag: BuildDiagnostic) => void;
+  onExplainDiagnosticNativeAi?: (diag: BuildDiagnostic) => void;
   onOpenSdkDoctor: () => void;
 }
 
@@ -128,6 +132,8 @@ export function BottomPanel({
   onCollapse,
   onClearLogs,
   onOpenDiagnosticLocation,
+  onExplainDiagnostic,
+  onExplainDiagnosticNativeAi,
   onOpenSdkDoctor,
 }: BottomPanelProps) {
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -372,22 +378,44 @@ export function BottomPanel({
                       </div>
                     </div>
 
-                    {canNavigate && diag.relative_path && diag.line && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onOpenDiagnosticLocation(
-                            diag.relative_path!,
-                            diag.line!,
-                            diag.column ?? 1
-                          )
-                        }
-                        className="inline-flex h-6 shrink-0 items-center gap-1 rounded border border-white/12 bg-white/[0.05] px-2 font-sans text-[10.5px] font-medium text-[#7aa2ff] hover:bg-white/[0.10]"
-                      >
-                        <FileCode2 className="h-3 w-3" />
-                        <span>Open</span>
-                      </button>
-                    )}
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {onExplainDiagnosticNativeAi && (
+                        <button
+                          type="button"
+                          onClick={() => onExplainDiagnosticNativeAi(diag)}
+                          className="inline-flex h-6 items-center gap-1 rounded border border-[#7aa2ff]/30 bg-[#7aa2ff]/12 px-2 font-sans text-[10.5px] font-medium text-[#e8ebf7] hover:bg-[#7aa2ff]/22"
+                        >
+                          <Bot className="h-3 w-3 text-[#7aa2ff]" />
+                          <span>Ask Native AI</span>
+                        </button>
+                      )}
+                      {onExplainDiagnostic && (
+                        <button
+                          type="button"
+                          onClick={() => onExplainDiagnostic(diag)}
+                          className="inline-flex h-6 items-center gap-1 rounded border border-white/15 bg-white/[0.05] px-2 font-sans text-[10.5px] font-medium text-[#e8ebf7]/85 hover:bg-white/[0.12]"
+                        >
+                          <Sparkles className="h-3 w-3 text-[#7aa2ff]" />
+                          <span>Ask OpenCode</span>
+                        </button>
+                      )}
+                      {canNavigate && diag.relative_path && diag.line && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onOpenDiagnosticLocation(
+                              diag.relative_path!,
+                              diag.line!,
+                              diag.column ?? 1
+                            )
+                          }
+                          className="inline-flex h-6 shrink-0 items-center gap-1 rounded border border-white/12 bg-white/[0.05] px-2 font-sans text-[10.5px] font-medium text-[#7aa2ff] hover:bg-white/[0.10]"
+                        >
+                          <FileCode2 className="h-3 w-3" />
+                          <span>Open</span>
+                        </button>
+                      )}
+                    </div>
                   </li>
                 );
               })}

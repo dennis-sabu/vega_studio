@@ -1,4 +1,17 @@
 import type {
+  AICodeApplyMode,
+  AICodeApplyValidateResponse,
+  AIConfig,
+  AIConnectionTestResponse,
+  AIContextAttachment,
+  AIContextPreviewResponse,
+  AIConversationDetailResponse,
+  AIConversationListResponse,
+  AICredentialStatus,
+  AIProviderId,
+  AIProvidersStateResponse,
+} from "@/types/ai";
+import type {
   BoardCompatibilityReport,
   BoardListResponse,
   BoardProfile,
@@ -33,6 +46,29 @@ import type {
   GitStatusResponse,
   GitSwitchPrecheckResponse,
 } from "@/types/git";
+import type {
+  GitHubCliInfo,
+  GitHubCreateRepoResponse,
+  GitHubOperationStateResponse,
+  GitHubOperationSummary,
+  GitHubPublishPreviewResponse,
+  GitHubRemoteRepoDetail,
+  GitHubStatusResponse,
+  GitHubSyncPrecheckResponse,
+  GitHubVisibility,
+  GitRemoteInfo,
+} from "@/types/github";
+import type {
+  OpenCodeConfig,
+  OpenCodeConfigStateResponse,
+  OpenCodeContextAttachment,
+  OpenCodeInfoResponse,
+  OpenCodePermissionDecision,
+  OpenCodePermissionMode,
+  OpenCodeSessionDetailResponse,
+  OpenCodeSessionListResponse,
+  OpenCodeSessionSummary,
+} from "@/types/opencode";
 import type {
   CreateProjectPayload,
   OpenProjectPayload,
@@ -867,5 +903,549 @@ export async function fetchGitDiff(
   }
   return apiFetch<GitDiffResponse>(`/api/git/diff?${params.toString()}`, {
     signal: options?.signal,
+  });
+}
+
+// ── Phase 13: Native GitHub Integration ───────────────────────────────────────
+
+export async function fetchGitHubInfo(signal?: AbortSignal): Promise<GitHubCliInfo> {
+  return apiFetch<GitHubCliInfo>("/api/github/info", { signal });
+}
+
+export async function fetchGitHubStatus(
+  projectDir?: string | null,
+  signal?: AbortSignal
+): Promise<GitHubStatusResponse> {
+  const params = new URLSearchParams();
+  if (projectDir) {
+    params.set("project_dir", projectDir);
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<GitHubStatusResponse>(`/api/github/status${suffix}`, { signal });
+}
+
+export async function startGitHubAuthLogin(
+  gitProtocol: "https" | "ssh" = "https"
+): Promise<GitHubOperationSummary> {
+  return apiFetch<GitHubOperationSummary>("/api/github/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ git_protocol: gitProtocol }),
+  });
+}
+
+export async function fetchGitHubOperationState(
+  signal?: AbortSignal
+): Promise<GitHubOperationStateResponse> {
+  return apiFetch<GitHubOperationStateResponse>("/api/github/operations/state", {
+    signal,
+  });
+}
+
+export async function cancelGitHubOperation(): Promise<GitHubOperationSummary> {
+  return apiFetch<GitHubOperationSummary>("/api/github/operations/cancel", {
+    method: "POST",
+  });
+}
+
+export async function listGitHubRemotes(
+  projectDir: string,
+  signal?: AbortSignal
+): Promise<GitRemoteInfo[]> {
+  const params = new URLSearchParams({ project_dir: projectDir });
+  return apiFetch<GitRemoteInfo[]>(`/api/github/remotes?${params.toString()}`, {
+    signal,
+  });
+}
+
+export async function addGitHubRemote(
+  projectDir: string,
+  name: string,
+  url: string
+): Promise<GitRemoteInfo[]> {
+  return apiFetch<GitRemoteInfo[]>("/api/github/remotes", {
+    method: "POST",
+    body: JSON.stringify({ project_dir: projectDir, name, url }),
+  });
+}
+
+export async function updateGitHubRemote(
+  projectDir: string,
+  name: string,
+  url: string,
+  confirm: boolean
+): Promise<GitRemoteInfo[]> {
+  return apiFetch<GitRemoteInfo[]>(
+    `/api/github/remotes/${encodeURIComponent(name)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ project_dir: projectDir, name, url, confirm }),
+    }
+  );
+}
+
+export async function removeGitHubRemote(
+  projectDir: string,
+  name: string,
+  confirm: boolean
+): Promise<GitRemoteInfo[]> {
+  const params = new URLSearchParams({
+    project_dir: projectDir,
+    confirm: String(confirm),
+  });
+  return apiFetch<GitRemoteInfo[]>(
+    `/api/github/remotes/${encodeURIComponent(name)}?${params.toString()}`,
+    {
+      method: "DELETE",
+    }
+  );
+}
+
+export async function createGitHubRepository(payload: {
+  project_dir: string;
+  name: string;
+  description: string;
+  visibility: GitHubVisibility;
+  add_readme: boolean;
+  configure_remote: boolean;
+  remote_name: string;
+  confirm: boolean;
+}): Promise<GitHubCreateRepoResponse> {
+  return apiFetch<GitHubCreateRepoResponse>("/api/github/repos/create", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function previewGitHubPublish(
+  projectDir: string
+): Promise<GitHubPublishPreviewResponse> {
+  return apiFetch<GitHubPublishPreviewResponse>("/api/github/publish/preview", {
+    method: "POST",
+    body: JSON.stringify({ project_dir: projectDir }),
+  });
+}
+
+export async function publishGitHubProject(payload: {
+  project_dir: string;
+  name: string;
+  description: string;
+  visibility: GitHubVisibility;
+  remote_name: string;
+  reuse_existing_remote: boolean;
+  confirm: boolean;
+}): Promise<GitHubOperationSummary> {
+  return apiFetch<GitHubOperationSummary>("/api/github/publish", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchGitHubRemoteRepoInfo(
+  projectDir: string,
+  remote?: string | null,
+  signal?: AbortSignal
+): Promise<GitHubRemoteRepoDetail> {
+  const params = new URLSearchParams({ project_dir: projectDir });
+  if (remote) {
+    params.set("remote", remote);
+  }
+  return apiFetch<GitHubRemoteRepoDetail>(`/api/github/repo?${params.toString()}`, {
+    signal,
+  });
+}
+
+export async function startGitHubFetch(
+  projectDir: string,
+  remote: string = "origin"
+): Promise<GitHubOperationSummary> {
+  return apiFetch<GitHubOperationSummary>("/api/github/fetch", {
+    method: "POST",
+    body: JSON.stringify({ project_dir: projectDir, remote }),
+  });
+}
+
+export async function precheckGitHubPull(
+  projectDir: string,
+  remote?: string | null,
+  signal?: AbortSignal
+): Promise<GitHubSyncPrecheckResponse> {
+  const params = new URLSearchParams({ project_dir: projectDir });
+  if (remote) {
+    params.set("remote", remote);
+  }
+  return apiFetch<GitHubSyncPrecheckResponse>(
+    `/api/github/pull/precheck?${params.toString()}`,
+    { signal }
+  );
+}
+
+export async function startGitHubPull(payload: {
+  project_dir: string;
+  remote?: string | null;
+  confirm: boolean;
+}): Promise<GitHubOperationSummary> {
+  return apiFetch<GitHubOperationSummary>("/api/github/pull", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function precheckGitHubPush(
+  projectDir: string,
+  remote?: string | null,
+  signal?: AbortSignal
+): Promise<GitHubSyncPrecheckResponse> {
+  const params = new URLSearchParams({ project_dir: projectDir });
+  if (remote) {
+    params.set("remote", remote);
+  }
+  return apiFetch<GitHubSyncPrecheckResponse>(
+    `/api/github/push/precheck?${params.toString()}`,
+    { signal }
+  );
+}
+
+export async function startGitHubPush(payload: {
+  project_dir: string;
+  remote?: string | null;
+  set_upstream: boolean;
+  confirm: boolean;
+}): Promise<GitHubOperationSummary> {
+  return apiFetch<GitHubOperationSummary>("/api/github/push", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+// ── Phase 14: OpenCode CLI Integration ────────────────────────────────────────
+
+export function getOpenCodeWsUrl(sessionId: string): string {
+  const baseUrl = getBackendUrl().replace(/\/+$/, "");
+  const wsBase = baseUrl.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:");
+  return `${wsBase}/api/opencode/ws/${encodeURIComponent(sessionId)}`;
+}
+
+export async function fetchOpenCodeInfo(
+  queryModels: boolean = false,
+  signal?: AbortSignal
+): Promise<OpenCodeInfoResponse> {
+  const params = new URLSearchParams();
+  if (queryModels) params.set("models", "true");
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<OpenCodeInfoResponse>(`/api/opencode/info${suffix}`, { signal });
+}
+
+export async function fetchOpenCodeConfig(
+  signal?: AbortSignal
+): Promise<OpenCodeConfigStateResponse> {
+  return apiFetch<OpenCodeConfigStateResponse>("/api/opencode/config", { signal });
+}
+
+export async function updateOpenCodeConfig(
+  config: OpenCodeConfig
+): Promise<OpenCodeConfigStateResponse> {
+  return apiFetch<OpenCodeConfigStateResponse>("/api/opencode/config", {
+    method: "PUT",
+    body: JSON.stringify(config),
+  });
+}
+
+export async function resetOpenCodeConfig(): Promise<OpenCodeConfigStateResponse> {
+  return apiFetch<OpenCodeConfigStateResponse>("/api/opencode/config/reset", {
+    method: "POST",
+  });
+}
+
+export async function fetchOpenCodeSessions(
+  projectDir?: string | null,
+  signal?: AbortSignal
+): Promise<OpenCodeSessionListResponse> {
+  const params = new URLSearchParams();
+  if (projectDir) params.set("project_dir", projectDir);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<OpenCodeSessionListResponse>(`/api/opencode/sessions${suffix}`, {
+    signal,
+  });
+}
+
+export async function createOpenCodeSession(payload: {
+  project_dir: string;
+  title?: string;
+  permission_mode?: OpenCodePermissionMode;
+  model?: string;
+}): Promise<OpenCodeSessionDetailResponse> {
+  return apiFetch<OpenCodeSessionDetailResponse>("/api/opencode/sessions", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchOpenCodeSession(
+  sessionId: string,
+  options?: { projectDir?: string | null; sync?: boolean; signal?: AbortSignal }
+): Promise<OpenCodeSessionDetailResponse> {
+  const params = new URLSearchParams();
+  if (options?.projectDir) params.set("project_dir", options.projectDir);
+  if (options?.sync === false) params.set("sync", "false");
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<OpenCodeSessionDetailResponse>(
+    `/api/opencode/sessions/${encodeURIComponent(sessionId)}${suffix}`,
+    { signal: options?.signal }
+  );
+}
+
+export async function promptOpenCodeSession(
+  sessionId: string,
+  payload: {
+    project_dir: string;
+    prompt: string;
+    model?: string;
+    contexts?: OpenCodeContextAttachment[];
+  }
+): Promise<OpenCodeSessionDetailResponse> {
+  return apiFetch<OpenCodeSessionDetailResponse>(
+    `/api/opencode/sessions/${encodeURIComponent(sessionId)}/prompt`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export async function interruptOpenCodeSession(
+  sessionId: string,
+  projectDir?: string | null
+): Promise<OpenCodeSessionSummary> {
+  return apiFetch<OpenCodeSessionSummary>(
+    `/api/opencode/sessions/${encodeURIComponent(sessionId)}/interrupt`,
+    {
+      method: "POST",
+      body: JSON.stringify(projectDir ? { project_dir: projectDir } : {}),
+    }
+  );
+}
+
+export async function replyOpenCodePermission(
+  sessionId: string,
+  requestId: string,
+  payload: {
+    project_dir?: string | null;
+    decision: OpenCodePermissionDecision;
+    message?: string;
+  }
+): Promise<OpenCodeSessionDetailResponse> {
+  return apiFetch<OpenCodeSessionDetailResponse>(
+    `/api/opencode/sessions/${encodeURIComponent(sessionId)}/permissions/${encodeURIComponent(requestId)}`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export async function terminateOpenCodeSession(
+  sessionId: string,
+  projectDir?: string | null
+): Promise<OpenCodeSessionSummary> {
+  const params = new URLSearchParams();
+  if (projectDir) params.set("project_dir", projectDir);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<OpenCodeSessionSummary>(
+    `/api/opencode/sessions/${encodeURIComponent(sessionId)}${suffix}`,
+    {
+      method: "DELETE",
+    }
+  );
+}
+
+// ── Phase 15: Native VEGA AI Assistant ────────────────────────────────────────
+
+export function getNativeAiWsUrl(conversationId: string): string {
+  const baseUrl = getBackendUrl().replace(/\/+$/, "");
+  const wsBase = baseUrl.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:");
+  return `${wsBase}/api/ai/ws/${encodeURIComponent(conversationId)}`;
+}
+
+export async function fetchAiProvidersState(
+  signal?: AbortSignal
+): Promise<AIProvidersStateResponse> {
+  return apiFetch<AIProvidersStateResponse>("/api/ai/providers", { signal });
+}
+
+export async function updateAiConfig(
+  config: AIConfig
+): Promise<AIProvidersStateResponse> {
+  return apiFetch<AIProvidersStateResponse>("/api/ai/config", {
+    method: "PUT",
+    body: JSON.stringify(config),
+  });
+}
+
+export async function resetAiConfig(): Promise<AIProvidersStateResponse> {
+  return apiFetch<AIProvidersStateResponse>("/api/ai/config/reset", {
+    method: "POST",
+  });
+}
+
+export async function setAiCredential(
+  providerId: AIProviderId,
+  apiKey: string,
+  sessionOnly: boolean = false
+): Promise<AICredentialStatus> {
+  return apiFetch<AICredentialStatus>(
+    `/api/ai/credentials/${encodeURIComponent(providerId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ api_key: apiKey, session_only: sessionOnly }),
+    }
+  );
+}
+
+export async function deleteAiCredential(
+  providerId: AIProviderId
+): Promise<AICredentialStatus> {
+  return apiFetch<AICredentialStatus>(
+    `/api/ai/credentials/${encodeURIComponent(providerId)}`,
+    {
+      method: "DELETE",
+    }
+  );
+}
+
+export async function testAiConnection(payload: {
+  provider_id: AIProviderId;
+  model?: string | null;
+  base_url?: string | null;
+  api_key_override?: string | null;
+}): Promise<AIConnectionTestResponse> {
+  return apiFetch<AIConnectionTestResponse>("/api/ai/test-connection", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchAiConversations(
+  projectDir?: string | null,
+  signal?: AbortSignal
+): Promise<AIConversationListResponse> {
+  const params = new URLSearchParams();
+  if (projectDir) params.set("project_dir", projectDir);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<AIConversationListResponse>(`/api/ai/conversations${suffix}`, {
+    signal,
+  });
+}
+
+export async function createAiConversation(payload: {
+  project_dir?: string | null;
+  title?: string;
+  allow_tools?: boolean;
+}): Promise<AIConversationDetailResponse> {
+  return apiFetch<AIConversationDetailResponse>("/api/ai/conversations", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchAiConversation(
+  conversationId: string,
+  signal?: AbortSignal
+): Promise<AIConversationDetailResponse> {
+  return apiFetch<AIConversationDetailResponse>(
+    `/api/ai/conversations/${encodeURIComponent(conversationId)}`,
+    { signal }
+  );
+}
+
+export async function updateAiConversation(
+  conversationId: string,
+  payload: { title?: string; allow_tools?: boolean }
+): Promise<AIConversationDetailResponse> {
+  return apiFetch<AIConversationDetailResponse>(
+    `/api/ai/conversations/${encodeURIComponent(conversationId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export async function clearAiConversation(
+  conversationId: string
+): Promise<AIConversationDetailResponse> {
+  return apiFetch<AIConversationDetailResponse>(
+    `/api/ai/conversations/${encodeURIComponent(conversationId)}/clear`,
+    { method: "POST" }
+  );
+}
+
+export async function deleteAiConversation(
+  conversationId: string
+): Promise<{ deleted: boolean; conversation_id: string }> {
+  return apiFetch<{ deleted: boolean; conversation_id: string }>(
+    `/api/ai/conversations/${encodeURIComponent(conversationId)}`,
+    { method: "DELETE" }
+  );
+}
+
+export async function sendAiMessage(
+  conversationId: string,
+  payload: {
+    project_dir?: string | null;
+    prompt: string;
+    attachments?: AIContextAttachment[];
+    provider_id?: AIProviderId;
+    model?: string;
+    allow_tools?: boolean;
+    include_workspace_summary?: boolean;
+  }
+): Promise<AIConversationDetailResponse> {
+  return apiFetch<AIConversationDetailResponse>(
+    `/api/ai/conversations/${encodeURIComponent(conversationId)}/messages`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export async function retryAiMessage(
+  conversationId: string
+): Promise<AIConversationDetailResponse> {
+  return apiFetch<AIConversationDetailResponse>(
+    `/api/ai/conversations/${encodeURIComponent(conversationId)}/retry`,
+    { method: "POST" }
+  );
+}
+
+export async function cancelAiGeneration(
+  conversationId: string
+): Promise<AIConversationDetailResponse> {
+  return apiFetch<AIConversationDetailResponse>(
+    `/api/ai/conversations/${encodeURIComponent(conversationId)}/cancel`,
+    { method: "POST" }
+  );
+}
+
+export async function previewAiContext(payload: {
+  project_dir?: string | null;
+  attachments?: AIContextAttachment[];
+  include_workspace_summary?: boolean;
+}): Promise<AIContextPreviewResponse> {
+  return apiFetch<AIContextPreviewResponse>("/api/ai/context/preview", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function validateAiCodeApply(payload: {
+  project_dir: string;
+  relative_path: string;
+  mode: AICodeApplyMode;
+  code: string;
+}): Promise<AICodeApplyValidateResponse> {
+  return apiFetch<AICodeApplyValidateResponse>("/api/ai/code/validate-apply", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }

@@ -18,6 +18,10 @@ import {
   Undo2,
   X,
 } from "lucide-react";
+import {
+  GitHubSidebarSection,
+  type GitHubSidebarProps,
+} from "@/components/git/GitHubSidebarSection";
 import { Tooltip } from "@/components/ui/Tooltip";
 import type {
   GitBranchInfo,
@@ -59,9 +63,10 @@ interface GitSidebarPanelProps {
   onLoadMoreHistory: () => void;
   onClearFeedback: () => void;
   onOpenProject: () => void;
+  githubProps?: GitHubSidebarProps;
 }
 
-type GitSubTab = "changes" | "branches" | "history";
+type GitSubTab = "changes" | "branches" | "history" | "github";
 
 const SHORT_DATE = new Intl.DateTimeFormat(undefined, {
   month: "short",
@@ -126,6 +131,7 @@ export function GitSidebarPanel({
   onLoadMoreHistory,
   onClearFeedback,
   onOpenProject,
+  githubProps,
 }: GitSidebarPanelProps) {
   const [subTab, setSubTab] = useState<GitSubTab>("changes");
   const [newBranchName, setNewBranchName] = useState("");
@@ -328,14 +334,15 @@ export function GitSidebarPanel({
           </div>
         </div>
       ) : (
-        /* Active Repository Views: Changes | Branches | History */
+        /* Active Repository Views: Changes | Branches | History | GitHub */
         <>
-          <div className="grid grid-cols-3 gap-1 border-b border-white/[0.07] bg-[#070910]/65 p-1.5 select-none">
+          <div className="grid grid-cols-4 gap-1 border-b border-white/[0.07] bg-[#070910]/65 p-1.5 select-none">
             {(
               [
                 { id: "changes", label: "Changes", count: (status?.staged_count ?? 0) + (status?.unstaged_count ?? 0) + (status?.untracked_count ?? 0) },
                 { id: "branches", label: "Branches", count: branches.length },
                 { id: "history", label: "History", count: commits.length },
+                { id: "github", label: "GitHub", count: githubProps?.status?.remotes.length ?? 0 },
               ] as const
             ).map((tab) => {
               const active = subTab === tab.id;
@@ -343,7 +350,12 @@ export function GitSidebarPanel({
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setSubTab(tab.id)}
+                  onClick={() => {
+                    setSubTab(tab.id);
+                    if (tab.id === "github") {
+                      githubProps?.onRefreshStatus();
+                    }
+                  }}
                   className={`inline-flex h-6 items-center justify-center gap-1 rounded px-1.5 font-mono text-[10px] font-medium transition-colors ${
                     active
                       ? "bg-[#7aa2ff]/20 text-[#e8ebf7]"
@@ -775,7 +787,7 @@ export function GitSidebarPanel({
                 )}
               </div>
             </div>
-          ) : (
+          ) : subTab === "history" ? (
             /* Bounded Paginated Commit History */
             <div className="vega-scroll flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2.5">
               <div className="flex items-center justify-between px-1">
@@ -833,7 +845,9 @@ export function GitSidebarPanel({
                 </button>
               )}
             </div>
-          )}
+          ) : githubProps ? (
+            <GitHubSidebarSection {...githubProps} />
+          ) : null}
         </>
       )}
     </div>

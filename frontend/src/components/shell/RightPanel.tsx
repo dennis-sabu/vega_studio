@@ -1,6 +1,9 @@
 "use client";
 
-import { ArrowUp, PanelRightClose, Sparkles, TerminalSquare } from "lucide-react";
+import { type ComponentProps } from "react";
+import { PanelRightClose, Sparkles, TerminalSquare } from "lucide-react";
+import { NativeAiPanel } from "@/components/ai/NativeAiPanel";
+import { OpenCodePanel } from "@/components/opencode/OpenCodePanel";
 import { Tooltip } from "@/components/ui/Tooltip";
 import type { RightPanelTab } from "@/types/shell";
 
@@ -9,6 +12,8 @@ interface RightPanelProps {
   width: number;
   onSelectTab: (tab: RightPanelTab) => void;
   onCollapse: () => void;
+  nativeAiProps?: ComponentProps<typeof NativeAiPanel>;
+  opencodeProps?: ComponentProps<typeof OpenCodePanel>;
 }
 
 export function RightPanel({
@@ -16,6 +21,8 @@ export function RightPanel({
   width,
   onSelectTab,
   onCollapse,
+  nativeAiProps,
+  opencodeProps,
 }: RightPanelProps) {
   return (
     <aside
@@ -74,49 +81,22 @@ export function RightPanel({
       </div>
 
       {/* Body */}
-      <div className="vega-scroll flex flex-1 flex-col justify-between gap-4 overflow-y-auto p-3.5">
-        <div className="rounded-xl border border-white/8 bg-[#08090f] p-3.5">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/45 uppercase">
-              {activeTab === "native-ai"
-                ? "API-Based Assistant"
-                : "OpenCode CLI Agent"}
-            </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 font-mono text-[10px] font-semibold text-[#e8ebf7]/50">
-              {activeTab === "native-ai" ? "Phase 12" : "Phase 11"}
-            </span>
+      <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+        {activeTab === "opencode" ? (
+          opencodeProps ? (
+            <OpenCodePanel {...opencodeProps} />
+          ) : (
+            <div className="flex flex-1 items-center justify-center p-4">
+              <span className="text-xs text-[#e8ebf7]/40">OpenCode loading…</span>
+            </div>
+          )
+        ) : nativeAiProps ? (
+          <NativeAiPanel {...nativeAiProps} />
+        ) : (
+          <div className="flex flex-1 items-center justify-center p-4">
+            <span className="text-xs text-[#e8ebf7]/40">VEGA AI Assistant loading…</span>
           </div>
-
-          <p className="text-xs leading-relaxed text-[#e8ebf7]/60">
-            {activeTab === "native-ai"
-              ? "Project-aware code assistance, diff review, and permission-gated workspace tools will live in this dock."
-              : "Dedicated PTY terminal running the actual OpenCode CLI inside your active project directory will launch independently here."}
-          </p>
-        </div>
-
-        {/* Scoped Disabled Composer Preview (DESIGN_SYSTEM.md 24px glass card) */}
-        <div
-          aria-disabled="true"
-          className="vega-glass rounded-[20px] p-3 opacity-55"
-          style={{ ["--blur" as string]: "8px", ["--tint" as string]: "0.6" }}
-        >
-          <p className="px-1 pb-3 text-xs text-[#e8ebf7]/45">
-            {activeTab === "native-ai"
-              ? "Ask about ARIES V3 project... (Phase 12)"
-              : "OpenCode CLI inactive (Phase 11)"}
-          </p>
-          <div className="flex items-center justify-between">
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-[#e8ebf7]/45">
-              Workspace Context
-            </span>
-            <span
-              aria-hidden="true"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-[#e8ebf7]/40"
-            >
-              <ArrowUp className="h-3.5 w-3.5" />
-            </span>
-          </div>
-        </div>
+        )}
       </div>
     </aside>
   );

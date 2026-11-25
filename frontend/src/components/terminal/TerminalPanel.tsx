@@ -12,6 +12,7 @@ import {
   Plus,
   RefreshCw,
   RotateCw,
+  Sparkles,
   Terminal as TerminalIcon,
   X,
 } from "lucide-react";
@@ -54,6 +55,7 @@ interface TerminalPanelProps {
   onSyncSession: (session: TerminalSessionSummary) => void;
   onUpdateCwd: (sessionId: string, cwd: string) => void;
   onClearError: () => void;
+  onAnalyzeSelectionInAi?: (selectedText: string, sessionLabel: string) => void;
 }
 
 export function TerminalPanel({
@@ -84,6 +86,7 @@ export function TerminalPanel({
   onSyncSession,
   onUpdateCwd,
   onClearError,
+  onAnalyzeSelectionInAi,
 }: TerminalPanelProps) {
   const surfaceMapRef = useRef<Map<string, XtermSurfaceHandle>>(new Map());
   const [wsNotice, setWsNotice] = useState<string | null>(null);
@@ -315,6 +318,35 @@ export function TerminalPanel({
                   <Eraser className="h-3 w-3" />
                 </button>
               </Tooltip>
+
+              {onAnalyzeSelectionInAi && (
+                <Tooltip
+                  label="Send selected terminal text to Native VEGA AI"
+                  side="top"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sel = getActiveHandle()?.getSelectionText().trim() ?? "";
+                      if (!sel) {
+                        setWsNotice(
+                          "Select terminal text first before sending to Native AI."
+                        );
+                        return;
+                      }
+                      setWsNotice(null);
+                      onAnalyzeSelectionInAi(
+                        sel.slice(0, 6000),
+                        `${activeSession.shell_id} (${activeSession.title})`
+                      );
+                    }}
+                    className="inline-flex h-6 items-center gap-1 rounded border border-[#7aa2ff]/30 bg-[#7aa2ff]/12 px-2 font-mono text-[10px] text-[#e8ebf7] hover:bg-[#7aa2ff]/22"
+                  >
+                    <Sparkles className="h-2.5 w-2.5 text-[#7aa2ff]" />
+                    <span className="hidden md:inline">Analyze Sel</span>
+                  </button>
+                </Tooltip>
+              )}
             </>
           )}
 

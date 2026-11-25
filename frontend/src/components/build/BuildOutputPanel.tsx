@@ -12,6 +12,7 @@ import {
   History,
   Loader2,
   RotateCw,
+  Sparkles,
   Square,
   Stethoscope,
   Trash2,
@@ -48,6 +49,7 @@ interface BuildOutputPanelProps {
   onOpenDiagnosticsTab: () => void;
   onOpenSdkDoctor: () => void;
   onOpenBoardManager: () => void;
+  onDebugWithNativeAi?: () => void;
 }
 
 const LOG_TIME = new Intl.DateTimeFormat(undefined, {
@@ -116,6 +118,7 @@ export function BuildOutputPanel({
   onOpenDiagnosticsTab,
   onOpenSdkDoctor,
   onOpenBoardManager,
+  onDebugWithNativeAi,
 }: BuildOutputPanelProps) {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [followOutput, setFollowOutput] = useState(true);
@@ -262,6 +265,26 @@ export function BuildOutputPanel({
               <span>Cancel</span>
             </button>
           )}
+
+          {onDebugWithNativeAi &&
+            !isRunning &&
+            (currentStatus === "failed" ||
+              currentStatus === "timed_out" ||
+              (latestBuild?.error_count ?? 0) > 0) && (
+              <Tooltip
+                label="Debug build failure with Native VEGA AI"
+                side="top"
+              >
+                <button
+                  type="button"
+                  onClick={onDebugWithNativeAi}
+                  className="inline-flex h-6 items-center gap-1 rounded border border-[#7aa2ff]/35 bg-[#7aa2ff]/15 px-2 font-mono text-[10px] font-medium text-[#e8ebf7] hover:bg-[#7aa2ff]/25"
+                >
+                  <Sparkles className="h-3 w-3 text-[#7aa2ff]" />
+                  <span>Debug AI</span>
+                </button>
+              </Tooltip>
+            )}
 
           <Tooltip
             label={
