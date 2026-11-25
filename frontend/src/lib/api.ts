@@ -23,6 +23,17 @@ import type {
   RenameEntryPayload,
 } from "@/types/explorer";
 import type {
+  GitBranchActionResponse,
+  GitBranchesResponse,
+  GitCommitDetailResponse,
+  GitCommitResponse,
+  GitDiffResponse,
+  GitHistoryResponse,
+  GitInfoResponse,
+  GitStatusResponse,
+  GitSwitchPrecheckResponse,
+} from "@/types/git";
+import type {
   CreateProjectPayload,
   OpenProjectPayload,
   WorkspaceStateResponse,
@@ -652,4 +663,209 @@ export async function closeTerminalSession(
     `/api/terminal/sessions/${encodeURIComponent(sessionId)}`,
     { method: "DELETE" }
   );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 12: Native Git Integration
+// ---------------------------------------------------------------------------
+
+export async function fetchGitInfo(
+  projectDir?: string,
+  signal?: AbortSignal
+): Promise<GitInfoResponse> {
+  const qs = projectDir
+    ? `?${new URLSearchParams({ project_dir: projectDir }).toString()}`
+    : "";
+  return apiFetch<GitInfoResponse>(`/api/git/info${qs}`, { signal });
+}
+
+export async function fetchGitStatus(
+  projectDir: string,
+  signal?: AbortSignal
+): Promise<GitStatusResponse> {
+  const params = new URLSearchParams({ project_dir: projectDir });
+  return apiFetch<GitStatusResponse>(`/api/git/status?${params.toString()}`, {
+    signal,
+  });
+}
+
+export async function refreshGitStatus(
+  projectDir: string
+): Promise<GitStatusResponse> {
+  return apiFetch<GitStatusResponse>("/api/git/refresh", {
+    method: "POST",
+    body: JSON.stringify({ project_dir: projectDir }),
+  });
+}
+
+export async function initGitRepository(
+  projectDir: string
+): Promise<GitStatusResponse> {
+  return apiFetch<GitStatusResponse>("/api/git/init", {
+    method: "POST",
+    body: JSON.stringify({ project_dir: projectDir }),
+  });
+}
+
+export async function stageGitPaths(
+  projectDir: string,
+  paths: string[]
+): Promise<GitStatusResponse> {
+  return apiFetch<GitStatusResponse>("/api/git/stage", {
+    method: "POST",
+    body: JSON.stringify({ project_dir: projectDir, paths }),
+  });
+}
+
+export async function stageAllGitChanges(
+  projectDir: string
+): Promise<GitStatusResponse> {
+  return apiFetch<GitStatusResponse>("/api/git/stage-all", {
+    method: "POST",
+    body: JSON.stringify({ project_dir: projectDir }),
+  });
+}
+
+export async function unstageGitPaths(
+  projectDir: string,
+  paths: string[]
+): Promise<GitStatusResponse> {
+  return apiFetch<GitStatusResponse>("/api/git/unstage", {
+    method: "POST",
+    body: JSON.stringify({ project_dir: projectDir, paths }),
+  });
+}
+
+export async function unstageAllGitChanges(
+  projectDir: string
+): Promise<GitStatusResponse> {
+  return apiFetch<GitStatusResponse>("/api/git/unstage-all", {
+    method: "POST",
+    body: JSON.stringify({ project_dir: projectDir }),
+  });
+}
+
+export async function discardGitChanges(
+  projectDir: string,
+  paths: string[],
+  confirm: boolean
+): Promise<GitStatusResponse> {
+  return apiFetch<GitStatusResponse>("/api/git/discard", {
+    method: "POST",
+    body: JSON.stringify({ project_dir: projectDir, paths, confirm }),
+  });
+}
+
+export async function deleteUntrackedGitFiles(
+  projectDir: string,
+  paths: string[],
+  confirm: boolean
+): Promise<GitStatusResponse> {
+  return apiFetch<GitStatusResponse>("/api/git/delete-untracked", {
+    method: "POST",
+    body: JSON.stringify({ project_dir: projectDir, paths, confirm }),
+  });
+}
+
+export async function commitGitChanges(
+  projectDir: string,
+  message: string
+): Promise<GitCommitResponse> {
+  return apiFetch<GitCommitResponse>("/api/git/commit", {
+    method: "POST",
+    body: JSON.stringify({ project_dir: projectDir, message }),
+  });
+}
+
+export async function fetchGitBranches(
+  projectDir: string,
+  signal?: AbortSignal
+): Promise<GitBranchesResponse> {
+  const params = new URLSearchParams({ project_dir: projectDir });
+  return apiFetch<GitBranchesResponse>(
+    `/api/git/branches?${params.toString()}`,
+    { signal }
+  );
+}
+
+export async function precheckGitBranchSwitch(
+  projectDir: string,
+  name: string
+): Promise<GitSwitchPrecheckResponse> {
+  const params = new URLSearchParams({ project_dir: projectDir, name });
+  return apiFetch<GitSwitchPrecheckResponse>(
+    `/api/git/branches/precheck?${params.toString()}`
+  );
+}
+
+export async function switchGitBranch(
+  projectDir: string,
+  name: string
+): Promise<GitBranchActionResponse> {
+  return apiFetch<GitBranchActionResponse>("/api/git/branches/switch", {
+    method: "POST",
+    body: JSON.stringify({ project_dir: projectDir, name }),
+  });
+}
+
+export async function createGitBranch(
+  projectDir: string,
+  name: string,
+  checkout: boolean = true
+): Promise<GitBranchActionResponse> {
+  return apiFetch<GitBranchActionResponse>("/api/git/branches/create", {
+    method: "POST",
+    body: JSON.stringify({ project_dir: projectDir, name, checkout }),
+  });
+}
+
+export async function fetchGitHistory(
+  projectDir: string,
+  limit: number = 25,
+  offset: number = 0,
+  signal?: AbortSignal
+): Promise<GitHistoryResponse> {
+  const params = new URLSearchParams({
+    project_dir: projectDir,
+    limit: String(limit),
+    offset: String(offset),
+  });
+  return apiFetch<GitHistoryResponse>(
+    `/api/git/history?${params.toString()}`,
+    { signal }
+  );
+}
+
+export async function fetchGitCommitDetail(
+  projectDir: string,
+  commitHash: string,
+  signal?: AbortSignal
+): Promise<GitCommitDetailResponse> {
+  const params = new URLSearchParams({ project_dir: projectDir });
+  return apiFetch<GitCommitDetailResponse>(
+    `/api/git/commit/${encodeURIComponent(commitHash)}?${params.toString()}`,
+    { signal }
+  );
+}
+
+export async function fetchGitDiff(
+  projectDir: string,
+  path: string,
+  options?: {
+    staged?: boolean;
+    commit?: string | null;
+    signal?: AbortSignal;
+  }
+): Promise<GitDiffResponse> {
+  const params = new URLSearchParams({
+    project_dir: projectDir,
+    path,
+    staged: String(Boolean(options?.staged)),
+  });
+  if (options?.commit) {
+    params.set("commit", options.commit);
+  }
+  return apiFetch<GitDiffResponse>(`/api/git/diff?${params.toString()}`, {
+    signal: options?.signal,
+  });
 }

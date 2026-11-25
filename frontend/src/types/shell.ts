@@ -17,7 +17,12 @@ export type BottomPanelTab =
 
 export type RightPanelTab = "native-ai" | "opencode";
 
-export type CenterTabId = "overview" | "diagnostics" | "sdk-doctor" | "board-manager";
+export type CenterTabId =
+  | "overview"
+  | "diagnostics"
+  | "sdk-doctor"
+  | "board-manager"
+  | "git-diff";
 
 export interface ShellLayoutState {
   activeMode: WorkspaceMode;

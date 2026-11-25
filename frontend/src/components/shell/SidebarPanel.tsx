@@ -17,6 +17,7 @@ import {
   Stethoscope,
 } from "lucide-react";
 import { FileExplorer } from "@/components/explorer/FileExplorer";
+import { GitSidebarPanel } from "@/components/git/GitSidebarPanel";
 import { Tooltip } from "@/components/ui/Tooltip";
 import type { ProjectBoardStatusResponse } from "@/types/board";
 import type { RecentProjectEntry, WorkspaceSummary } from "@/types/project";
@@ -35,6 +36,7 @@ interface SidebarPanelProps {
   recentProjects: RecentProjectEntry[];
   actionPending: boolean;
   explorer: SidebarExplorerBridge;
+  gitPanelProps: ComponentProps<typeof GitSidebarPanel>;
   sdkReport: SdkDoctorReport | null;
   sdkRunning: boolean;
   boardStatus: ProjectBoardStatusResponse | null;
@@ -75,15 +77,15 @@ const SECTION_META: Record<PrimaryNavSection, SectionConfig> = {
   },
   git: {
     title: "Source Control",
-    phase: "Phase 10",
-    heading: "Git CLI Integration",
+    phase: "Phase 12 · Active",
+    heading: "Native Git Source Control",
     description:
-      "Repository status, staging, diffs, commit workflow, and GitHub CLI sync will appear here.",
+      "Inspect changes, stage/unstage files, review diffs, commit changes, manage local branches, and browse history.",
     icon: GitBranch,
     details: [
-      "Local Git CLI status & diff tracking",
-      "Branch management & commit staging",
-      "Portable project history across OSes",
+      "Porcelain status, staging & safe discard",
+      "Local branch creation, switching & conflict guards",
+      "Paginated history & Monaco Diff inspection",
     ],
   },
   examples: {
@@ -134,6 +136,7 @@ export function SidebarPanel({
   recentProjects,
   actionPending,
   explorer,
+  gitPanelProps,
   sdkReport,
   sdkRunning,
   boardStatus,
@@ -197,6 +200,8 @@ export function SidebarPanel({
             {...explorer}
           />
         </div>
+      ) : activeNav === "git" ? (
+        <GitSidebarPanel {...gitPanelProps} />
       ) : (
         <div className="vega-scroll flex flex-1 flex-col gap-4 overflow-y-auto p-3">
           <>

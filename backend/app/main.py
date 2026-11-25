@@ -12,6 +12,7 @@ from app.config import settings
 from app.routers import boards as boards_router
 from app.routers import build as build_router
 from app.routers import explorer as explorer_router
+from app.routers import git as git_router
 from app.routers import health as health_router
 from app.routers import projects as projects_router
 from app.routers import sdk as sdk_router
@@ -73,6 +74,7 @@ def create_app() -> FastAPI:
     application.include_router(upload_router.router)
     application.include_router(serial_router.router)
     application.include_router(terminal_router.router)
+    application.include_router(git_router.router)
 
     return application
 

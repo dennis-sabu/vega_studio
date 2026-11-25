@@ -67,6 +67,7 @@ const VALID_CENTER_TABS = new Set<CenterTabId>([
   "diagnostics",
   "sdk-doctor",
   "board-manager",
+  "git-diff",
 ]);
 
 function clamp(value: number, min: number, max: number): number {

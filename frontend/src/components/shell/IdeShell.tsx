@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { UnsavedChangesDialog } from "@/components/editor/UnsavedChangesDialog";
+import { GitConfirmDialog } from "@/components/git/GitConfirmDialog";
 import { NewProjectDialog } from "@/components/project/NewProjectDialog";
 import { OpenProjectDialog } from "@/components/project/OpenProjectDialog";
 import { AppToolbar } from "@/components/shell/AppToolbar";
@@ -28,6 +29,7 @@ import { useBuildSystem } from "@/hooks/useBuildSystem";
 import { useEditorSettings } from "@/hooks/useEditorSettings";
 import { useEditorTabs } from "@/hooks/useEditorTabs";
 import { useFileExplorer } from "@/hooks/useFileExplorer";
+import { useGitIntegration } from "@/hooks/useGitIntegration";
 import { useSdkDoctor } from "@/hooks/useSdkDoctor";
 import { useSerialMonitor } from "@/hooks/useSerialMonitor";
 import { useTerminalManager } from "@/hooks/useTerminalManager";
@@ -261,6 +263,29 @@ export function IdeShell() {
     onLog: (level, message) => appendLog("SHELL", level, message),
   });
 
+  const openGitDiffTab = useCallback(() => {
+    setComposerFocused(false);
+    setSettingsOpen(false);
+    editorTabs.setActiveFileTabPath(null);
+    setMode("workspace");
+    openCenterTab("git-diff");
+  }, [editorTabs, openCenterTab, setMode]);
+
+  const gitIntegration = useGitIntegration({
+    projectDir: workspace.activeProject?.project_dir ?? null,
+    isBackendConnected: isConnected,
+    onOpenDiffTab: openGitDiffTab,
+    onAfterWorkingTreeChange: async () => {
+      await explorer.refreshAll();
+      for (const tab of editorTabs.openFileTabs) {
+        if (!tab.isDirty) {
+          void editorTabs.reloadTabFromDisk(tab.uid);
+        }
+      }
+    },
+    onLog: (level, message) => appendLog("SHELL", level, message),
+  });
+
   const openSettingsCategory = useCallback((cat: SettingsCategory) => {
     setSettingsCategory(cat);
     setSettingsOpen(true);
@@ -306,6 +331,13 @@ export function IdeShell() {
     setMode("workspace");
     setBottomTab("terminal");
   }, [setBottomTab, setMode]);
+
+  const openSourceControl = useCallback(() => {
+    setComposerFocused(false);
+    setSettingsOpen(false);
+    setMode("workspace");
+    selectNav("git");
+  }, [selectNav, setMode]);
 
   const triggerUploadPrompt = useCallback(() => {
     openUploadPanel();
@@ -614,6 +646,7 @@ export function IdeShell() {
                 } else if (section === "tools") {
                   openBoardManager();
                 } else {
+                  setMode("workspace");
                   selectNav(section);
                 }
               }}
@@ -655,10 +688,61 @@ export function IdeShell() {
                     onRefreshDirectory: explorer.loadDirectory,
                     onToggleHidden: () =>
                       explorer.setShowHidden((prev) => !prev),
-                    onCreateEntry: explorer.createEntry,
-                    onRenameEntry: explorer.renameEntry,
-                    onDeleteEntry: explorer.deleteEntry,
+                    onCreateEntry: async (...args) => {
+                      const res = await explorer.createEntry(...args);
+                      void gitIntegration.refreshAll();
+                      return res;
+                    },
+                    onRenameEntry: async (...args) => {
+                      const res = await explorer.renameEntry(...args);
+                      void gitIntegration.refreshAll();
+                      return res;
+                    },
+                    onDeleteEntry: async (...args) => {
+                      const res = await explorer.deleteEntry(...args);
+                      void gitIntegration.refreshAll();
+                      return res;
+                    },
                     onClearFeedback: explorer.clearFeedback,
+                  }}
+                  gitPanelProps={{
+                    activeProject: workspace.activeProject,
+                    isBackendConnected: isConnected,
+                    info: gitIntegration.info,
+                    status: gitIntegration.status,
+                    branches: gitIntegration.branches,
+                    commits: gitIntegration.commits,
+                    historyHasMore: gitIntegration.historyHasMore,
+                    commitMessage: gitIntegration.commitMessage,
+                    loading: gitIntegration.loading,
+                    loadingMoreHistory: gitIntegration.loadingMoreHistory,
+                    actionPending: gitIntegration.actionPending,
+                    error: gitIntegration.error,
+                    notice: gitIntegration.notice,
+                    onRefresh: () => void gitIntegration.refreshAll(),
+                    onInitRepo: () => void gitIntegration.initRepository(),
+                    onCommitMessageChange: gitIntegration.setCommitMessage,
+                    onCommit: () => void gitIntegration.commitStaged(),
+                    onStagePaths: (paths) =>
+                      void gitIntegration.stagePaths(paths),
+                    onStageAll: () => void gitIntegration.stageAll(),
+                    onUnstagePaths: (paths) =>
+                      void gitIntegration.unstagePaths(paths),
+                    onUnstageAll: () => void gitIntegration.unstageAll(),
+                    onDiscardPaths: gitIntegration.requestDiscard,
+                    onDeleteUntrackedPaths:
+                      gitIntegration.requestDeleteUntracked,
+                    onSwitchBranch: (name) =>
+                      void gitIntegration.requestSwitchBranch(name),
+                    onCreateBranch: gitIntegration.createBranch,
+                    onOpenFileDiff: (path, staged) =>
+                      void gitIntegration.openFileDiff(path, { staged }),
+                    onOpenCommitDetail: (hash) =>
+                      void gitIntegration.openCommitDetail(hash),
+                    onLoadMoreHistory: () =>
+                      void gitIntegration.loadMoreHistory(),
+                    onClearFeedback: gitIntegration.clearFeedback,
+                    onOpenProject: openOpenProjectDialog,
                   }}
                   sdkReport={sdkDoctor.report}
                   sdkRunning={sdkDoctor.runningDiagnostics}
@@ -741,6 +825,21 @@ export function IdeShell() {
                     onOpenSdkDoctor: openSdkDoctor,
                     onClearMessages: boardManager.clearMessages,
                   }}
+                  gitDiffProps={{
+                    activeDiff: gitIntegration.activeDiff,
+                    activeCommit: gitIntegration.activeCommit,
+                    inspectLoading: gitIntegration.inspectLoading,
+                    inspectError: gitIntegration.inspectError,
+                    onSelectCommitFile: (path, commitHash) =>
+                      void gitIntegration.openFileDiff(path, {
+                        commit: commitHash,
+                        keepCommitOpen: true,
+                      }),
+                    onOpenFileInEditor: (relativePath) => {
+                      explorer.setSelectedPath(relativePath);
+                      editorTabs.openFileAtLocation(relativePath, 1, 1);
+                    },
+                  }}
                   layout={layout}
                   activeProject={workspace.activeProject}
                   isConnected={isConnected}
@@ -770,9 +869,15 @@ export function IdeShell() {
                     void editorTabs.requestCloseAllTabs()
                   }
                   onSaveFileTab={(uidOrPath, overwriteConflict) =>
-                    void editorTabs.saveTab(uidOrPath, { overwriteConflict })
+                    void editorTabs
+                      .saveTab(uidOrPath, { overwriteConflict })
+                      .then(() => gitIntegration.refreshAll())
                   }
-                  onSaveAllFileTabs={() => void editorTabs.saveAllDirtyTabs()}
+                  onSaveAllFileTabs={() =>
+                    void editorTabs
+                      .saveAllDirtyTabs()
+                      .then(() => gitIntegration.refreshAll())
+                  }
                   onReloadFileTab={(uid) =>
                     void editorTabs.reloadTabFromDisk(uid)
                   }
@@ -1009,6 +1114,7 @@ export function IdeShell() {
         editorSettings={editorSettings.settings}
         dirtyCount={editorTabs.dirtyCount}
         sdkStatus={sdkDoctor.report?.overall_status ?? null}
+        gitStatus={gitIntegration.status}
         latestBuild={buildSystem.latestBuild}
         latestUpload={uploadSystem.latestUpload}
         selectedPort={uploadSystem.selectedPort}
@@ -1024,6 +1130,7 @@ export function IdeShell() {
           openCenterTab("diagnostics");
         }}
         onOpenSdkDoctor={openSdkDoctor}
+        onOpenSourceControl={openSourceControl}
         onOpenBoardManager={openBoardManager}
         onOpenBuildOutput={() => setBottomTab("build")}
         onOpenUploadOutput={openUploadPanel}
@@ -1063,6 +1170,13 @@ export function IdeShell() {
       />
 
       <UnsavedChangesDialog prompt={editorTabs.unsavedPrompt} />
+
+      <GitConfirmDialog
+        dialog={gitIntegration.confirmDialog}
+        pending={gitIntegration.actionPending}
+        onCancel={() => gitIntegration.setConfirmDialog(null)}
+        onConfirm={() => void gitIntegration.executeConfirmedAction()}
+      />
 
       <NewProjectDialog
         open={newProjectOpen}

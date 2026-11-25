@@ -26,6 +26,7 @@ import type { BuildSummary } from "@/types/build";
 import type { EditorCursorPosition, EditorSettings } from "@/types/editor";
 import type { OpenFileTab } from "@/types/explorer";
 import type { DiagnosticStatus } from "@/types/sdk";
+import type { GitStatusResponse } from "@/types/git";
 import type { SerialStatus } from "@/types/serial";
 import type { UploadSummary } from "@/types/upload";
 
@@ -43,6 +44,7 @@ interface StatusBarProps {
   editorSettings: EditorSettings;
   dirtyCount: number;
   sdkStatus: DiagnosticStatus | null;
+  gitStatus: GitStatusResponse | null;
   latestBuild: BuildSummary | null;
   latestUpload: UploadSummary | null;
   selectedPort: string;
@@ -55,6 +57,7 @@ interface StatusBarProps {
   rightPanelOpen: boolean;
   onInspectBackend: () => void;
   onOpenSdkDoctor: () => void;
+  onOpenSourceControl: () => void;
   onOpenBoardManager: () => void;
   onOpenBuildOutput: () => void;
   onOpenUploadOutput: () => void;
@@ -80,6 +83,7 @@ export function StatusBar({
   editorSettings,
   dirtyCount,
   sdkStatus,
+  gitStatus,
   latestBuild,
   latestUpload,
   selectedPort,
@@ -92,6 +96,7 @@ export function StatusBar({
   rightPanelOpen,
   onInspectBackend,
   onOpenSdkDoctor,
+  onOpenSourceControl,
   onOpenBoardManager,
   onOpenBuildOutput,
   onOpenUploadOutput,
@@ -240,10 +245,63 @@ export function StatusBar({
           </button>
         </Tooltip>
 
-        <span className="hidden items-center gap-1 font-mono text-[11px] text-[#e8ebf7]/40 lg:inline-flex">
-          <GitBranch className="h-3 w-3" />
-          <span>No Repo</span>
-        </span>
+        <Tooltip
+          label={
+            !activeProjectName
+              ? "Open a project to use Git Source Control"
+              : !gitStatus?.git_available
+              ? "Git CLI not installed — click for instructions"
+              : !gitStatus?.is_repository
+              ? "Project is not a Git repository — click to initialize"
+              : `Branch: ${gitStatus.current_branch ?? "Detached HEAD"} — click to open Source Control`
+          }
+          side="top"
+        >
+          <button
+            type="button"
+            onClick={onOpenSourceControl}
+            className={`hidden items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[11px] transition-colors hover:bg-white/[0.07] lg:inline-flex ${
+              !activeProjectName
+                ? "text-[#e8ebf7]/40 hover:text-[#e8ebf7]"
+                : !gitStatus?.git_available
+                ? "text-amber-300"
+                : !gitStatus?.is_repository
+                ? "text-[#e8ebf7]/55 hover:text-[#e8ebf7]"
+                : gitStatus.staged_count +
+                    gitStatus.unstaged_count +
+                    gitStatus.untracked_count >
+                  0
+                ? "text-amber-200"
+                : "text-emerald-300"
+            }`}
+          >
+            <GitBranch className="h-3 w-3" />
+            <span>
+              {!activeProjectName
+                ? "No Repo"
+                : !gitStatus?.git_available
+                ? "Git Missing"
+                : !gitStatus?.is_repository
+                ? "Init Git"
+                : `${
+                    gitStatus.is_detached
+                      ? "Detached"
+                      : gitStatus.current_branch ?? "main"
+                  }${
+                    gitStatus.staged_count +
+                      gitStatus.unstaged_count +
+                      gitStatus.untracked_count >
+                    0
+                      ? ` (${
+                          gitStatus.staged_count +
+                          gitStatus.unstaged_count +
+                          gitStatus.untracked_count
+                        })`
+                      : ""
+                  }`}
+            </span>
+          </button>
+        </Tooltip>
 
         {latestBuild && (
           <Tooltip

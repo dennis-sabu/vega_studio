@@ -16,6 +16,7 @@ import {
   Check,
   ChevronRight,
   Cpu,
+  FileDiff,
   FolderOpen,
   FolderPlus,
   Layers,
@@ -42,6 +43,7 @@ import {
 } from "@/components/editor/MonacoEditorSurface";
 import { BoardManagerView } from "@/components/board/BoardManagerView";
 import { FileIcon } from "@/components/explorer/FileIcon";
+import { GitDiffView } from "@/components/git/GitDiffView";
 import { SdkDoctorView } from "@/components/sdk/SdkDoctorView";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { fetchStatus, type HealthResponse, type StatusResponse } from "@/lib/api";
@@ -64,6 +66,7 @@ interface WorkspaceEditorAreaProps {
   pendingReveal?: EditorRevealTarget | null;
   sdkDoctorProps: ComponentProps<typeof SdkDoctorView>;
   boardManagerProps: ComponentProps<typeof BoardManagerView>;
+  gitDiffProps: ComponentProps<typeof GitDiffView>;
   layout: ShellLayoutState;
   activeProject: WorkspaceSummary | null;
   isConnected: boolean;
@@ -102,6 +105,7 @@ const TAB_META: Record<
   diagnostics: { label: "Backend Status", icon: Activity },
   "sdk-doctor": { label: "SDK Doctor", icon: Stethoscope },
   "board-manager": { label: "Board Manager", icon: Cpu },
+  "git-diff": { label: "Git Diff", icon: FileDiff },
 };
 
 const TIME_FORMAT = new Intl.DateTimeFormat(undefined, { timeStyle: "medium" });
@@ -122,6 +126,7 @@ export function WorkspaceEditorArea({
   pendingReveal,
   sdkDoctorProps,
   boardManagerProps,
+  gitDiffProps,
   layout,
   activeProject,
   isConnected,
@@ -412,6 +417,15 @@ export function WorkspaceEditorArea({
               + Board Manager
             </button>
           )}
+          {!openTabs.includes("git-diff") && (
+            <button
+              type="button"
+              onClick={() => onOpenTab("git-diff")}
+              className="rounded px-2 py-1 text-[11px] text-[#e8ebf7]/55 hover:bg-white/[0.06] hover:text-[#e8ebf7]"
+            >
+              + Git Diff
+            </button>
+          )}
         </div>
       </div>
 
@@ -695,6 +709,8 @@ export function WorkspaceEditorArea({
             </div>
           )}
         </div>
+      ) : activeTab === "git-diff" ? (
+        <GitDiffView {...gitDiffProps} />
       ) : (
         <div className="vega-scroll min-h-0 flex-1 overflow-y-auto p-5">
           {activeTab === null ? (
