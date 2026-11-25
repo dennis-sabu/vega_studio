@@ -1,0 +1,90 @@
+# ============================================================
+# VEGA Studio — root .gitignore
+# ============================================================
+
+# ------ Node.js ------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+package-lock.json.bak
+
+# ------ Frontend (Next.js) ------
+frontend/.next/
+frontend/out/
+frontend/dist/
+frontend/build/
+frontend/.cache/
+
+# ------ Electron build output ------
+electron/dist/
+electron/build/
+electron/out/
+*.js.map
+
+# ------ Python ------
+**/.venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/*.egg-info/
+**/.eggs/
+**/dist/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/htmlcov/
+**/.coverage
+**/*.cover
+**/coverage.xml
+
+# ------ SQLite (future phases) ------
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+
+# ------ Environment files ------
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env.local
+# Keep these:
+!.env.example
+!.env.local.example
+!backend/.env.example
+!frontend/.env.example
+
+# ------ IDE & Editor ------
+.vscode/settings.json
+.vscode/.ropeproject
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+
+# ------ OS ------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ------ Logs ------
+*.log
+logs/
+*.pid
+*.seed
+
+# ------ Temporary ------
+tmp/
+temp/
+.tmp/

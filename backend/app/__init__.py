@@ -1,0 +1,1 @@
+"""VEGA Studio Backend package."""

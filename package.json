@@ -1,0 +1,26 @@
+{
+  "name": "vega-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VEGA Studio — Desktop IDE for C-DAC VEGA ARIES V3 RISC-V board",
+  "workspaces": [
+    "frontend",
+    "electron"
+  ],
+  "scripts": {
+    "dev": "concurrently --kill-others -n FRONTEND,ELECTRON --prefix-colors green,yellow \"npm run dev:frontend\" \"npm run dev:electron\"",
+    "dev:backend": "node scripts/start-backend.js",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:electron": "node scripts/start-electron.js",
+    "build:frontend": "npm --prefix frontend run build",
+    "build:electron": "npm --prefix electron run build",
+    "test:backend": "node scripts/test-backend.js",
+    "test:frontend": "npm --prefix frontend run lint",
+    "install:backend": "node scripts/setup-backend.js",
+    "setup": "npm install && npm run install:backend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "wait-on": "^8.0.0"
+  }
+}
