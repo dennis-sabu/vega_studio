@@ -1,7 +1,9 @@
 """VEGA Studio Backend – pydantic-settings configuration."""
 from __future__ import annotations
 
-from typing import List
+import os
+from pathlib import Path
+from typing import List, Optional
 from urllib.parse import urlparse
 
 from pydantic import field_validator
@@ -37,6 +39,30 @@ class Settings(BaseSettings):
     # App metadata
     APP_NAME: str = "vega-studio-backend"
     APP_VERSION: str = "0.1.0"
+
+    # Optional override for application persistence directory (SQLite state)
+    DATA_DIR: Optional[str] = None
+
+    def get_data_dir(self) -> Path:
+        """Return cross-platform local application data directory."""
+        if self.DATA_DIR:
+            return Path(self.DATA_DIR).expanduser().resolve()
+        if os.name == "nt":
+            local_app_data = os.environ.get("LOCALAPPDATA")
+            if local_app_data:
+                return Path(local_app_data) / "VEGA Studio"
+            return Path.home() / "AppData" / "Local" / "VEGA Studio"
+        xdg_data = os.environ.get("XDG_DATA_HOME")
+        if xdg_data:
+            return Path(xdg_data) / "vega-studio"
+        return Path.home() / ".local" / "share" / "vega-studio"
+
+    def get_default_projects_dir(self) -> Path:
+        """Return sensible cross-platform default location for VEGA projects."""
+        docs = Path.home() / "Documents"
+        if docs.exists() and docs.is_dir():
+            return docs / "VEGA Studio Projects"
+        return Path.home() / "VEGA Studio Projects"
 
     @field_validator("HOST")
     @classmethod

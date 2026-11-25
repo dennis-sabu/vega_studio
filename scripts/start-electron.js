@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const waitOn = require('wait-on');
@@ -12,11 +12,22 @@ let child = null;
 let build = null;
 let shuttingDown = false;
 
+function killProcessTree(proc) {
+  if (!proc || proc.killed || proc.exitCode !== null) return;
+  if (IS_WIN && proc.pid) {
+    spawnSync('taskkill', ['/PID', String(proc.pid), '/T', '/F'], {
+      stdio: 'ignore',
+    });
+  } else {
+    proc.kill('SIGTERM');
+  }
+}
+
 function shutdown(code) {
   if (shuttingDown) return;
   shuttingDown = true;
-  if (child && !child.killed) child.kill();
-  if (build && !build.killed) build.kill();
+  killProcessTree(child);
+  killProcessTree(build);
   process.exit(code);
 }
 
@@ -110,10 +121,19 @@ Promise.all([frontendReady, buildElectron()])
     }
 
     console.log('[start-electron] Frontend ready. Launching Electron...');
+    /** @type {NodeJS.ProcessEnv} */
+    const electronEnv = {
+      ...process.env,
+      NODE_ENV: process.env.NODE_ENV ?? 'development',
+    };
+    // Integrated IDE terminals (VS Code / Antigravity) set ELECTRON_RUN_AS_NODE=1,
+    // which forces Electron into plain Node mode and breaks require('electron').
+    delete electronEnv.ELECTRON_RUN_AS_NODE;
+
     child = spawn(electronBinary, ['dist/main.js'], {
       cwd: ELECTRON_DIR,
       stdio: 'inherit',
-      env: { ...process.env, NODE_ENV: process.env.NODE_ENV ?? 'development' },
+      env: electronEnv,
     });
 
     child.on('exit', (code, signal) => {

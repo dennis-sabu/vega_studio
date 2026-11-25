@@ -20,7 +20,7 @@ export function createMainWindow(): BrowserWindow {
     title: 'VEGA Studio',
     show: false,
     // Paint the window background immediately while the renderer loads.
-    backgroundColor: '#1a1a2e',
+    backgroundColor: '#06070c',
     paintWhenInitiallyHidden: true,
     webPreferences: {
       contextIsolation: true,

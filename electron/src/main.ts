@@ -1,4 +1,5 @@
-import { app, ipcMain, BrowserWindow } from 'electron';
+import { app, dialog, ipcMain, BrowserWindow } from 'electron';
+import * as fs from 'fs';
 import * as path from 'path';
 import { spawnBackend, killBackend } from './backend';
 import { createMainWindow } from './window';
@@ -12,6 +13,50 @@ let isQuitting = false;
 // Register IPC handlers before the window exists so the renderer never waits.
 ipcMain.on('get-app-version', (event) => {
   event.returnValue = app.getVersion();
+});
+
+ipcMain.handle(
+  'select-directory',
+  async (
+    _event,
+    options?: { title?: unknown; defaultPath?: unknown }
+  ): Promise<{ canceled: boolean; path: string | null }> => {
+    const title =
+      typeof options?.title === 'string' && options.title.trim().length > 0
+        ? options.title.trim().slice(0, 120)
+        : 'Select Directory';
+
+    let defaultPath: string | undefined;
+    if (
+      typeof options?.defaultPath === 'string' &&
+      options.defaultPath.trim().length > 0
+    ) {
+      const candidate = path.resolve(options.defaultPath.trim());
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
+        defaultPath = candidate;
+      }
+    }
+
+    const dialogOptions: Electron.OpenDialogOptions = {
+      title,
+      defaultPath,
+      properties: ['openDirectory', 'createDirectory'],
+    };
+
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions);
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true, path: null };
+    }
+
+    return { canceled: false, path: result.filePaths[0] };
+  }
+);
+
+ipcMain.handle('get-default-projects-dir', (): string => {
+  return path.join(app.getPath('documents'), 'VEGA Studio Projects');
 });
 
 function startBackendInBackground(): void {

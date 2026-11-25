@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchHealth, type HealthResponse } from "@/lib/api";
 
 export type BackendConnectionStatus = "connected" | "disconnected";
+
+export interface UseBackendHealthOptions {
+  onStatusChange?: (connected: boolean, detail: string) => void;
+}
 
 export interface UseBackendHealthResult {
   isConnected: boolean;
@@ -34,8 +38,16 @@ const INITIAL_STATE: HealthState = {
   error: null,
 };
 
-export function useBackendHealth(): UseBackendHealthResult {
+export function useBackendHealth(
+  options?: UseBackendHealthOptions
+): UseBackendHealthResult {
   const [state, setState] = useState<HealthState>(INITIAL_STATE);
+  const onStatusChangeRef = useRef(options?.onStatusChange);
+  const lastReportedRef = useRef<boolean | null>(null);
+
+  useEffect(() => {
+    onStatusChangeRef.current = options?.onStatusChange;
+  });
 
   useEffect(() => {
     let active = true;
@@ -69,6 +81,15 @@ export function useBackendHealth(): UseBackendHealthResult {
 
         failures = 0;
         const healthy = data.status === "ok";
+        if (lastReportedRef.current !== healthy) {
+          lastReportedRef.current = healthy;
+          onStatusChangeRef.current?.(
+            healthy,
+            healthy
+              ? `Connected to ${data.service} v${data.version}`
+              : `Unexpected health status: ${data.status}`
+          );
+        }
         setState({
           isConnected: healthy,
           health: data,
@@ -86,6 +107,10 @@ export function useBackendHealth(): UseBackendHealthResult {
               ? "Request timed out"
               : err.message
             : "Backend unreachable";
+        if (lastReportedRef.current !== false) {
+          lastReportedRef.current = false;
+          onStatusChangeRef.current?.(false, nextError);
+        }
         setState({
           isConnected: false,
           health: null,

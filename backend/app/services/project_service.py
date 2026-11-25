@@ -1,0 +1,494 @@
+"""VEGA Studio Backend – Safe project creation, metadata validation, and workspace state."""
+from __future__ import annotations
+
+import json
+import re
+import shutil
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import List, Optional, Tuple
+
+from pydantic import ValidationError
+
+from app.config import Settings, settings
+from app.models.project import (
+    PROJECT_METADATA_FILENAME,
+    PROJECT_SCHEMA_VERSION,
+    CreateProjectRequest,
+    ProjectBuildConfig,
+    ProjectEntrySummary,
+    ProjectTarget,
+    ProjectTemplate,
+    RecentProjectEntry,
+    VegaProjectMetadata,
+    WorkspaceStateResponse,
+    WorkspaceSummary,
+)
+from app.services.persistence import AppPersistence
+
+_PROJECT_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}$")
+_INVALID_CHARS_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+_WINDOWS_RESERVED_NAMES = frozenset(
+    {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        *(f"COM{i}" for i in range(1, 10)),
+        *(f"LPT{i}" for i in range(1, 10)),
+    }
+)
+
+
+class ProjectServiceError(Exception):
+    """Domain error with an HTTP status code for safe API reporting."""
+
+    def __init__(self, message: str, status_code: int = 400) -> None:
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def validate_project_name(raw_name: str) -> str:
+    """Validate project folder & display name across Windows and Linux."""
+    name = raw_name.strip()
+    if not name:
+        raise ProjectServiceError("Project name cannot be empty.", 400)
+    if len(name) > 64:
+        raise ProjectServiceError(
+            "Project name must be 64 characters or fewer.", 400
+        )
+    if name in (".", "..") or ".." in name:
+        raise ProjectServiceError(
+            "Project name cannot contain path traversal segments.", 400
+        )
+    if _INVALID_CHARS_RE.search(name):
+        raise ProjectServiceError(
+            "Project name contains invalid filesystem characters.", 400
+        )
+    if name.endswith(".") or name.endswith(" "):
+        raise ProjectServiceError(
+            "Project name cannot end with a period or space.", 400
+        )
+    if name.split(".")[0].upper() in _WINDOWS_RESERVED_NAMES:
+        raise ProjectServiceError(
+            f"'{name}' is a reserved system device name.", 400
+        )
+    if not _PROJECT_NAME_RE.match(name):
+        raise ProjectServiceError(
+            "Project name must start with a letter or digit and use only letters, digits, spaces, '.', '_' or '-'.",
+            400,
+        )
+    return name
+
+
+def validate_directory_input(raw_path: str, label: str = "Directory") -> Path:
+    """Validate and resolve a user-supplied directory path without traversal."""
+    cleaned = raw_path.strip()
+    if not cleaned or "\x00" in cleaned:
+        raise ProjectServiceError(f"{label} path cannot be empty.", 400)
+
+    normalized_parts = cleaned.replace("\\", "/").split("/")
+    if ".." in normalized_parts:
+        raise ProjectServiceError(
+            f"{label} path cannot contain '..' traversal segments.", 400
+        )
+
+    candidate = Path(cleaned).expanduser()
+    if not candidate.is_absolute():
+        raise ProjectServiceError(
+            f"{label} must be an absolute directory path.", 400
+        )
+
+    try:
+        return candidate.resolve(strict=False)
+    except OSError as exc:
+        raise ProjectServiceError(
+            f"Invalid {label.lower()} path: {exc}", 400
+        ) from exc
+
+
+def _write_exclusive(path: Path, content: str) -> None:
+    """Write text file atomically without overwriting existing files."""
+    with open(path, "x", encoding="utf-8", newline="\n") as handle:
+        handle.write(content)
+
+
+def _render_gitignore() -> str:
+    return (
+        "# Build outputs\n"
+        "build/\n"
+        "*.o\n"
+        "*.d\n"
+        "*.elf\n"
+        "*.bin\n"
+        "*.hex\n"
+        "*.map\n"
+        "\n"
+        "# Local host/IDE state (keep host-specific settings out of Git)\n"
+        ".env\n"
+        ".env.local\n"
+        ".vega-studio/\n"
+    )
+
+
+def _render_readme(name: str, description: str) -> str:
+    desc = description.strip() or "VEGA ARIES V3 RISC-V firmware project."
+    return (
+        f"# {name}\n\n"
+        f"{desc}\n\n"
+        "## Target\n\n"
+        "- **Board:** C-DAC VEGA ARIES V3\n"
+        "- **Architecture:** `rv32i_zicsr` (`THEJAS32`)\n"
+        "- **Metadata:** `vega-project.json`\n\n"
+        "## Project Structure\n\n"
+        "```text\n"
+        f"{name}/\n"
+        "├── src/\n"
+        "├── include/\n"
+        "├── Makefile\n"
+        "├── README.md\n"
+        "├── vega-project.json\n"
+        "└── .gitignore\n"
+        "```\n"
+    )
+
+
+def _render_main_c(name: str) -> str:
+    return (
+        "/*\n"
+        f" * {name} — VEGA ARIES V3 Firmware Entry Point\n"
+        " *\n"
+        " * Generated by VEGA Studio.\n"
+        " * Add verified VEGA SDK headers and peripheral calls after\n"
+        " * configuring your local VEGA SDK environment.\n"
+        " */\n\n"
+        "int main(void)\n"
+        "{\n"
+        "    while (1) {\n"
+        "        /* Firmware application loop */\n"
+        "    }\n\n"
+        "    return 0;\n"
+        "}\n"
+    )
+
+
+def _render_makefile(name: str) -> str:
+    return (
+        f"# Portable Makefile placeholder for {name} (VEGA ARIES V3)\n"
+        "# Host-specific SDK and toolchain paths are resolved by VEGA Studio\n"
+        "# from your local environment, never stored inside this repository.\n\n"
+        f"PROJECT := {name}\n"
+        "VEGA_MACHINE ?= THEJAS32\n"
+        "SRC_DIR := src\n"
+        "INC_DIR := include\n"
+        "BUILD_DIR := build\n\n"
+        ".PHONY: all clean\n\n"
+        "all:\n"
+        "\t@echo \"Configure VEGA SDK environment before building $(PROJECT) ($(VEGA_MACHINE)).\"\n\n"
+        "clean:\n"
+        "\trm -rf $(BUILD_DIR)\n"
+    )
+
+
+class ProjectService:
+    """Service coordinating VEGA Studio project lifecycle and local persistence."""
+
+    def __init__(self, app_settings: Optional[Settings] = None) -> None:
+        self._settings = app_settings or settings
+        db_path = self._settings.get_data_dir() / "vega_studio.db"
+        self.persistence = AppPersistence(db_path)
+
+    def _inspect_project_directory(
+        self, project_path: Path
+    ) -> Tuple[VegaProjectMetadata, bool, List[str], List[ProjectEntrySummary]]:
+        """Read and validate a VEGA project directory without modifying any files."""
+        meta_path = project_path / PROJECT_METADATA_FILENAME
+        if not meta_path.exists():
+            raise ProjectServiceError(
+                f"Not a VEGA Studio project: missing '{PROJECT_METADATA_FILENAME}' in '{project_path}'.",
+                400,
+            )
+
+        try:
+            resolved_meta = meta_path.resolve(strict=True)
+        except OSError as exc:
+            raise ProjectServiceError(
+                f"Unable to access '{PROJECT_METADATA_FILENAME}': {exc}", 400
+            ) from exc
+
+        if resolved_meta.parent != project_path or not resolved_meta.is_file():
+            raise ProjectServiceError(
+                f"Invalid '{PROJECT_METADATA_FILENAME}' location or file type.",
+                400,
+            )
+
+        try:
+            raw_text = resolved_meta.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise ProjectServiceError(
+                f"Failed to read '{PROJECT_METADATA_FILENAME}': {exc}", 400
+            ) from exc
+
+        try:
+            raw_json = json.loads(raw_text)
+        except json.JSONDecodeError as exc:
+            raise ProjectServiceError(
+                f"Malformed JSON in '{PROJECT_METADATA_FILENAME}': {exc.msg} (line {exc.lineno}).",
+                422,
+            ) from exc
+
+        if not isinstance(raw_json, dict):
+            raise ProjectServiceError(
+                f"Invalid '{PROJECT_METADATA_FILENAME}': root JSON value must be an object.",
+                422,
+            )
+
+        try:
+            metadata = VegaProjectMetadata.model_validate(raw_json)
+        except ValidationError as exc:
+            first_err = exc.errors()[0] if exc.errors() else None
+            detail = (
+                f"{'.'.join(str(x) for x in first_err.get('loc', ()))}: {first_err.get('msg')}"
+                if first_err
+                else str(exc)
+            )
+            raise ProjectServiceError(
+                f"Invalid project metadata in '{PROJECT_METADATA_FILENAME}': {detail}",
+                422,
+            ) from exc
+
+        warnings: List[str] = []
+        src_path = project_path / metadata.build.sourceDir
+        if not src_path.exists() or not src_path.is_dir():
+            warnings.append(
+                f"Configured source directory '{metadata.build.sourceDir}' was not found."
+            )
+        inc_path = project_path / metadata.build.includeDir
+        if not inc_path.exists() or not inc_path.is_dir():
+            warnings.append(
+                f"Configured include directory '{metadata.build.includeDir}' was not found."
+            )
+        if metadata.template == "minimal":
+            makefile_path = project_path / metadata.build.makefile
+            if not makefile_path.exists() or not makefile_path.is_file():
+                warnings.append(
+                    f"Configured Makefile '{metadata.build.makefile}' was not found."
+                )
+
+        entries: List[ProjectEntrySummary] = []
+        try:
+            children = sorted(
+                project_path.iterdir(),
+                key=lambda p: (not p.is_dir(), p.name.lower()),
+            )
+            for child in children[:30]:
+                entries.append(
+                    ProjectEntrySummary(
+                        name=child.name,
+                        kind="dir" if child.is_dir() else "file",
+                    )
+                )
+        except OSError as exc:
+            warnings.append(f"Could not list directory entries: {exc}")
+
+        return metadata, len(warnings) == 0, warnings, entries
+
+    def create_project(self, req: CreateProjectRequest) -> WorkspaceSummary:
+        """Create a new portable VEGA Studio project safely without overwriting."""
+        name = validate_project_name(req.name)
+        parent_path = validate_directory_input(
+            req.parent_dir, label="Project location"
+        )
+
+        if parent_path.exists() and not parent_path.is_dir():
+            raise ProjectServiceError(
+                f"Project location '{parent_path}' is not a directory.", 400
+            )
+
+        target_dir = (parent_path / name).resolve(strict=False)
+        if target_dir.parent != parent_path or target_dir == parent_path:
+            raise ProjectServiceError(
+                "Resolved project directory escapes the chosen parent location.",
+                400,
+            )
+
+        if target_dir.exists():
+            raise ProjectServiceError(
+                f"Directory '{target_dir}' already exists. Choose a different project name or open the existing project.",
+                409,
+            )
+
+        now = _utc_now()
+        metadata = VegaProjectMetadata(
+            schemaVersion=PROJECT_SCHEMA_VERSION,
+            name=name,
+            description=req.description.strip(),
+            template=req.template,
+            target=ProjectTarget(),
+            build=ProjectBuildConfig(),
+            createdAt=now,
+            updatedAt=now,
+        )
+
+        created_target = False
+        try:
+            if not parent_path.exists():
+                parent_path.mkdir(parents=True, exist_ok=True)
+            target_dir.mkdir(exist_ok=False)
+            created_target = True
+
+            src_dir = target_dir / metadata.build.sourceDir
+            inc_dir = target_dir / metadata.build.includeDir
+            src_dir.mkdir(exist_ok=False)
+            inc_dir.mkdir(exist_ok=False)
+
+            _write_exclusive(
+                target_dir / PROJECT_METADATA_FILENAME,
+                json.dumps(metadata.model_dump(mode="json"), indent=2) + "\n",
+            )
+            _write_exclusive(target_dir / ".gitignore", _render_gitignore())
+            _write_exclusive(
+                target_dir / "README.md",
+                _render_readme(name, req.description),
+            )
+            _write_exclusive(inc_dir / ".gitkeep", "")
+
+            if req.template == "minimal":
+                _write_exclusive(src_dir / "main.c", _render_main_c(name))
+                _write_exclusive(
+                    target_dir / metadata.build.makefile,
+                    _render_makefile(name),
+                )
+            else:
+                _write_exclusive(src_dir / ".gitkeep", "")
+        except FileExistsError as exc:
+            if created_target and target_dir.exists():
+                shutil.rmtree(target_dir, ignore_errors=True)
+            raise ProjectServiceError(
+                f"Refusing to overwrite existing path: {exc}", 409
+            ) from exc
+        except OSError as exc:
+            if created_target and target_dir.exists():
+                shutil.rmtree(target_dir, ignore_errors=True)
+            raise ProjectServiceError(
+                f"Failed to initialize project directory: {exc}", 500
+            ) from exc
+
+        return self.open_project(str(target_dir))
+
+    def open_project(self, raw_project_dir: str) -> WorkspaceSummary:
+        """Validate and open an existing VEGA Studio project without modifying it."""
+        project_path = validate_directory_input(
+            raw_project_dir, label="Project directory"
+        )
+        if not project_path.exists():
+            raise ProjectServiceError(
+                f"Project directory '{project_path}' does not exist.", 404
+            )
+        if not project_path.is_dir():
+            raise ProjectServiceError(
+                f"'{project_path}' is not a directory.", 400
+            )
+
+        metadata, structure_valid, warnings, entries = (
+            self._inspect_project_directory(project_path)
+        )
+
+        dir_str = str(project_path)
+        self.persistence.set_active_project_dir(dir_str)
+        self.persistence.upsert_recent_project(
+            project_dir=dir_str,
+            name=metadata.name,
+            board=metadata.target.board,
+            schema_version=metadata.schemaVersion,
+        )
+
+        return WorkspaceSummary(
+            project=metadata,
+            project_dir=dir_str,
+            structure_valid=structure_valid,
+            warnings=warnings,
+            top_level_entries=entries,
+        )
+
+    def close_workspace(self) -> None:
+        """Clear the active workspace without modifying project files."""
+        self.persistence.set_active_project_dir(None)
+
+    def remove_recent_project(self, raw_project_dir: str) -> None:
+        """Remove a project entry from local recent history."""
+        cleaned = raw_project_dir.strip()
+        if not cleaned:
+            return
+        try:
+            resolved = str(Path(cleaned).expanduser().resolve(strict=False))
+        except OSError:
+            resolved = cleaned
+        self.persistence.remove_recent_project(resolved)
+        self.persistence.remove_recent_project(cleaned)
+
+    def _list_recent(self) -> List[RecentProjectEntry]:
+        records = self.persistence.list_recent_projects()
+        result: List[RecentProjectEntry] = []
+        for rec in records:
+            p = Path(rec["project_dir"])
+            exists = p.exists() and p.is_dir() and (p / PROJECT_METADATA_FILENAME).is_file()
+            result.append(
+                RecentProjectEntry(
+                    name=rec["name"],
+                    project_dir=rec["project_dir"],
+                    board=rec["board"],
+                    schema_version=rec["schema_version"],
+                    last_opened_at=rec["last_opened_at"],
+                    exists=exists,
+                )
+            )
+        return result
+
+    def get_workspace_state(self) -> WorkspaceStateResponse:
+        """Return active workspace (if valid) and recent projects list."""
+        default_dir = str(self._settings.get_default_projects_dir())
+        active_dir = self.persistence.get_active_project_dir()
+        active_summary: Optional[WorkspaceSummary] = None
+        warning: Optional[str] = None
+
+        if active_dir:
+            try:
+                active_path = validate_directory_input(
+                    active_dir, label="Saved workspace"
+                )
+                if not active_path.exists() or not active_path.is_dir():
+                    raise ProjectServiceError(
+                        f"Previously opened workspace '{active_dir}' no longer exists.",
+                        404,
+                    )
+                metadata, structure_valid, warnings, entries = (
+                    self._inspect_project_directory(active_path)
+                )
+                active_summary = WorkspaceSummary(
+                    project=metadata,
+                    project_dir=str(active_path),
+                    structure_valid=structure_valid,
+                    warnings=warnings,
+                    top_level_entries=entries,
+                )
+            except ProjectServiceError as exc:
+                self.persistence.set_active_project_dir(None)
+                warning = exc.message
+
+        return WorkspaceStateResponse(
+            active_project=active_summary,
+            recent_projects=self._list_recent(),
+            default_projects_dir=default_dir,
+            warning=warning,
+        )
+
+
+def get_project_service() -> ProjectService:
+    """FastAPI dependency returning a ProjectService configured from current settings."""
+    return ProjectService(settings)

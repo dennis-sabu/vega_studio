@@ -1,5 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+export interface SelectDirectoryOptions {
+  title?: string;
+  defaultPath?: string;
+}
+
+export interface SelectDirectoryResult {
+  canceled: boolean;
+  path: string | null;
+}
+
 contextBridge.exposeInMainWorld('vegaStudio', {
   getBackendUrl: (): string => 'http://127.0.0.1:8765',
 
@@ -12,4 +22,14 @@ contextBridge.exposeInMainWorld('vegaStudio', {
   },
 
   getPlatform: (): NodeJS.Platform => process.platform,
+
+  selectDirectory: (
+    options?: SelectDirectoryOptions
+  ): Promise<SelectDirectoryResult> => {
+    return ipcRenderer.invoke('select-directory', options);
+  },
+
+  getDefaultProjectsDir: (): Promise<string> => {
+    return ipcRenderer.invoke('get-default-projects-dir');
+  },
 });
