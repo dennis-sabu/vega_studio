@@ -15,7 +15,10 @@ import { LiquidGlassFilter } from "@/components/shell/LiquidGlassFilter";
 import { PrimaryNav } from "@/components/shell/PrimaryNav";
 import { ResizeHandle } from "@/components/shell/ResizeHandle";
 import { RightPanel } from "@/components/shell/RightPanel";
-import { SettingsModal } from "@/components/shell/SettingsModal";
+import {
+  SettingsModal,
+  type SettingsCategory,
+} from "@/components/shell/SettingsModal";
 import { SidebarPanel } from "@/components/shell/SidebarPanel";
 import { StatusBar } from "@/components/shell/StatusBar";
 import { WorkspaceEditorArea } from "@/components/shell/WorkspaceEditorArea";
@@ -23,6 +26,7 @@ import { useBackendHealth } from "@/hooks/useBackendHealth";
 import { useEditorSettings } from "@/hooks/useEditorSettings";
 import { useEditorTabs } from "@/hooks/useEditorTabs";
 import { useFileExplorer } from "@/hooks/useFileExplorer";
+import { useSdkDoctor } from "@/hooks/useSdkDoctor";
 import {
   BOTTOM_PANEL_DEFAULT_HEIGHT,
   BOTTOM_PANEL_MIN_HEIGHT,
@@ -106,6 +110,8 @@ export function IdeShell() {
   );
   const [atmosphereHydrated, setAtmosphereHydrated] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsCategory, setSettingsCategory] =
+    useState<SettingsCategory>("appearance");
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [openProjectOpen, setOpenProjectOpen] = useState(false);
   const [composerFocused, setComposerFocused] = useState(false);
@@ -199,6 +205,25 @@ export function IdeShell() {
     onEntryRenamed: editorTabs.handleEntryRenamed,
     onEntryDeleted: editorTabs.handleEntryDeleted,
   });
+
+  const sdkDoctor = useSdkDoctor({
+    isBackendConnected: isConnected,
+    onLog: (level, message) => appendLog("SHELL", level, message),
+  });
+
+  const openSettingsCategory = useCallback((cat: SettingsCategory) => {
+    setSettingsCategory(cat);
+    setSettingsOpen(true);
+  }, []);
+
+  const openSdkDoctor = useCallback(() => {
+    setComposerFocused(false);
+    setSettingsOpen(false);
+    editorTabs.setActiveFileTabPath(null);
+    setMode("workspace");
+    selectNav("sdk");
+    openCenterTab("sdk-doctor");
+  }, [editorTabs, openCenterTab, selectNav, setMode]);
 
   // Global keyboard shortcuts for shell panel navigation, save & settings
   useEffect(() => {
@@ -455,7 +480,11 @@ export function IdeShell() {
               }}
               onOpenNavSection={(section) => {
                 setComposerFocused(false);
-                selectNav(section);
+                if (section === "sdk") {
+                  openSdkDoctor();
+                } else {
+                  selectNav(section);
+                }
               }}
               onOpenBottomTab={(tab) => {
                 setComposerFocused(false);
@@ -500,6 +529,8 @@ export function IdeShell() {
                     onDeleteEntry: explorer.deleteEntry,
                     onClearFeedback: explorer.clearFeedback,
                   }}
+                  sdkReport={sdkDoctor.report}
+                  sdkRunning={sdkDoctor.runningDiagnostics}
                   onCollapse={toggleSidebar}
                   onOpenHome={() => setMode("home")}
                   onNewProject={openNewProjectDialog}
@@ -508,6 +539,9 @@ export function IdeShell() {
                     void handleOpenProjectDir(dir).catch(() => {})
                   }
                   onCloseProject={() => void handleCloseProject()}
+                  onOpenSdkDoctor={openSdkDoctor}
+                  onRunSdkDiagnostics={() => void sdkDoctor.runDiagnostics()}
+                  onOpenSdkSettings={() => openSettingsCategory("sdk")}
                 />
                 <ResizeHandle
                   orientation="vertical"
@@ -531,6 +565,26 @@ export function IdeShell() {
                   activeFileTabPath={editorTabs.activeFileTabPath}
                   editorSettings={editorSettings.settings}
                   dirtyCount={editorTabs.dirtyCount}
+                  sdkDoctorProps={{
+                    isBackendConnected: isConnected,
+                    hasElectronBrowse: sdkDoctor.hasElectronBrowse,
+                    configState: sdkDoctor.configState,
+                    report: sdkDoctor.report,
+                    discovery: sdkDoctor.discovery,
+                    loading: sdkDoctor.loading,
+                    runningDiagnostics: sdkDoctor.runningDiagnostics,
+                    discovering: sdkDoctor.discovering,
+                    savingConfig: sdkDoctor.savingConfig,
+                    error: sdkDoctor.error,
+                    feedback: sdkDoctor.feedback,
+                    onBrowseDirectory: sdkDoctor.browseDirectory,
+                    onBrowseFile: sdkDoctor.browseFile,
+                    onRunDiagnostics: sdkDoctor.runDiagnostics,
+                    onDiscover: sdkDoctor.runDiscovery,
+                    onSaveConfig: sdkDoctor.saveConfig,
+                    onResetConfig: sdkDoctor.resetConfig,
+                    onClearFeedback: sdkDoctor.clearFeedback,
+                  }}
                   layout={layout}
                   activeProject={workspace.activeProject}
                   isConnected={isConnected}
@@ -569,7 +623,7 @@ export function IdeShell() {
                   onDirtyChange={editorTabs.setTabDirty}
                   onCursorChange={editorTabs.setCursorPosition}
                   onUpdateEditorSettings={editorSettings.updateSettings}
-                  onOpenSettings={() => setSettingsOpen(true)}
+                  onOpenSettings={() => openSettingsCategory("editor")}
                   onNewProject={openNewProjectDialog}
                   onOpenProject={openOpenProjectDialog}
                   onCloseProject={() => void handleCloseProject()}
@@ -642,6 +696,7 @@ export function IdeShell() {
         cursorPosition={editorTabs.cursorPosition}
         editorSettings={editorSettings.settings}
         dirtyCount={editorTabs.dirtyCount}
+        sdkStatus={sdkDoctor.report?.overall_status ?? null}
         sidebarOpen={layout.sidebarOpen}
         bottomPanelOpen={layout.bottomPanelOpen}
         rightPanelOpen={layout.rightPanelOpen}
@@ -649,6 +704,7 @@ export function IdeShell() {
           editorTabs.setActiveFileTabPath(null);
           openCenterTab("diagnostics");
         }}
+        onOpenSdkDoctor={openSdkDoctor}
         onOpenProject={openOpenProjectDialog}
         onToggleSidebar={toggleSidebar}
         onToggleBottomPanel={toggleBottomPanel}
@@ -657,15 +713,29 @@ export function IdeShell() {
 
       <SettingsModal
         open={settingsOpen}
+        initialCategory={settingsCategory}
         species={species}
         tweaks={tweaks}
         editorSettings={editorSettings.settings}
+        sdkConfigProps={{
+          configState: sdkDoctor.configState,
+          hasElectronBrowse: sdkDoctor.hasElectronBrowse,
+          isBackendConnected: isConnected,
+          saving: sdkDoctor.savingConfig,
+          discovering: sdkDoctor.discovering,
+          onBrowseDirectory: sdkDoctor.browseDirectory,
+          onBrowseFile: sdkDoctor.browseFile,
+          onDiscover: sdkDoctor.runDiscovery,
+          onSave: sdkDoctor.saveConfig,
+          onReset: sdkDoctor.resetConfig,
+        }}
         onClose={() => setSettingsOpen(false)}
         onSpeciesChange={handleSpeciesChange}
         onTweaksChange={handleTweaksChange}
         onResetTweaks={handleResetTweaks}
         onEditorSettingsChange={editorSettings.updateSettings}
         onResetEditorSettings={editorSettings.resetSettings}
+        onOpenSdkDoctor={openSdkDoctor}
       />
 
       <UnsavedChangesDialog prompt={editorTabs.unsavedPrompt} />

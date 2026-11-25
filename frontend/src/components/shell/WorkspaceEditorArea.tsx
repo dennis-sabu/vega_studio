@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ComponentProps,
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
@@ -29,6 +30,7 @@ import {
   Search,
   Server,
   SlidersHorizontal,
+  Stethoscope,
   Wifi,
   WifiOff,
   WrapText,
@@ -39,6 +41,7 @@ import {
   type MonacoEditorHandle,
 } from "@/components/editor/MonacoEditorSurface";
 import { FileIcon } from "@/components/explorer/FileIcon";
+import { SdkDoctorView } from "@/components/sdk/SdkDoctorView";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { fetchStatus, type HealthResponse, type StatusResponse } from "@/lib/api";
 import type { EditorCursorPosition, EditorSettings } from "@/types/editor";
@@ -53,6 +56,7 @@ interface WorkspaceEditorAreaProps {
   activeFileTabPath: string | null;
   editorSettings: EditorSettings;
   dirtyCount: number;
+  sdkDoctorProps: ComponentProps<typeof SdkDoctorView>;
   layout: ShellLayoutState;
   activeProject: WorkspaceSummary | null;
   isConnected: boolean;
@@ -88,6 +92,7 @@ const TAB_META: Record<
 > = {
   overview: { label: "Shell Overview", icon: Layers },
   diagnostics: { label: "Backend Status", icon: Activity },
+  "sdk-doctor": { label: "SDK Doctor", icon: Stethoscope },
 };
 
 const TIME_FORMAT = new Intl.DateTimeFormat(undefined, { timeStyle: "medium" });
@@ -105,6 +110,7 @@ export function WorkspaceEditorArea({
   activeFileTabPath,
   editorSettings,
   dirtyCount,
+  sdkDoctorProps,
   layout,
   activeProject,
   isConnected,
@@ -374,6 +380,15 @@ export function WorkspaceEditorArea({
               className="rounded px-2 py-1 text-[11px] text-[#e8ebf7]/55 hover:bg-white/[0.06] hover:text-[#e8ebf7]"
             >
               + Status
+            </button>
+          )}
+          {!openTabs.includes("sdk-doctor") && (
+            <button
+              type="button"
+              onClick={() => onOpenTab("sdk-doctor")}
+              className="rounded px-2 py-1 text-[11px] text-[#e8ebf7]/55 hover:bg-white/[0.06] hover:text-[#e8ebf7]"
+            >
+              + SDK Doctor
             </button>
           )}
         </div>
@@ -916,6 +931,8 @@ export function WorkspaceEditorArea({
               </p>
             </div>
           </div>
+        ) : activeTab === "sdk-doctor" ? (
+          <SdkDoctorView {...sdkDoctorProps} />
         ) : (
           /* Live Backend Health & Status Tab */
           <div className="mx-auto flex max-w-3xl flex-col gap-4">

@@ -17,6 +17,7 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import type { HealthResponse } from "@/lib/api";
 import type { EditorCursorPosition, EditorSettings } from "@/types/editor";
 import type { OpenFileTab } from "@/types/explorer";
+import type { DiagnosticStatus } from "@/types/sdk";
 
 interface StatusBarProps {
   isConnected: boolean;
@@ -27,10 +28,12 @@ interface StatusBarProps {
   cursorPosition: EditorCursorPosition;
   editorSettings: EditorSettings;
   dirtyCount: number;
+  sdkStatus: DiagnosticStatus | null;
   sidebarOpen: boolean;
   bottomPanelOpen: boolean;
   rightPanelOpen: boolean;
   onInspectBackend: () => void;
+  onOpenSdkDoctor: () => void;
   onOpenProject: () => void;
   onToggleSidebar: () => void;
   onToggleBottomPanel: () => void;
@@ -46,10 +49,12 @@ export function StatusBar({
   cursorPosition,
   editorSettings,
   dirtyCount,
+  sdkStatus,
   sidebarOpen,
   bottomPanelOpen,
   rightPanelOpen,
   onInspectBackend,
+  onOpenSdkDoctor,
   onOpenProject,
   onToggleSidebar,
   onToggleBottomPanel,
@@ -130,10 +135,35 @@ export function StatusBar({
           <span>ARIES V3</span>
         </span>
 
-        <span className="hidden items-center gap-1 font-mono text-[11px] text-[#e8ebf7]/40 md:inline-flex">
-          <Stethoscope className="h-3 w-3" />
-          <span>SDK: Unconfigured</span>
-        </span>
+        <Tooltip
+          label="Open VEGA SDK Doctor & environment diagnostics"
+          side="top"
+        >
+          <button
+            type="button"
+            onClick={onOpenSdkDoctor}
+            className={`hidden items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[11px] transition-colors hover:bg-white/[0.07] md:inline-flex ${
+              sdkStatus === "pass"
+                ? "text-emerald-300"
+                : sdkStatus === "warning"
+                ? "text-amber-300"
+                : sdkStatus === "fail"
+                ? "text-red-300"
+                : "text-[#e8ebf7]/50 hover:text-[#e8ebf7]"
+            }`}
+          >
+            <Stethoscope className="h-3 w-3" />
+            <span>
+              {sdkStatus === "pass"
+                ? "SDK: Ready"
+                : sdkStatus === "warning"
+                ? "SDK: Warnings"
+                : sdkStatus === "fail"
+                ? "SDK: Issues"
+                : "SDK: Unchecked"}
+            </span>
+          </button>
+        </Tooltip>
 
         <span className="hidden items-center gap-1 font-mono text-[11px] text-[#e8ebf7]/40 lg:inline-flex">
           <GitBranch className="h-3 w-3" />

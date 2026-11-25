@@ -62,7 +62,11 @@ const VALID_BOTTOM_TABS = new Set<BottomPanelTab>([
   "logs",
 ]);
 const VALID_RIGHT_TABS = new Set<RightPanelTab>(["native-ai", "opencode"]);
-const VALID_CENTER_TABS = new Set<CenterTabId>(["overview", "diagnostics"]);
+const VALID_CENTER_TABS = new Set<CenterTabId>([
+  "overview",
+  "diagnostics",
+  "sdk-doctor",
+]);
 
 function clamp(value: number, min: number, max: number): number {
   if (max < min) return min;

@@ -55,6 +55,46 @@ ipcMain.handle(
   }
 );
 
+ipcMain.handle(
+  'select-file',
+  async (
+    _event,
+    options?: { title?: unknown; defaultPath?: unknown }
+  ): Promise<{ canceled: boolean; path: string | null }> => {
+    const title =
+      typeof options?.title === 'string' && options.title.trim().length > 0
+        ? options.title.trim().slice(0, 120)
+        : 'Select File';
+
+    let defaultPath: string | undefined;
+    if (
+      typeof options?.defaultPath === 'string' &&
+      options.defaultPath.trim().length > 0
+    ) {
+      const candidate = path.resolve(options.defaultPath.trim());
+      if (fs.existsSync(candidate)) {
+        defaultPath = candidate;
+      }
+    }
+
+    const dialogOptions: Electron.OpenDialogOptions = {
+      title,
+      defaultPath,
+      properties: ['openFile'],
+    };
+
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions);
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true, path: null };
+    }
+
+    return { canceled: false, path: result.filePaths[0] };
+  }
+);
+
 ipcMain.handle('get-default-projects-dir', (): string => {
   return path.join(app.getPath('documents'), 'VEGA Studio Projects');
 });

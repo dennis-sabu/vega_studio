@@ -1,11 +1,12 @@
 """Local SQLite persistence for application workspace state and recent projects."""
 from __future__ import annotations
 
+import json
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator, List, Optional
+from typing import Any, Iterator, List, Optional
 
 
 class AppPersistence:
@@ -128,3 +129,39 @@ class AppPersistence:
                 "DELETE FROM recent_projects WHERE project_dir = ?",
                 (project_dir,),
             )
+
+    def get_state_json(self, key: str) -> Optional[tuple[Any, str]]:
+        """Read a JSON-encoded record and its updated_at timestamp from app_state."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT value, updated_at FROM app_state WHERE key = ?",
+                (key,),
+            ).fetchone()
+            if not row:
+                return None
+            try:
+                return json.loads(str(row["value"])), str(row["updated_at"])
+            except json.JSONDecodeError:
+                return None
+
+    def set_state_json(self, key: str, value: Any) -> str:
+        """Persist a JSON-encoded record into app_state and return updated_at."""
+        now = self._utc_now()
+        payload = json.dumps(value)
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO app_state (key, value, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = excluded.updated_at
+                """,
+                (key, payload, now),
+            )
+        return now
+
+    def delete_state(self, key: str) -> None:
+        """Remove a key from app_state."""
+        with self._connect() as conn:
+            conn.execute("DELETE FROM app_state WHERE key = ?", (key,))

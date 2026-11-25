@@ -15,6 +15,12 @@ import type {
   WorkspaceStateResponse,
   WorkspaceSummary,
 } from "@/types/project";
+import type {
+  SdkConfig,
+  SdkConfigStateResponse,
+  SdkDiscoveryResult,
+  SdkDoctorReport,
+} from "@/types/sdk";
 
 export interface HealthResponse {
   status: string;
@@ -61,6 +67,9 @@ export interface VegaStudioBridge {
   getVersion?: () => string;
   getPlatform?: () => string;
   selectDirectory?: (
+    options?: SelectDirectoryOptions
+  ) => Promise<SelectDirectoryResult>;
+  selectFile?: (
     options?: SelectDirectoryOptions
   ) => Promise<SelectDirectoryResult>;
   getDefaultProjectsDir?: () => Promise<string>;
@@ -256,5 +265,50 @@ export async function saveFileContent(
   return apiFetch<FileWriteResponse>("/api/explorer/file", {
     method: "PUT",
     body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchSdkConfig(
+  signal?: AbortSignal
+): Promise<SdkConfigStateResponse> {
+  return apiFetch<SdkConfigStateResponse>("/api/sdk/config", { signal });
+}
+
+export async function updateSdkConfig(
+  config: SdkConfig
+): Promise<SdkConfigStateResponse> {
+  return apiFetch<SdkConfigStateResponse>("/api/sdk/config", {
+    method: "PUT",
+    body: JSON.stringify(config),
+  });
+}
+
+export async function resetSdkConfig(): Promise<SdkConfigStateResponse> {
+  return apiFetch<SdkConfigStateResponse>("/api/sdk/config/reset", {
+    method: "POST",
+  });
+}
+
+export async function discoverSdk(
+  applyToConfig = false
+): Promise<SdkDiscoveryResult> {
+  return apiFetch<SdkDiscoveryResult>("/api/sdk/discover", {
+    method: "POST",
+    body: JSON.stringify({ apply_to_config: applyToConfig }),
+  });
+}
+
+export async function fetchSdkDiagnostics(
+  signal?: AbortSignal
+): Promise<SdkDoctorReport> {
+  return apiFetch<SdkDoctorReport>("/api/sdk/diagnostics", { signal });
+}
+
+export async function runSdkDiagnostics(
+  configOverride?: SdkConfig
+): Promise<SdkDoctorReport> {
+  return apiFetch<SdkDoctorReport>("/api/sdk/diagnostics/run", {
+    method: "POST",
+    body: JSON.stringify({ config_override: configOverride ?? null }),
   });
 }

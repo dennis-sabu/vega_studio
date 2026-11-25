@@ -10,12 +10,16 @@ import {
   FolderPlus,
   GitBranch,
   Home,
+  Loader2,
   PanelLeftClose,
+  RefreshCw,
+  Settings2,
   Stethoscope,
 } from "lucide-react";
 import { FileExplorer } from "@/components/explorer/FileExplorer";
 import { Tooltip } from "@/components/ui/Tooltip";
 import type { RecentProjectEntry, WorkspaceSummary } from "@/types/project";
+import type { SdkDoctorReport } from "@/types/sdk";
 import type { PrimaryNavSection } from "@/types/shell";
 
 export type SidebarExplorerBridge = Omit<
@@ -30,12 +34,17 @@ interface SidebarPanelProps {
   recentProjects: RecentProjectEntry[];
   actionPending: boolean;
   explorer: SidebarExplorerBridge;
+  sdkReport: SdkDoctorReport | null;
+  sdkRunning: boolean;
   onCollapse: () => void;
   onOpenHome: () => void;
   onNewProject: () => void;
   onOpenProject: () => void;
   onOpenRecentProject: (projectDir: string) => void;
   onCloseProject: () => void;
+  onOpenSdkDoctor: () => void;
+  onRunSdkDiagnostics: () => void;
+  onOpenSdkSettings: () => void;
 }
 
 interface SectionConfig {
@@ -89,7 +98,7 @@ const SECTION_META: Record<PrimaryNavSection, SectionConfig> = {
   },
   sdk: {
     title: "SDK & Doctor",
-    phase: "Phase 4",
+    phase: "Phase 6 · Active",
     heading: "Toolchain & SDK Diagnostics",
     description:
       "Detects local VEGA SDK, RISC-V GCC toolchain, Make, Python dependencies, and configuration.",
@@ -97,7 +106,7 @@ const SECTION_META: Record<PrimaryNavSection, SectionConfig> = {
     details: [
       "VEGA SDK & riscv32-vega-elf-gcc check",
       "THEJAS32 / rv32i_zicsr config validation",
-      "Guided fixes without silent edits",
+      "Bounded read-only diagnostic commands",
     ],
   },
   tools: {
@@ -122,12 +131,17 @@ export function SidebarPanel({
   recentProjects,
   actionPending,
   explorer,
+  sdkReport,
+  sdkRunning,
   onCollapse,
   onOpenHome,
   onNewProject,
   onOpenProject,
   onOpenRecentProject,
   onCloseProject,
+  onOpenSdkDoctor,
+  onRunSdkDiagnostics,
+  onOpenSdkSettings,
 }: SidebarPanelProps) {
   const meta = SECTION_META[activeNav];
   const SectionIcon = meta.icon;
@@ -218,6 +232,68 @@ export function SidebarPanel({
                     <FolderPlus className="h-3.5 w-3.5 text-[#7aa2ff]" />
                     <span>New Project</span>
                   </button>
+                </div>
+              )}
+
+              {activeNav === "sdk" && (
+                <div className="mt-3.5 space-y-2.5">
+                  {sdkReport && (
+                    <div className="rounded-xl border border-white/[0.08] bg-[#090b13]/75 px-2.5 py-2 font-mono text-[10.5px]">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[#e8ebf7]/55">Status</span>
+                        <span
+                          className={`font-semibold uppercase ${
+                            sdkReport.overall_status === "pass"
+                              ? "text-emerald-300"
+                              : sdkReport.overall_status === "warning"
+                              ? "text-amber-300"
+                              : sdkReport.overall_status === "fail"
+                              ? "text-red-300"
+                              : "text-[#e8ebf7]/65"
+                          }`}
+                        >
+                          {sdkReport.overall_status.replace("_", " ")}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between text-[10px] text-[#e8ebf7]/55">
+                        <span>{sdkReport.summary.passed} pass</span>
+                        <span>{sdkReport.summary.warning} warn</span>
+                        <span>{sdkReport.summary.failed} fail</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-1.5">
+                    <button
+                      type="button"
+                      onClick={onOpenSdkDoctor}
+                      className="inline-flex h-8 items-center justify-center gap-2 rounded-lg border border-[#7aa2ff]/35 bg-[#7aa2ff]/16 px-3 text-xs font-medium text-[#e8ebf7] transition-colors hover:bg-[#7aa2ff]/25"
+                    >
+                      <Stethoscope className="h-3.5 w-3.5 text-[#7aa2ff]" />
+                      <span>Open SDK Doctor</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={sdkRunning}
+                      onClick={onRunSdkDiagnostics}
+                      className="inline-flex h-8 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/[0.05] px-3 text-xs font-medium text-[#e8ebf7]/85 transition-colors hover:bg-white/10 disabled:opacity-45"
+                    >
+                      {sdkRunning ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-[#7aa2ff]" />
+                      ) : (
+                        <RefreshCw className="h-3.5 w-3.5 text-[#7aa2ff]" />
+                      )}
+                      <span>{sdkRunning ? "Running..." : "Run Diagnostics"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onOpenSdkSettings}
+                      className="inline-flex h-7 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-transparent px-3 text-[11px] text-[#e8ebf7]/70 hover:bg-white/[0.06] hover:text-[#e8ebf7]"
+                    >
+                      <Settings2 className="h-3 w-3 text-[#7aa2ff]" />
+                      <span>Configure SDK Paths</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

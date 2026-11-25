@@ -1,5 +1,6 @@
 "use client";
 
+import type { ComponentProps } from "react";
 import { useEffect, useState } from "react";
 import {
   Cpu,
@@ -9,6 +10,7 @@ import {
   Type,
   X,
 } from "lucide-react";
+import { SdkConfigForm } from "@/components/sdk/SdkConfigForm";
 import {
   SegmentedPill,
   type SegmentedPillOption,
@@ -21,17 +23,22 @@ import {
 } from "@/lib/glyphAnimalsEngine";
 import type { EditorSettings } from "@/types/editor";
 
+export type SettingsCategory = "appearance" | "editor" | "sdk";
+
 interface SettingsModalProps {
   open: boolean;
+  initialCategory?: SettingsCategory;
   species: SpeciesKey;
   tweaks: AtmosphereTweaks;
   editorSettings: EditorSettings;
+  sdkConfigProps: ComponentProps<typeof SdkConfigForm>;
   onClose: () => void;
   onSpeciesChange: (species: SpeciesKey) => void;
   onTweaksChange: (partial: Partial<AtmosphereTweaks>) => void;
   onResetTweaks: () => void;
   onEditorSettingsChange: (partial: Partial<EditorSettings>) => void;
   onResetEditorSettings: () => void;
+  onOpenSdkDoctor: () => void;
 }
 
 interface SliderSpec {
@@ -193,31 +200,39 @@ const GLASS_SLIDERS: SliderSpec[] = [
   },
 ];
 
-type SettingsCategory = "appearance" | "editor";
-
 const FUTURE_SETTINGS_SECTIONS = [
-  { label: "SDK & Toolchain", phase: "Phase 6", icon: Stethoscope },
   { label: "Board & Serial", phase: "Phases 7–9", icon: Cpu },
   { label: "AI & OpenCode", phase: "Phases 12–13", icon: Sparkles },
 ];
 
 export function SettingsModal({
   open,
+  initialCategory = "appearance",
   species,
   tweaks,
   editorSettings,
+  sdkConfigProps,
   onClose,
   onSpeciesChange,
   onTweaksChange,
   onResetTweaks,
   onEditorSettingsChange,
   onResetEditorSettings,
+  onOpenSdkDoctor,
 }: SettingsModalProps) {
   const [activeCategory, setActiveCategory] =
-    useState<SettingsCategory>("appearance");
+    useState<SettingsCategory>(initialCategory);
   const [confirmReset, setConfirmReset] = useState(false);
   const [hoveredHint, setHoveredHint] = useState<string | null>(null);
   const defaults = SPECIES_MAP[species].defaults;
+
+  useEffect(() => {
+    if (!open) return;
+    queueMicrotask(() => {
+      setConfirmReset(false);
+      setActiveCategory(initialCategory);
+    });
+  }, [initialCategory, open]);
 
   useEffect(() => {
     if (!confirmReset) return;
@@ -338,6 +353,8 @@ export function SettingsModal({
                 setConfirmReset(false);
                 if (activeCategory === "editor") {
                   onResetEditorSettings();
+                } else if (activeCategory === "sdk") {
+                  void sdkConfigProps.onReset();
                 } else {
                   onResetTweaks();
                 }
@@ -401,6 +418,22 @@ export function SettingsModal({
                 <span>Monaco Editor</span>
               </button>
 
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmReset(false);
+                  setActiveCategory("sdk");
+                }}
+                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+                  activeCategory === "sdk"
+                    ? "bg-white/10 text-[#e8ebf7]"
+                    : "text-[#e8ebf7]/60 hover:bg-white/[0.05] hover:text-[#e8ebf7]"
+                }`}
+              >
+                <Stethoscope className="h-3.5 w-3.5 text-[#7aa2ff]" />
+                <span>SDK &amp; Toolchain</span>
+              </button>
+
               {FUTURE_SETTINGS_SECTIONS.map(({ label, phase, icon: Icon }) => (
                 <button
                   key={label}
@@ -423,13 +456,39 @@ export function SettingsModal({
             <p className="px-2 font-mono text-[10px] leading-relaxed text-[#e8ebf7]/35">
               {activeCategory === "editor"
                 ? "Applies immediately to all open code editor tabs."
+                : activeCategory === "sdk"
+                ? "Persisted in local app storage across IDE restarts."
                 : "Double-click any slider name to reset it."}
             </p>
           </nav>
 
           {/* Right Customization Content */}
           <div className="vega-scroll flex-1 space-y-4 overflow-y-auto p-5">
-            {activeCategory === "editor" ? (
+            {activeCategory === "sdk" ? (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#7aa2ff]/20 bg-[#7aa2ff]/[0.07] px-4 py-3">
+                  <div>
+                    <p className="text-xs font-medium text-[#e8ebf7]">
+                      Need full toolchain validation?
+                    </p>
+                    <p className="text-[11px] text-[#e8ebf7]/60">
+                      Use SDK Doctor to verify compiler execution, Make, Python,
+                      target triple, and XMODEM uploader checks.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onOpenSdkDoctor}
+                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-[#7aa2ff]/40 bg-[#7aa2ff]/18 px-3.5 text-xs font-medium text-[#e8ebf7] hover:bg-[#7aa2ff]/28"
+                  >
+                    <Stethoscope className="h-3.5 w-3.5 text-[#7aa2ff]" />
+                    <span>Open SDK Doctor</span>
+                  </button>
+                </div>
+
+                <SdkConfigForm {...sdkConfigProps} />
+              </div>
+            ) : activeCategory === "editor" ? (
               <div className="space-y-4">
                 <div className="space-y-3 rounded-2xl border border-white/[0.08] bg-[#06070c]/60 p-4">
                   <div className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/45 uppercase">
@@ -671,6 +730,8 @@ export function SettingsModal({
           <span>
             {activeCategory === "editor"
               ? "Editor preferences save locally and apply immediately"
+              : activeCategory === "sdk"
+              ? "VEGA SDK settings persist in application data directory"
               : hoveredHint ??
                 "Hover a slider for details · Double-click a label to reset"}
           </span>

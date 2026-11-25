@@ -29,6 +29,12 @@ contextBridge.exposeInMainWorld('vegaStudio', {
     return ipcRenderer.invoke('select-directory', options);
   },
 
+  selectFile: (
+    options?: SelectDirectoryOptions
+  ): Promise<SelectDirectoryResult> => {
+    return ipcRenderer.invoke('select-file', options);
+  },
+
   getDefaultProjectsDir: (): Promise<string> => {
     return ipcRenderer.invoke('get-default-projects-dir');
   },
