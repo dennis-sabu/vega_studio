@@ -11,7 +11,9 @@ import {
   PanelBottom,
   PanelLeft,
   PanelRight,
+  Plug,
   Stethoscope,
+  Terminal,
   Upload,
   Usb,
   Wifi,
@@ -24,6 +26,7 @@ import type { BuildSummary } from "@/types/build";
 import type { EditorCursorPosition, EditorSettings } from "@/types/editor";
 import type { OpenFileTab } from "@/types/explorer";
 import type { DiagnosticStatus } from "@/types/sdk";
+import type { SerialStatus } from "@/types/serial";
 import type { UploadSummary } from "@/types/upload";
 
 interface StatusBarProps {
@@ -43,6 +46,10 @@ interface StatusBarProps {
   latestBuild: BuildSummary | null;
   latestUpload: UploadSummary | null;
   selectedPort: string;
+  serialStatus: SerialStatus;
+  serialPort: string | null;
+  serialBaudRate: number;
+  terminalRunningCount: number;
   sidebarOpen: boolean;
   bottomPanelOpen: boolean;
   rightPanelOpen: boolean;
@@ -51,6 +58,8 @@ interface StatusBarProps {
   onOpenBoardManager: () => void;
   onOpenBuildOutput: () => void;
   onOpenUploadOutput: () => void;
+  onOpenSerialMonitor: () => void;
+  onOpenTerminal: () => void;
   onOpenProject: () => void;
   onToggleSidebar: () => void;
   onToggleBottomPanel: () => void;
@@ -74,6 +83,10 @@ export function StatusBar({
   latestBuild,
   latestUpload,
   selectedPort,
+  serialStatus,
+  serialPort,
+  serialBaudRate,
+  terminalRunningCount,
   sidebarOpen,
   bottomPanelOpen,
   rightPanelOpen,
@@ -82,6 +95,8 @@ export function StatusBar({
   onOpenBoardManager,
   onOpenBuildOutput,
   onOpenUploadOutput,
+  onOpenSerialMonitor,
+  onOpenTerminal,
   onOpenProject,
   onToggleSidebar,
   onToggleBottomPanel,
@@ -316,6 +331,68 @@ export function StatusBar({
             </button>
           </Tooltip>
         )}
+
+        <Tooltip
+          label={
+            serialStatus === "connected"
+              ? `Serial Monitor connected to ${serialPort} @ ${serialBaudRate} baud — click to open`
+              : serialStatus === "error"
+              ? "Serial Monitor connection error — click to inspect"
+              : "Open UART Serial Monitor"
+          }
+          side="top"
+        >
+          <button
+            type="button"
+            onClick={onOpenSerialMonitor}
+            className={`hidden items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[11px] transition-colors hover:bg-white/[0.07] md:inline-flex ${
+              serialStatus === "connected"
+                ? "text-emerald-300"
+                : serialStatus === "connecting"
+                ? "text-[#7aa2ff]"
+                : serialStatus === "error"
+                ? "text-red-300"
+                : "text-[#e8ebf7]/55 hover:text-[#e8ebf7]"
+            }`}
+          >
+            <Plug className="h-3 w-3" />
+            <span>
+              {serialStatus === "connected" && serialPort
+                ? `Serial: ${serialPort} @ ${serialBaudRate}`
+                : serialStatus === "connecting"
+                ? "Serial: Connecting…"
+                : serialStatus === "error"
+                ? "Serial: Error"
+                : "Serial"}
+            </span>
+          </button>
+        </Tooltip>
+
+        <Tooltip
+          label={
+            terminalRunningCount > 0
+              ? `${terminalRunningCount} interactive terminal session(s) running — click to open`
+              : "Open Integrated Terminal"
+          }
+          side="top"
+        >
+          <button
+            type="button"
+            onClick={onOpenTerminal}
+            className={`hidden items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[11px] transition-colors hover:bg-white/[0.07] md:inline-flex ${
+              terminalRunningCount > 0
+                ? "text-emerald-300"
+                : "text-[#e8ebf7]/55 hover:text-[#e8ebf7]"
+            }`}
+          >
+            <Terminal className="h-3 w-3" />
+            <span>
+              {terminalRunningCount > 0
+                ? `Term: ${terminalRunningCount}`
+                : "Terminal"}
+            </span>
+          </button>
+        </Tooltip>
 
         {dirtyCount > 0 && (
           <span className="hidden items-center gap-1.5 rounded border border-amber-400/25 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-amber-200 md:inline-flex">

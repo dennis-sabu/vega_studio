@@ -15,8 +15,12 @@ from app.routers import explorer as explorer_router
 from app.routers import health as health_router
 from app.routers import projects as projects_router
 from app.routers import sdk as sdk_router
+from app.routers import serial as serial_router
+from app.routers import terminal as terminal_router
 from app.routers import upload as upload_router
 from app.services.build_service import get_build_service
+from app.services.serial_service import get_serial_service
+from app.services.terminal_service import get_terminal_service
 from app.services.upload_service import get_upload_service
 
 logging.basicConfig(
@@ -37,6 +41,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
     get_build_service().shutdown()
     get_upload_service().shutdown()
+    get_serial_service().shutdown()
+    get_terminal_service().shutdown()
     logger.info("VEGA Studio Backend shutting down")
 
 
@@ -65,6 +71,8 @@ def create_app() -> FastAPI:
     application.include_router(boards_router.router)
     application.include_router(build_router.router)
     application.include_router(upload_router.router)
+    application.include_router(serial_router.router)
+    application.include_router(terminal_router.router)
 
     return application
 

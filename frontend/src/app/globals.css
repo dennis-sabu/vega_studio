@@ -291,6 +291,27 @@ html.liquid .vega-glass-liquid {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
 }
 
+/* Integrated xterm.js Obsidian host styling */
+.vega-xterm-host .xterm {
+  height: 100%;
+  padding: 6px 8px;
+}
+
+.vega-xterm-host .xterm-viewport {
+  background-color: #06070c !important;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+.vega-xterm-host .xterm-viewport::-webkit-scrollbar {
+  width: 7px;
+}
+
+.vega-xterm-host .xterm-viewport::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+
 /* Reduced motion compliance */
 @media (prefers-reduced-motion: reduce) {
   *,

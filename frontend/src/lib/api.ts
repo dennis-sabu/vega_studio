@@ -35,6 +35,20 @@ import type {
   SdkDoctorReport,
 } from "@/types/sdk";
 import type {
+  SerialConnectRequestPayload,
+  SerialSendRequestPayload,
+  SerialStateResponse,
+} from "@/types/serial";
+import type {
+  TerminalCloseResponse,
+  TerminalResizePayload,
+  TerminalSessionCreatePayload,
+  TerminalSessionListResponse,
+  TerminalSessionStateResponse,
+  TerminalSessionSummary,
+  TerminalShellsResponse,
+} from "@/types/terminal";
+import type {
   DeviceListResponse,
   UploadHistoryResponse,
   UploadPreflightRequestPayload,
@@ -503,4 +517,139 @@ export async function clearUploadOutput(): Promise<UploadStateResponse> {
   return apiFetch<UploadStateResponse>("/api/upload/output/clear", {
     method: "POST",
   });
+}
+
+// ---------------------------------------------------------------------------
+// Phase 10: Serial Monitor
+// ---------------------------------------------------------------------------
+
+export function getSerialWsUrl(): string {
+  const baseUrl = getBackendUrl().replace(/\/+$/, "");
+  const wsBase = baseUrl.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:");
+  return `${wsBase}/api/serial/ws`;
+}
+
+export async function fetchSerialDevices(
+  signal?: AbortSignal
+): Promise<DeviceListResponse> {
+  return apiFetch<DeviceListResponse>("/api/serial/devices", { signal });
+}
+
+export async function fetchSerialState(
+  signal?: AbortSignal
+): Promise<SerialStateResponse> {
+  return apiFetch<SerialStateResponse>("/api/serial/state", { signal });
+}
+
+export async function connectSerial(
+  payload: SerialConnectRequestPayload
+): Promise<SerialStateResponse> {
+  return apiFetch<SerialStateResponse>("/api/serial/connect", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function disconnectSerial(): Promise<SerialStateResponse> {
+  return apiFetch<SerialStateResponse>("/api/serial/disconnect", {
+    method: "POST",
+  });
+}
+
+export async function sendSerialData(
+  payload: SerialSendRequestPayload
+): Promise<SerialStateResponse> {
+  return apiFetch<SerialStateResponse>("/api/serial/send", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function clearSerialOutput(): Promise<SerialStateResponse> {
+  return apiFetch<SerialStateResponse>("/api/serial/output/clear", {
+    method: "POST",
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Phase 11: Integrated Terminal
+// ---------------------------------------------------------------------------
+
+export function getTerminalWsUrl(sessionId: string): string {
+  const baseUrl = getBackendUrl().replace(/\/+$/, "");
+  const wsBase = baseUrl.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:");
+  return `${wsBase}/api/terminal/ws/${encodeURIComponent(sessionId)}`;
+}
+
+export async function fetchTerminalShells(
+  signal?: AbortSignal
+): Promise<TerminalShellsResponse> {
+  return apiFetch<TerminalShellsResponse>("/api/terminal/shells", { signal });
+}
+
+export async function fetchTerminalSessions(
+  signal?: AbortSignal
+): Promise<TerminalSessionListResponse> {
+  return apiFetch<TerminalSessionListResponse>("/api/terminal/sessions", {
+    signal,
+  });
+}
+
+export async function createTerminalSession(
+  payload: TerminalSessionCreatePayload
+): Promise<TerminalSessionStateResponse> {
+  return apiFetch<TerminalSessionStateResponse>("/api/terminal/sessions", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchTerminalSessionState(
+  sessionId: string,
+  signal?: AbortSignal
+): Promise<TerminalSessionStateResponse> {
+  return apiFetch<TerminalSessionStateResponse>(
+    `/api/terminal/sessions/${encodeURIComponent(sessionId)}`,
+    { signal }
+  );
+}
+
+export async function resizeTerminalSession(
+  sessionId: string,
+  payload: TerminalResizePayload
+): Promise<TerminalSessionSummary> {
+  return apiFetch<TerminalSessionSummary>(
+    `/api/terminal/sessions/${encodeURIComponent(sessionId)}/resize`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export async function restartTerminalSession(
+  sessionId: string
+): Promise<TerminalSessionStateResponse> {
+  return apiFetch<TerminalSessionStateResponse>(
+    `/api/terminal/sessions/${encodeURIComponent(sessionId)}/restart`,
+    { method: "POST" }
+  );
+}
+
+export async function clearTerminalReplay(
+  sessionId: string
+): Promise<TerminalSessionSummary> {
+  return apiFetch<TerminalSessionSummary>(
+    `/api/terminal/sessions/${encodeURIComponent(sessionId)}/clear`,
+    { method: "POST" }
+  );
+}
+
+export async function closeTerminalSession(
+  sessionId: string
+): Promise<TerminalCloseResponse> {
+  return apiFetch<TerminalCloseResponse>(
+    `/api/terminal/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "DELETE" }
+  );
 }

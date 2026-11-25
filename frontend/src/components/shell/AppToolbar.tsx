@@ -10,6 +10,7 @@ import {
   PanelBottom,
   PanelLeft,
   PanelRight,
+  Plug,
   RotateCcw,
   RotateCw,
   Settings,
@@ -34,6 +35,8 @@ interface AppToolbarProps {
   activeProjectName: string | null;
   isBuilding: boolean;
   isUploading: boolean;
+  isSerialConnected: boolean;
+  serialPort: string | null;
   selectedPort: string;
   isBackendConnected: boolean;
   sidebarOpen: boolean;
@@ -50,6 +53,7 @@ interface AppToolbarProps {
   onUploadAction: () => void;
   onCancelUpload: () => void;
   onOpenUploadPanel: () => void;
+  onOpenSerialMonitor: () => void;
   onToggleSidebar: () => void;
   onToggleBottomPanel: () => void;
   onToggleRightPanel: () => void;
@@ -67,6 +71,8 @@ export function AppToolbar({
   activeProjectName,
   isBuilding,
   isUploading,
+  isSerialConnected,
+  serialPort,
   selectedPort,
   isBackendConnected,
   sidebarOpen,
@@ -83,6 +89,7 @@ export function AppToolbar({
   onUploadAction,
   onCancelUpload,
   onOpenUploadPanel,
+  onOpenSerialMonitor,
   onToggleSidebar,
   onToggleBottomPanel,
   onToggleRightPanel,
@@ -306,6 +313,33 @@ export function AppToolbar({
               <span className="max-w-[110px] truncate">
                 {selectedPort || "No port"}
               </span>
+            </button>
+          </Tooltip>
+
+          <Tooltip
+            label={
+              isSerialConnected
+                ? `Serial Monitor connected (${serialPort ?? "active"}) — click to open`
+                : "Open UART Serial Monitor"
+            }
+          >
+            <button
+              type="button"
+              disabled={!isBackendConnected}
+              aria-label="Open Serial Monitor"
+              onClick={onOpenSerialMonitor}
+              className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                isSerialConnected
+                  ? "border-emerald-400/35 bg-emerald-500/14 text-emerald-200 hover:bg-emerald-500/22"
+                  : "border-transparent text-[#e8ebf7]/75 hover:bg-white/[0.08] hover:text-[#e8ebf7]"
+              }`}
+            >
+              <Plug
+                className={`h-3.5 w-3.5 ${
+                  isSerialConnected ? "text-emerald-300" : "text-[#7aa2ff]"
+                }`}
+              />
+              <span className="hidden xl:inline">Serial</span>
             </button>
           </Tooltip>
         </div>

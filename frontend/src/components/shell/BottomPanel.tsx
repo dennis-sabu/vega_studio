@@ -18,6 +18,8 @@ import {
   Usb,
 } from "lucide-react";
 import { BuildOutputPanel } from "@/components/build/BuildOutputPanel";
+import { SerialMonitorPanel } from "@/components/serial/SerialMonitorPanel";
+import { TerminalPanel } from "@/components/terminal/TerminalPanel";
 import { UploadPanel } from "@/components/upload/UploadPanel";
 import { Tooltip } from "@/components/ui/Tooltip";
 import type { BuildDiagnostic } from "@/types/build";
@@ -29,7 +31,9 @@ interface BottomPanelProps {
   maximized: boolean;
   logs: ShellLogEntry[];
   buildPanelProps: ComponentProps<typeof BuildOutputPanel>;
+  terminalPanelProps: ComponentProps<typeof TerminalPanel>;
   uploadPanelProps: ComponentProps<typeof UploadPanel>;
+  serialPanelProps: ComponentProps<typeof SerialMonitorPanel>;
   buildDiagnostics: BuildDiagnostic[];
   onSelectTab: (tab: BottomPanelTab) => void;
   onToggleMaximize: () => void;
@@ -65,19 +69,19 @@ const BOTTOM_TABS: BottomTabMeta[] = [
   {
     id: "terminal",
     label: "Terminal",
-    phase: "Phase 10",
-    emptyTitle: "Interactive PTY Terminal Slot",
+    phase: "Phase 11",
+    emptyTitle: "Interactive PTY Terminal Ready",
     emptyDescription:
-      "xterm.js interactive shell sessions anchored to the active project directory will mount here later.",
+      "xterm.js interactive shell sessions anchored to the active project directory.",
     icon: Terminal,
   },
   {
     id: "serial",
     label: "Serial Monitor",
-    phase: "Phase 9",
-    emptyTitle: "UART Serial Monitor Slot",
+    phase: "Phase 10",
+    emptyTitle: "UART Serial Monitor Ready",
     emptyDescription:
-      "ARIES V3 UART RX/TX console (configurable baud, 115200 default) will stream here in serial phases.",
+      "Real-time USB-UART console for connecting to VEGA ARIES V3, streaming output, and transmitting commands.",
     icon: Usb,
   },
   {
@@ -115,7 +119,9 @@ export function BottomPanel({
   maximized,
   logs,
   buildPanelProps,
+  terminalPanelProps,
   uploadPanelProps,
+  serialPanelProps,
   buildDiagnostics,
   onSelectTab,
   onToggleMaximize,
@@ -185,10 +191,41 @@ export function BottomPanel({
                     className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#7aa2ff]"
                   />
                 )}
+                {id === "terminal" &&
+                  terminalPanelProps.sessions.some((s) => s.status === "running") && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-1.5 font-mono text-[10px] text-emerald-300">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                      <span>
+                        {
+                          terminalPanelProps.sessions.filter(
+                            (s) => s.status === "running"
+                          ).length
+                        }
+                      </span>
+                    </span>
+                  )}
                 {id === "upload" && uploadPanelProps.activeUpload?.status === "running" && (
                   <span
                     aria-label="Uploading"
                     className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#7aa2ff]"
+                  />
+                )}
+                {id === "serial" && serialPanelProps.status === "connected" && (
+                  <span
+                    aria-label="Serial Connected"
+                    className="h-1.5 w-1.5 rounded-full bg-emerald-400"
+                  />
+                )}
+                {id === "serial" && serialPanelProps.status === "connecting" && (
+                  <span
+                    aria-label="Serial Connecting"
+                    className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#7aa2ff]"
+                  />
+                )}
+                {id === "serial" && serialPanelProps.status === "error" && (
+                  <span
+                    aria-label="Serial Error"
+                    className="h-1.5 w-1.5 rounded-full bg-red-400"
                   />
                 )}
                 {id === "diagnostics" && buildDiagnostics.length > 0 && (
@@ -262,8 +299,12 @@ export function BottomPanel({
       {/* Tab Content */}
       {activeTab === "build" ? (
         <BuildOutputPanel {...buildPanelProps} />
+      ) : activeTab === "terminal" ? (
+        <TerminalPanel {...terminalPanelProps} />
       ) : activeTab === "upload" ? (
         <UploadPanel {...uploadPanelProps} />
+      ) : activeTab === "serial" ? (
+        <SerialMonitorPanel {...serialPanelProps} />
       ) : activeTab === "diagnostics" ? (
         <div className="vega-scroll min-h-0 flex-1 overflow-y-auto p-3 font-mono text-xs">
           <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-2">

@@ -29,6 +29,8 @@ import { useEditorSettings } from "@/hooks/useEditorSettings";
 import { useEditorTabs } from "@/hooks/useEditorTabs";
 import { useFileExplorer } from "@/hooks/useFileExplorer";
 import { useSdkDoctor } from "@/hooks/useSdkDoctor";
+import { useSerialMonitor } from "@/hooks/useSerialMonitor";
+import { useTerminalManager } from "@/hooks/useTerminalManager";
 import { useUploadSystem } from "@/hooks/useUploadSystem";
 import {
   BOTTOM_PANEL_DEFAULT_HEIGHT,
@@ -241,6 +243,24 @@ export function IdeShell() {
     onLog: (level, message) => appendLog("SHELL", level, message),
   });
 
+  const serialMonitor = useSerialMonitor({
+    isBackendConnected: isConnected,
+    defaultPortHint: uploadSystem.selectedPort,
+    onLog: (level, message) => appendLog("SHELL", level, message),
+  });
+
+  const terminalManager = useTerminalManager({
+    activeProjectDir: workspace.activeProject?.project_dir ?? null,
+    defaultProjectsDir: workspace.defaultProjectsDir || null,
+    isBackendConnected: isConnected,
+    hasElectronBrowse: workspace.isElectronBridge,
+    onBrowseDirectory: async (title, defaultPath) => {
+      const outcome = await workspace.browseDirectory(title, defaultPath);
+      return outcome.supported && !outcome.canceled ? outcome.path : null;
+    },
+    onLog: (level, message) => appendLog("SHELL", level, message),
+  });
+
   const openSettingsCategory = useCallback((cat: SettingsCategory) => {
     setSettingsCategory(cat);
     setSettingsOpen(true);
@@ -271,6 +291,21 @@ export function IdeShell() {
     setBottomTab("upload");
     void uploadSystem.refreshDevicesAndPreflight();
   }, [setBottomTab, setMode, uploadSystem]);
+
+  const openSerialMonitor = useCallback(() => {
+    setComposerFocused(false);
+    setSettingsOpen(false);
+    setMode("workspace");
+    setBottomTab("serial");
+    void serialMonitor.refreshDevices();
+  }, [serialMonitor, setBottomTab, setMode]);
+
+  const openTerminalPanel = useCallback(() => {
+    setComposerFocused(false);
+    setSettingsOpen(false);
+    setMode("workspace");
+    setBottomTab("terminal");
+  }, [setBottomTab, setMode]);
 
   const triggerUploadPrompt = useCallback(() => {
     openUploadPanel();
@@ -503,6 +538,8 @@ export function IdeShell() {
         activeProjectName={activeProjectName}
         isBuilding={buildSystem.isBuilding}
         isUploading={uploadSystem.isUploading}
+        isSerialConnected={serialMonitor.isConnected}
+        serialPort={serialMonitor.activePort}
         selectedPort={uploadSystem.selectedPort}
         isBackendConnected={isConnected}
         sidebarOpen={layout.sidebarOpen}
@@ -522,6 +559,7 @@ export function IdeShell() {
         onUploadAction={triggerUploadPrompt}
         onCancelUpload={() => void uploadSystem.cancelActive()}
         onOpenUploadPanel={openUploadPanel}
+        onOpenSerialMonitor={openSerialMonitor}
         onToggleSidebar={toggleSidebar}
         onToggleBottomPanel={toggleBottomPanel}
         onToggleRightPanel={toggleRightPanel}
@@ -794,6 +832,42 @@ export function IdeShell() {
                       onOpenSdkDoctor: openSdkDoctor,
                       onOpenBoardManager: openBoardManager,
                     }}
+                    terminalPanelProps={{
+                      isBackendConnected: isConnected,
+                      activeProjectDir:
+                        workspace.activeProject?.project_dir ?? null,
+                      defaultProjectsDir: workspace.defaultProjectsDir,
+                      hasElectronBrowse: terminalManager.hasElectronBrowse,
+                      shells: terminalManager.shells,
+                      selectedShellId: terminalManager.selectedShellId,
+                      ptySupported: terminalManager.ptySupported,
+                      ptyBackend: terminalManager.ptyBackend,
+                      ptyMessage: terminalManager.ptyMessage,
+                      maxSessions: terminalManager.maxSessions,
+                      sessions: terminalManager.sessions,
+                      activeSessionId: terminalManager.activeSessionId,
+                      activeSession: terminalManager.activeSession,
+                      pendingAction: terminalManager.pendingAction,
+                      loading: terminalManager.loading,
+                      error: terminalManager.error,
+                      onSelectShell: terminalManager.setSelectedShellId,
+                      onSelectSession: terminalManager.setActiveSessionId,
+                      onCreateSession: () =>
+                        void terminalManager.createSession(),
+                      onCreateInFolder: () =>
+                        void terminalManager.createSessionWithFolderPicker(),
+                      onCloseSession: (id) =>
+                        void terminalManager.closeSession(id),
+                      onRestartSession: (id) =>
+                        void terminalManager.restartSession(id),
+                      onClearReplay: (id) =>
+                        void terminalManager.clearReplayBuffer(id),
+                      onRefreshState: () =>
+                        void terminalManager.refreshState(),
+                      onSyncSession: terminalManager.syncSessionSummary,
+                      onUpdateCwd: terminalManager.updateSessionCwd,
+                      onClearError: terminalManager.clearError,
+                    }}
                     uploadPanelProps={{
                       hasActiveProject: Boolean(workspace.activeProject),
                       isBackendConnected: isConnected,
@@ -827,6 +901,49 @@ export function IdeShell() {
                       onTriggerBuild: () => void handleBuildOperation("build"),
                       onOpenSdkDoctor: openSdkDoctor,
                       onOpenBoardManager: openBoardManager,
+                    }}
+                    serialPanelProps={{
+                      isBackendConnected: isConnected,
+                      status: serialMonitor.status,
+                      pyserialAvailable: serialMonitor.pyserialAvailable,
+                      deviceInfo: serialMonitor.deviceInfo,
+                      devices: serialMonitor.devices,
+                      selectedPort: serialMonitor.selectedPort,
+                      activePort: serialMonitor.activePort,
+                      baudRate: serialMonitor.baudRate,
+                      dataBits: serialMonitor.dataBits,
+                      parity: serialMonitor.parity,
+                      stopBits: serialMonitor.stopBits,
+                      lineEnding: serialMonitor.lineEnding,
+                      showTimestamps: serialMonitor.showTimestamps,
+                      autoScroll: serialMonitor.autoScroll,
+                      sendText: serialMonitor.sendText,
+                      txHistory: serialMonitor.txHistory,
+                      logs: serialMonitor.logs,
+                      truncatedLogs: serialMonitor.truncatedLogs,
+                      rxCount: serialMonitor.rxCount,
+                      txCount: serialMonitor.txCount,
+                      refreshingDevices: serialMonitor.refreshingDevices,
+                      connecting: serialMonitor.connecting,
+                      disconnecting: serialMonitor.disconnecting,
+                      sending: serialMonitor.sending,
+                      error: serialMonitor.error,
+                      onSelectPort: serialMonitor.updatePort,
+                      onChangeBaudRate: serialMonitor.updateBaudRate,
+                      onChangeDataBits: serialMonitor.updateDataBits,
+                      onChangeParity: serialMonitor.updateParity,
+                      onChangeStopBits: serialMonitor.updateStopBits,
+                      onChangeLineEnding: serialMonitor.updateLineEnding,
+                      onToggleTimestamps: serialMonitor.toggleTimestamps,
+                      onAutoScrollChange: serialMonitor.setAutoScroll,
+                      onSendTextChange: serialMonitor.setSendText,
+                      onRefreshDevices: () => void serialMonitor.refreshDevices(),
+                      onConnect: () => void serialMonitor.connect(),
+                      onDisconnect: () => void serialMonitor.disconnect(),
+                      onSend: () => void serialMonitor.send(),
+                      onClearOutput: () => void serialMonitor.clearOutput(),
+                      onClearError: serialMonitor.clearError,
+                      onOpenSdkDoctor: openSdkDoctor,
                     }}
                     buildDiagnostics={buildSystem.diagnostics}
                     onSelectTab={setBottomTab}
@@ -895,6 +1012,10 @@ export function IdeShell() {
         latestBuild={buildSystem.latestBuild}
         latestUpload={uploadSystem.latestUpload}
         selectedPort={uploadSystem.selectedPort}
+        serialStatus={serialMonitor.status}
+        serialPort={serialMonitor.activePort}
+        serialBaudRate={serialMonitor.baudRate}
+        terminalRunningCount={terminalManager.runningCount}
         sidebarOpen={layout.sidebarOpen}
         bottomPanelOpen={layout.bottomPanelOpen}
         rightPanelOpen={layout.rightPanelOpen}
@@ -906,6 +1027,8 @@ export function IdeShell() {
         onOpenBoardManager={openBoardManager}
         onOpenBuildOutput={() => setBottomTab("build")}
         onOpenUploadOutput={openUploadPanel}
+        onOpenSerialMonitor={openSerialMonitor}
+        onOpenTerminal={openTerminalPanel}
         onOpenProject={openOpenProjectDialog}
         onToggleSidebar={toggleSidebar}
         onToggleBottomPanel={toggleBottomPanel}
