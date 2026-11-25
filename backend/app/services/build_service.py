@@ -4,14 +4,12 @@ from __future__ import annotations
 import asyncio
 import os
 import re
-import signal
 import subprocess
 import threading
 import time
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Deque, Dict, List, Optional, Sequence, Set, Tuple
 
@@ -28,7 +26,9 @@ from app.models.build import (
     BuildSummary,
     validate_build_id,
 )
+from app.services.board_service import BoardService
 from app.services.explorer_service import ExplorerService, ExplorerServiceError
+from app.services.process_utils import terminate_process_tree, utc_now_iso as _utc_now
 from app.services.project_service import ProjectService, ProjectServiceError
 from app.services.sdk_service import (
     SdkService,
@@ -60,10 +60,6 @@ class BuildServiceError(Exception):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _resolve_diagnostic_rel_path(project_root: Path, raw_file: str) -> Optional[str]:
@@ -136,44 +132,6 @@ def parse_build_diagnostic(
     return None
 
 
-def terminate_process_tree(proc: subprocess.Popen[str]) -> None:
-    """Safely terminate a build process and its child tree without raising."""
-    if proc.poll() is not None:
-        return
-
-    if _host_os_name() == "windows":
-        try:
-            subprocess.run(
-                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
-                shell=False,
-                capture_output=True,
-                timeout=3.0,
-            )
-        except (subprocess.TimeoutExpired, OSError):
-            try:
-                proc.kill()
-            except OSError:
-                pass
-        try:
-            proc.wait(timeout=1.0)
-        except (subprocess.TimeoutExpired, OSError):
-            pass
-    else:
-        try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            proc.wait(timeout=1.2)
-            return
-        except (subprocess.TimeoutExpired, OSError):
-            pass
-        try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-        except OSError:
-            try:
-                proc.kill()
-            except OSError:
-                pass
-
-
 @dataclass
 class BuildRunRecord:
     """Runtime tracking record for an active or completed build."""
@@ -210,6 +168,7 @@ class BuildService:
         self._explorer = ExplorerService(self._settings)
         self._projects = ProjectService(self._settings)
         self._sdk = SdkService(self._settings)
+        self._boards = BoardService(self._settings)
 
         self._state_lock = threading.Lock()
         self._active_build_id: Optional[str] = None
@@ -232,6 +191,19 @@ class BuildService:
             raise BuildServiceError(exc.message, exc.status_code) from exc
         except ProjectServiceError as exc:
             raise BuildServiceError(exc.message, exc.status_code) from exc
+
+        selected_board_id = (meta.target.board if meta and meta.target else None) or ""
+        if not selected_board_id.strip():
+            raise BuildServiceError(
+                "No hardware board is selected for this project. Open Board Manager to select a target board before running builds.",
+                400,
+            )
+        board = self._boards.find_board(selected_board_id)
+        if board is None:
+            raise BuildServiceError(
+                f"Unsupported or unrecognized target board '{selected_board_id}' in vega-project.json. Open Board Manager to select a supported board.",
+                400,
+            )
 
         rel_makefile = (meta.build.makefile if meta else "Makefile") or "Makefile"
         try:
@@ -274,9 +246,15 @@ class BuildService:
                     400,
                 )
             if not compiler_exe or not compiler_exe.is_file():
-                prefix = eff.cross_compile_prefix or "riscv32-vega-elf"
+                prefix = board.build.cross_compile_prefix or eff.cross_compile_prefix or "riscv32-vega-elf"
                 raise BuildServiceError(
                     f"Cross-compiler '{prefix}-gcc' could not be located. Open SDK Doctor to inspect toolchain setup before building.",
+                    400,
+                )
+            compat = self._boards.validate_compatibility(board, eff)
+            if compat.issues:
+                raise BuildServiceError(
+                    f"Board compatibility check failed for {board.name}: {'; '.join(compat.issues)}",
                     400,
                 )
 
@@ -296,13 +274,14 @@ class BuildService:
             else list(commands[0])
         )
 
-        # Controlled build environment derived from SDK config
+        # Controlled build environment derived from verified board profile & SDK config
         env = _build_safe_subprocess_env(eff)
-        prefix = eff.cross_compile_prefix or "riscv32-vega-elf"
+        prefix = board.build.cross_compile_prefix or eff.cross_compile_prefix or "riscv32-vega-elf"
         env["CROSS_COMPILE"] = prefix if prefix.endswith("-") else f"{prefix}-"
         env["VEGA_PREFIX"] = prefix
-        env["RISCV_ARCH"] = eff.target_arch
-        env["VEGA_MACHINE"] = eff.target_machine
+        env["RISCV_ARCH"] = board.isa
+        env["VEGA_MACHINE"] = board.machine
+        env["VEGA_BOARD"] = board.id
         if sdk_root and sdk_root.is_dir():
             env["VEGA_SDK"] = str(sdk_root)
             env["VEGA_SDK_HOME"] = str(sdk_root)

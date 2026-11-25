@@ -10,7 +10,7 @@ PROJECT_SCHEMA_VERSION = "1.0"
 PROJECT_METADATA_FILENAME = "vega-project.json"
 
 ProjectTemplate = Literal["minimal", "empty"]
-TargetBoard = Literal["VEGA_ARIES_V3"]
+TargetBoard = str
 
 
 def _is_safe_relative_path(raw: str) -> bool:
@@ -28,9 +28,19 @@ def _is_safe_relative_path(raw: str) -> bool:
 class ProjectTarget(BaseModel):
     """Target hardware descriptor (portable, board-scoped)."""
 
-    board: TargetBoard = "VEGA_ARIES_V3"
+    board: Optional[TargetBoard] = "VEGA_ARIES_V3"
     arch: str = "rv32i_zicsr"
     machine: str = "THEJAS32"
+
+    @field_validator("board", mode="before")
+    @classmethod
+    def _clean_board(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("Board identifier must be a string or null.")
+        cleaned = value.strip()
+        return cleaned or None
 
 
 class ProjectBuildConfig(BaseModel):

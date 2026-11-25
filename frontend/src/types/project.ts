@@ -1,7 +1,7 @@
 export type ProjectTemplate = "minimal" | "empty";
 
 export interface ProjectTarget {
-  board: "VEGA_ARIES_V3";
+  board: string | null;
   arch: string;
   machine: string;
 }

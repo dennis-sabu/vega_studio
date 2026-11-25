@@ -248,8 +248,19 @@ class ProjectService:
                 422,
             )
 
+        # Backward compatibility: legacy metadata missing target or target.board must load
+        # cleanly with board=None rather than silently defaulting to a board.
+        normalized_json = dict(raw_json)
+        raw_target = normalized_json.get("target")
+        if raw_target is None:
+            normalized_json["target"] = {"board": None}
+        elif isinstance(raw_target, dict) and "board" not in raw_target:
+            target_copy = dict(raw_target)
+            target_copy["board"] = None
+            normalized_json["target"] = target_copy
+
         try:
-            metadata = VegaProjectMetadata.model_validate(raw_json)
+            metadata = VegaProjectMetadata.model_validate(normalized_json)
         except ValidationError as exc:
             first_err = exc.errors()[0] if exc.errors() else None
             detail = (
@@ -263,6 +274,18 @@ class ProjectService:
             ) from exc
 
         warnings: List[str] = []
+        from app.services.board_service import _BOARD_CATALOGUE
+
+        known_boards = {b.id for b in _BOARD_CATALOGUE}
+        if not metadata.target.board:
+            warnings.append(
+                "No target board selected in vega-project.json. Open Board Manager to select a supported VEGA board."
+            )
+        elif metadata.target.board not in known_boards:
+            warnings.append(
+                f"Unsupported target board '{metadata.target.board}' in vega-project.json. Select a supported board in Board Manager."
+            )
+
         src_path = project_path / metadata.build.sourceDir
         if not src_path.exists() or not src_path.is_dir():
             warnings.append(
@@ -404,7 +427,7 @@ class ProjectService:
         self.persistence.upsert_recent_project(
             project_dir=dir_str,
             name=metadata.name,
-            board=metadata.target.board,
+            board=metadata.target.board or "UNASSIGNED",
             schema_version=metadata.schemaVersion,
         )
 

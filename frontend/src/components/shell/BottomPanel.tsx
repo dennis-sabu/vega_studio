@@ -18,6 +18,7 @@ import {
   Usb,
 } from "lucide-react";
 import { BuildOutputPanel } from "@/components/build/BuildOutputPanel";
+import { UploadPanel } from "@/components/upload/UploadPanel";
 import { Tooltip } from "@/components/ui/Tooltip";
 import type { BuildDiagnostic } from "@/types/build";
 import type { BottomPanelTab, ShellLogEntry } from "@/types/shell";
@@ -28,6 +29,7 @@ interface BottomPanelProps {
   maximized: boolean;
   logs: ShellLogEntry[];
   buildPanelProps: ComponentProps<typeof BuildOutputPanel>;
+  uploadPanelProps: ComponentProps<typeof UploadPanel>;
   buildDiagnostics: BuildDiagnostic[];
   onSelectTab: (tab: BottomPanelTab) => void;
   onToggleMaximize: () => void;
@@ -90,10 +92,10 @@ const BOTTOM_TABS: BottomTabMeta[] = [
   {
     id: "upload",
     label: "Upload Output",
-    phase: "Phase 8",
+    phase: "Phase 9",
     emptyTitle: "XMODEM Upload Channel Ready",
     emptyDescription:
-      "Explicitly initiated firmware flashing logs and progress from vega_xmodem.py will stream here in upload phase.",
+      "Explicitly initiated firmware flashing logs and progress from vega_xmodem.py stream here.",
     icon: Upload,
   },
   {
@@ -113,6 +115,7 @@ export function BottomPanel({
   maximized,
   logs,
   buildPanelProps,
+  uploadPanelProps,
   buildDiagnostics,
   onSelectTab,
   onToggleMaximize,
@@ -179,6 +182,12 @@ export function BottomPanel({
                 {id === "build" && buildPanelProps.activeBuild?.status === "running" && (
                   <span
                     aria-label="Building"
+                    className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#7aa2ff]"
+                  />
+                )}
+                {id === "upload" && uploadPanelProps.activeUpload?.status === "running" && (
+                  <span
+                    aria-label="Uploading"
                     className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#7aa2ff]"
                   />
                 )}
@@ -253,6 +262,8 @@ export function BottomPanel({
       {/* Tab Content */}
       {activeTab === "build" ? (
         <BuildOutputPanel {...buildPanelProps} />
+      ) : activeTab === "upload" ? (
+        <UploadPanel {...uploadPanelProps} />
       ) : activeTab === "diagnostics" ? (
         <div className="vega-scroll min-h-0 flex-1 overflow-y-auto p-3 font-mono text-xs">
           <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-2">

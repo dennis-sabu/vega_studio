@@ -33,6 +33,8 @@ interface AppToolbarProps {
   activeMode: WorkspaceMode;
   activeProjectName: string | null;
   isBuilding: boolean;
+  isUploading: boolean;
+  selectedPort: string;
   isBackendConnected: boolean;
   sidebarOpen: boolean;
   bottomPanelOpen: boolean;
@@ -45,6 +47,9 @@ interface AppToolbarProps {
   onCloseProject: () => void;
   onBuildAction: (op: BuildOperation) => void;
   onCancelBuild: () => void;
+  onUploadAction: () => void;
+  onCancelUpload: () => void;
+  onOpenUploadPanel: () => void;
   onToggleSidebar: () => void;
   onToggleBottomPanel: () => void;
   onToggleRightPanel: () => void;
@@ -61,6 +66,8 @@ export function AppToolbar({
   activeMode,
   activeProjectName,
   isBuilding,
+  isUploading,
+  selectedPort,
   isBackendConnected,
   sidebarOpen,
   bottomPanelOpen,
@@ -73,6 +80,9 @@ export function AppToolbar({
   onCloseProject,
   onBuildAction,
   onCancelBuild,
+  onUploadAction,
+  onCancelUpload,
+  onOpenUploadPanel,
   onToggleSidebar,
   onToggleBottomPanel,
   onToggleRightPanel,
@@ -231,27 +241,71 @@ export function AppToolbar({
             </Tooltip>
           )}
 
-          <Tooltip label="Upload Firmware (Phase 8+)">
+          <Tooltip
+            label={
+              !activeProjectName
+                ? "Open a project to upload firmware"
+                : !isBackendConnected
+                ? "Backend disconnected"
+                : isUploading
+                ? "Firmware upload in progress"
+                : "Review preflight & upload compiled firmware"
+            }
+          >
             <button
               type="button"
-              disabled
-              aria-label="Upload Firmware (Phase 8+)"
-              className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-[#e8ebf7]/40 opacity-45 disabled:cursor-not-allowed"
+              disabled={!activeProjectName || !isBackendConnected || isBuilding || isUploading}
+              aria-label="Upload Firmware"
+              onClick={onUploadAction}
+              className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-[#e8ebf7]/80 transition-colors hover:bg-white/[0.08] hover:text-[#e8ebf7] disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <Upload className="h-3.5 w-3.5" />
-              <span className="hidden xl:inline">Upload</span>
+              {isUploading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-[#7aa2ff]" />
+              ) : (
+                <Upload className="h-3.5 w-3.5 text-[#7aa2ff]" />
+              )}
+              <span className="hidden xl:inline">
+                {isUploading ? "Uploading" : "Upload"}
+              </span>
             </button>
           </Tooltip>
 
-          <Tooltip label="Serial Port Selector (Phase 6)">
+          {isUploading && (
+            <Tooltip label="Cancel Active Firmware Upload">
+              <button
+                type="button"
+                aria-label="Cancel Active Firmware Upload"
+                onClick={onCancelUpload}
+                className="inline-flex h-7 items-center gap-1 rounded-md border border-red-400/35 bg-red-500/18 px-2 text-xs font-medium text-red-200 transition-colors hover:bg-red-500/28"
+              >
+                <Square className="h-3 w-3 fill-current" />
+                <span className="hidden xl:inline">Stop</span>
+              </button>
+            </Tooltip>
+          )}
+
+          <Tooltip
+            label={
+              selectedPort
+                ? `Selected serial device: ${selectedPort} — click to configure in Upload Output`
+                : "Select or inspect serial port in Upload Output"
+            }
+          >
             <button
               type="button"
-              disabled
-              aria-label="Serial Port Selector (Phase 6)"
-              className="ml-1 hidden h-7 items-center gap-1.5 rounded-full border border-white/8 bg-white/[0.03] px-2.5 font-mono text-[11px] text-[#e8ebf7]/40 opacity-60 lg:inline-flex disabled:cursor-not-allowed"
+              disabled={!isBackendConnected}
+              aria-label="Serial Port Selector"
+              onClick={onOpenUploadPanel}
+              className={`ml-1 hidden h-7 items-center gap-1.5 rounded-full border px-2.5 font-mono text-[11px] transition-colors lg:inline-flex disabled:cursor-not-allowed disabled:opacity-45 ${
+                selectedPort
+                  ? "border-[#7aa2ff]/30 bg-[#7aa2ff]/12 text-[#e8ebf7] hover:bg-[#7aa2ff]/20"
+                  : "border-white/10 bg-white/[0.03] text-[#e8ebf7]/60 hover:bg-white/[0.08] hover:text-[#e8ebf7]"
+              }`}
             >
-              <Usb className="h-3 w-3" />
-              <span>No port</span>
+              <Usb className="h-3 w-3 text-[#7aa2ff]" />
+              <span className="max-w-[110px] truncate">
+                {selectedPort || "No port"}
+              </span>
             </button>
           </Tooltip>
         </div>

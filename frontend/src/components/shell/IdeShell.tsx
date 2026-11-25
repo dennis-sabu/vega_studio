@@ -23,11 +23,13 @@ import { SidebarPanel } from "@/components/shell/SidebarPanel";
 import { StatusBar } from "@/components/shell/StatusBar";
 import { WorkspaceEditorArea } from "@/components/shell/WorkspaceEditorArea";
 import { useBackendHealth } from "@/hooks/useBackendHealth";
+import { useBoardManager } from "@/hooks/useBoardManager";
 import { useBuildSystem } from "@/hooks/useBuildSystem";
 import { useEditorSettings } from "@/hooks/useEditorSettings";
 import { useEditorTabs } from "@/hooks/useEditorTabs";
 import { useFileExplorer } from "@/hooks/useFileExplorer";
 import { useSdkDoctor } from "@/hooks/useSdkDoctor";
+import { useUploadSystem } from "@/hooks/useUploadSystem";
 import {
   BOTTOM_PANEL_DEFAULT_HEIGHT,
   BOTTOM_PANEL_MIN_HEIGHT,
@@ -117,6 +119,7 @@ export function IdeShell() {
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [openProjectOpen, setOpenProjectOpen] = useState(false);
   const [composerFocused, setComposerFocused] = useState(false);
+  const [confirmUploadNonce, setConfirmUploadNonce] = useState(0);
 
   const [logs, setLogs] = useState<ShellLogEntry[]>(() => [
     createLogEntry(
@@ -219,6 +222,25 @@ export function IdeShell() {
     onLog: (level, message) => appendLog("SHELL", level, message),
   });
 
+  const boardManager = useBoardManager({
+    activeProject: workspace.activeProject,
+    isBackendConnected: isConnected,
+    sdkConfigUpdatedAt: sdkDoctor.configState?.updated_at ?? null,
+    onBoardChanged: async () => {
+      await workspace.refreshWorkspace();
+    },
+    onLog: (level, message) => appendLog("SHELL", level, message),
+  });
+
+  const uploadSystem = useUploadSystem({
+    projectDir: workspace.activeProject?.project_dir ?? null,
+    boardId: workspace.activeProject?.project.target.board ?? null,
+    sdkConfigUpdatedAt: sdkDoctor.configState?.updated_at ?? null,
+    latestBuildFinishedAt: buildSystem.latestBuild?.finished_at ?? null,
+    isBackendConnected: isConnected,
+    onLog: (level, message) => appendLog("SHELL", level, message),
+  });
+
   const openSettingsCategory = useCallback((cat: SettingsCategory) => {
     setSettingsCategory(cat);
     setSettingsOpen(true);
@@ -232,6 +254,28 @@ export function IdeShell() {
     selectNav("sdk");
     openCenterTab("sdk-doctor");
   }, [editorTabs, openCenterTab, selectNav, setMode]);
+
+  const openBoardManager = useCallback(() => {
+    setComposerFocused(false);
+    setSettingsOpen(false);
+    editorTabs.setActiveFileTabPath(null);
+    setMode("workspace");
+    selectNav("tools");
+    openCenterTab("board-manager");
+  }, [editorTabs, openCenterTab, selectNav, setMode]);
+
+  const openUploadPanel = useCallback(() => {
+    setComposerFocused(false);
+    setSettingsOpen(false);
+    setMode("workspace");
+    setBottomTab("upload");
+    void uploadSystem.refreshDevicesAndPreflight();
+  }, [setBottomTab, setMode, uploadSystem]);
+
+  const triggerUploadPrompt = useCallback(() => {
+    openUploadPanel();
+    setConfirmUploadNonce((n) => n + 1);
+  }, [openUploadPanel]);
 
   // Global keyboard shortcuts for shell panel navigation, save & settings
   useEffect(() => {
@@ -458,6 +502,8 @@ export function IdeShell() {
         activeMode={layout.activeMode}
         activeProjectName={activeProjectName}
         isBuilding={buildSystem.isBuilding}
+        isUploading={uploadSystem.isUploading}
+        selectedPort={uploadSystem.selectedPort}
         isBackendConnected={isConnected}
         sidebarOpen={layout.sidebarOpen}
         bottomPanelOpen={layout.bottomPanelOpen}
@@ -473,6 +519,9 @@ export function IdeShell() {
         onCloseProject={() => void handleCloseProject()}
         onBuildAction={(op) => void handleBuildOperation(op)}
         onCancelBuild={() => void buildSystem.cancelActive()}
+        onUploadAction={triggerUploadPrompt}
+        onCancelUpload={() => void uploadSystem.cancelActive()}
+        onOpenUploadPanel={openUploadPanel}
         onToggleSidebar={toggleSidebar}
         onToggleBottomPanel={toggleBottomPanel}
         onToggleRightPanel={toggleRightPanel}
@@ -524,6 +573,8 @@ export function IdeShell() {
                 setComposerFocused(false);
                 if (section === "sdk") {
                   openSdkDoctor();
+                } else if (section === "tools") {
+                  openBoardManager();
                 } else {
                   selectNav(section);
                 }
@@ -573,6 +624,7 @@ export function IdeShell() {
                   }}
                   sdkReport={sdkDoctor.report}
                   sdkRunning={sdkDoctor.runningDiagnostics}
+                  boardStatus={boardManager.projectBoardStatus}
                   onCollapse={toggleSidebar}
                   onOpenHome={() => setMode("home")}
                   onNewProject={openNewProjectDialog}
@@ -584,6 +636,7 @@ export function IdeShell() {
                   onOpenSdkDoctor={openSdkDoctor}
                   onRunSdkDiagnostics={() => void sdkDoctor.runDiagnostics()}
                   onOpenSdkSettings={() => openSettingsCategory("sdk")}
+                  onOpenBoardManager={openBoardManager}
                 />
                 <ResizeHandle
                   orientation="vertical"
@@ -627,6 +680,28 @@ export function IdeShell() {
                     onSaveConfig: sdkDoctor.saveConfig,
                     onResetConfig: sdkDoctor.resetConfig,
                     onClearFeedback: sdkDoctor.clearFeedback,
+                  }}
+                  boardManagerProps={{
+                    isBackendConnected: isConnected,
+                    activeProject: workspace.activeProject,
+                    boards: boardManager.boards,
+                    inspectedBoard: boardManager.inspectedBoard,
+                    inspectedCompatibility: boardManager.inspectedCompatibility,
+                    projectBoardStatus: boardManager.projectBoardStatus,
+                    loadingBoards: boardManager.loadingBoards,
+                    loadingStatus: boardManager.loadingStatus,
+                    validatingCompatibility:
+                      boardManager.validatingCompatibility,
+                    selectingBoard: boardManager.selectingBoard,
+                    error: boardManager.error,
+                    feedback: boardManager.feedback,
+                    onInspectBoard: boardManager.inspectBoard,
+                    onRefresh: boardManager.refreshAll,
+                    onValidateCompatibility:
+                      boardManager.checkCompatibilityForBoard,
+                    onSelectBoard: boardManager.applyBoardToProject,
+                    onOpenSdkDoctor: openSdkDoctor,
+                    onClearMessages: boardManager.clearMessages,
                   }}
                   layout={layout}
                   activeProject={workspace.activeProject}
@@ -717,6 +792,41 @@ export function IdeShell() {
                       onClearError: buildSystem.clearError,
                       onOpenDiagnosticsTab: () => setBottomTab("diagnostics"),
                       onOpenSdkDoctor: openSdkDoctor,
+                      onOpenBoardManager: openBoardManager,
+                    }}
+                    uploadPanelProps={{
+                      hasActiveProject: Boolean(workspace.activeProject),
+                      isBackendConnected: isConnected,
+                      deviceInfo: uploadSystem.deviceInfo,
+                      devices: uploadSystem.devices,
+                      preflight: uploadSystem.preflight,
+                      selectedPort: uploadSystem.selectedPort,
+                      selectedArtifactPath: uploadSystem.selectedArtifactPath,
+                      invocationMode: uploadSystem.invocationMode,
+                      activeUpload: uploadSystem.activeUpload,
+                      latestUpload: uploadSystem.latestUpload,
+                      logs: uploadSystem.logs,
+                      history: uploadSystem.history,
+                      refreshingDevices: uploadSystem.refreshingDevices,
+                      runningPreflight: uploadSystem.runningPreflight,
+                      pendingAction: uploadSystem.pendingAction,
+                      error: uploadSystem.error,
+                      confirmNonce: confirmUploadNonce,
+                      onSelectPort: uploadSystem.updatePort,
+                      onSelectArtifact: uploadSystem.updateArtifactPath,
+                      onSelectMode: uploadSystem.updateInvocationMode,
+                      onRefreshDevices: () =>
+                        void uploadSystem.refreshDevicesAndPreflight(),
+                      onRunPreflight: () =>
+                        void uploadSystem.runPreflightCheck(),
+                      onStartUpload: uploadSystem.startUpload,
+                      onCancel: () => void uploadSystem.cancelActive(),
+                      onClearOutput: () => void uploadSystem.clearOutput(),
+                      onClearHistory: () => void uploadSystem.clearHistory(),
+                      onClearError: uploadSystem.clearError,
+                      onTriggerBuild: () => void handleBuildOperation("build"),
+                      onOpenSdkDoctor: openSdkDoctor,
+                      onOpenBoardManager: openBoardManager,
                     }}
                     buildDiagnostics={buildSystem.diagnostics}
                     onSelectTab={setBottomTab}
@@ -760,12 +870,31 @@ export function IdeShell() {
         health={health}
         error={error}
         activeProjectName={activeProjectName}
+        activeBoardId={boardManager.activeProjectBoardId}
+        activeBoardName={
+          boardManager.projectBoardStatus?.board?.name ??
+          boardManager.activeProjectBoardId
+        }
+        boardSupported={
+          boardManager.projectBoardStatus?.board_supported ??
+          Boolean(
+            boardManager.activeProjectBoardId &&
+              boardManager.boards.some(
+                (b) => b.id === boardManager.activeProjectBoardId
+              )
+          )
+        }
+        boardCompatibility={
+          boardManager.projectBoardStatus?.compatibility?.status ?? null
+        }
         activeFileTab={activeFileTab}
         cursorPosition={editorTabs.cursorPosition}
         editorSettings={editorSettings.settings}
         dirtyCount={editorTabs.dirtyCount}
         sdkStatus={sdkDoctor.report?.overall_status ?? null}
         latestBuild={buildSystem.latestBuild}
+        latestUpload={uploadSystem.latestUpload}
+        selectedPort={uploadSystem.selectedPort}
         sidebarOpen={layout.sidebarOpen}
         bottomPanelOpen={layout.bottomPanelOpen}
         rightPanelOpen={layout.rightPanelOpen}
@@ -774,7 +903,9 @@ export function IdeShell() {
           openCenterTab("diagnostics");
         }}
         onOpenSdkDoctor={openSdkDoctor}
+        onOpenBoardManager={openBoardManager}
         onOpenBuildOutput={() => setBottomTab("build")}
+        onOpenUploadOutput={openUploadPanel}
         onOpenProject={openOpenProjectDialog}
         onToggleSidebar={toggleSidebar}
         onToggleBottomPanel={toggleBottomPanel}

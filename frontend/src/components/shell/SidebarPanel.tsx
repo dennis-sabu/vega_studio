@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { FileExplorer } from "@/components/explorer/FileExplorer";
 import { Tooltip } from "@/components/ui/Tooltip";
+import type { ProjectBoardStatusResponse } from "@/types/board";
 import type { RecentProjectEntry, WorkspaceSummary } from "@/types/project";
 import type { SdkDoctorReport } from "@/types/sdk";
 import type { PrimaryNavSection } from "@/types/shell";
@@ -36,6 +37,7 @@ interface SidebarPanelProps {
   explorer: SidebarExplorerBridge;
   sdkReport: SdkDoctorReport | null;
   sdkRunning: boolean;
+  boardStatus: ProjectBoardStatusResponse | null;
   onCollapse: () => void;
   onOpenHome: () => void;
   onNewProject: () => void;
@@ -45,6 +47,7 @@ interface SidebarPanelProps {
   onOpenSdkDoctor: () => void;
   onRunSdkDiagnostics: () => void;
   onOpenSdkSettings: () => void;
+  onOpenBoardManager: () => void;
 }
 
 interface SectionConfig {
@@ -110,16 +113,16 @@ const SECTION_META: Record<PrimaryNavSection, SectionConfig> = {
     ],
   },
   tools: {
-    title: "Project & Board Tools",
-    phase: "Phases 5–7",
-    heading: "ARIES V3 Hardware & Build",
+    title: "Board & Tools",
+    phase: "Phases 5–8",
+    heading: "Hardware Target & Build",
     description:
-      "Build orchestration, ARIES V3 serial device selection, and XMODEM upload workflows live here.",
+      "Select and inspect verified VEGA target boards, check SDK compatibility, and orchestrate Make builds.",
     icon: Cpu,
     details: [
-      "C-DAC VEGA ARIES V3 board configuration",
-      "Serial port detection (/dev/ttyUSB*, COM*)",
-      "Explicit-approval XMODEM firmware upload",
+      "VEGA Board Manager & profile registry",
+      "Per-project vega-project.json target config",
+      "Phase 7 Make-based firmware compilation",
     ],
   },
 };
@@ -133,6 +136,7 @@ export function SidebarPanel({
   explorer,
   sdkReport,
   sdkRunning,
+  boardStatus,
   onCollapse,
   onOpenHome,
   onNewProject,
@@ -142,6 +146,7 @@ export function SidebarPanel({
   onOpenSdkDoctor,
   onRunSdkDiagnostics,
   onOpenSdkSettings,
+  onOpenBoardManager,
 }: SidebarPanelProps) {
   const meta = SECTION_META[activeNav];
   const SectionIcon = meta.icon;
@@ -294,6 +299,49 @@ export function SidebarPanel({
                       <span>Configure SDK Paths</span>
                     </button>
                   </div>
+                </div>
+              )}
+
+              {activeNav === "tools" && (
+                <div className="mt-3.5 space-y-2.5">
+                  <div className="rounded-xl border border-white/[0.08] bg-[#090b13]/75 px-2.5 py-2 font-mono text-[10.5px]">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[#e8ebf7]/55">Active Target</span>
+                      <span
+                        className={`truncate font-semibold ${
+                          !activeProject
+                            ? "text-[#e8ebf7]/45"
+                            : !boardStatus?.selected_board_id ||
+                              !boardStatus?.board_supported
+                            ? "text-amber-300"
+                            : boardStatus.compatibility?.status === "incompatible"
+                            ? "text-red-300"
+                            : "text-emerald-300"
+                        }`}
+                      >
+                        {!activeProject
+                          ? "No Project"
+                          : boardStatus?.board?.name ??
+                            boardStatus?.selected_board_id ??
+                            "Unassigned"}
+                      </span>
+                    </div>
+                    {activeProject && boardStatus?.board && (
+                      <div className="mt-1 flex items-center justify-between text-[10px] text-[#e8ebf7]/55">
+                        <span>{boardStatus.board.isa}</span>
+                        <span>{boardStatus.board.machine}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={onOpenBoardManager}
+                    className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-lg border border-[#7aa2ff]/35 bg-[#7aa2ff]/16 px-3 text-xs font-medium text-[#e8ebf7] transition-colors hover:bg-[#7aa2ff]/25"
+                  >
+                    <Cpu className="h-3.5 w-3.5 text-[#7aa2ff]" />
+                    <span>Open Board Manager</span>
+                  </button>
                 </div>
               )}
             </div>

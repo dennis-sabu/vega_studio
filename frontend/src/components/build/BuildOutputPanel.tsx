@@ -7,6 +7,7 @@ import {
   ArrowDownToLine,
   CheckCircle2,
   Clock,
+  Cpu,
   Hammer,
   History,
   Loader2,
@@ -46,6 +47,7 @@ interface BuildOutputPanelProps {
   onClearError: () => void;
   onOpenDiagnosticsTab: () => void;
   onOpenSdkDoctor: () => void;
+  onOpenBoardManager: () => void;
 }
 
 const LOG_TIME = new Intl.DateTimeFormat(undefined, {
@@ -113,6 +115,7 @@ export function BuildOutputPanel({
   onClearError,
   onOpenDiagnosticsTab,
   onOpenSdkDoctor,
+  onOpenBoardManager,
 }: BuildOutputPanelProps) {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [followOutput, setFollowOutput] = useState(true);
@@ -331,6 +334,17 @@ export function BuildOutputPanel({
             <span className="truncate font-sans">{error}</span>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
+            {(error.toLowerCase().includes("board") ||
+              error.toLowerCase().includes("compatibility")) && (
+              <button
+                type="button"
+                onClick={onOpenBoardManager}
+                className="inline-flex h-6 items-center gap-1 rounded border border-[#7aa2ff]/35 bg-[#7aa2ff]/18 px-2 font-sans text-[11px] font-medium text-[#e8ebf7] hover:bg-[#7aa2ff]/28"
+              >
+                <Cpu className="h-3 w-3 text-[#7aa2ff]" />
+                <span>Open Board Manager</span>
+              </button>
+            )}
             {(error.toLowerCase().includes("sdk") ||
               error.toLowerCase().includes("compiler") ||
               error.toLowerCase().includes("make")) && (

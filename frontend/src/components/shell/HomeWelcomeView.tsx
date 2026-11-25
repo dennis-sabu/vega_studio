@@ -118,7 +118,9 @@ export function HomeWelcomeView({
         label: activeProject
           ? `Resume ${activeProject.project.name}`
           : "Open Workspace Shell",
-        hint: activeProject ? activeProject.project.target.board : "IDE layout",
+        hint: activeProject
+          ? activeProject.project.target.board ?? "Unassigned"
+          : "IDE layout",
         action: onEnterWorkspace,
       },
       ...recentProjects

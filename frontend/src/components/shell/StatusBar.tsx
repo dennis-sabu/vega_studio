@@ -12,33 +12,45 @@ import {
   PanelLeft,
   PanelRight,
   Stethoscope,
+  Upload,
+  Usb,
   Wifi,
   WifiOff,
 } from "lucide-react";
 import { Tooltip } from "@/components/ui/Tooltip";
 import type { HealthResponse } from "@/lib/api";
+import type { CompatibilityStatus } from "@/types/board";
 import type { BuildSummary } from "@/types/build";
 import type { EditorCursorPosition, EditorSettings } from "@/types/editor";
 import type { OpenFileTab } from "@/types/explorer";
 import type { DiagnosticStatus } from "@/types/sdk";
+import type { UploadSummary } from "@/types/upload";
 
 interface StatusBarProps {
   isConnected: boolean;
   health: HealthResponse | null;
   error: string | null;
   activeProjectName: string | null;
+  activeBoardId: string | null;
+  activeBoardName: string | null;
+  boardSupported: boolean;
+  boardCompatibility: CompatibilityStatus | null;
   activeFileTab: OpenFileTab | null;
   cursorPosition: EditorCursorPosition;
   editorSettings: EditorSettings;
   dirtyCount: number;
   sdkStatus: DiagnosticStatus | null;
   latestBuild: BuildSummary | null;
+  latestUpload: UploadSummary | null;
+  selectedPort: string;
   sidebarOpen: boolean;
   bottomPanelOpen: boolean;
   rightPanelOpen: boolean;
   onInspectBackend: () => void;
   onOpenSdkDoctor: () => void;
+  onOpenBoardManager: () => void;
   onOpenBuildOutput: () => void;
+  onOpenUploadOutput: () => void;
   onOpenProject: () => void;
   onToggleSidebar: () => void;
   onToggleBottomPanel: () => void;
@@ -50,18 +62,26 @@ export function StatusBar({
   health,
   error,
   activeProjectName,
+  activeBoardId,
+  activeBoardName,
+  boardSupported,
+  boardCompatibility,
   activeFileTab,
   cursorPosition,
   editorSettings,
   dirtyCount,
   sdkStatus,
   latestBuild,
+  latestUpload,
+  selectedPort,
   sidebarOpen,
   bottomPanelOpen,
   rightPanelOpen,
   onInspectBackend,
   onOpenSdkDoctor,
+  onOpenBoardManager,
   onOpenBuildOutput,
+  onOpenUploadOutput,
   onOpenProject,
   onToggleSidebar,
   onToggleBottomPanel,
@@ -137,10 +157,43 @@ export function StatusBar({
           </button>
         </Tooltip>
 
-        <span className="hidden items-center gap-1 font-mono text-[11px] text-[#e8ebf7]/45 md:inline-flex">
-          <Cpu className="h-3 w-3 text-[#7aa2ff]/75" />
-          <span>ARIES V3</span>
-        </span>
+        <Tooltip
+          label={
+            !activeProjectName
+              ? "Open Board Manager to browse verified VEGA boards"
+              : !activeBoardId
+              ? "No hardware board assigned — click to select in Board Manager"
+              : !boardSupported
+              ? `Unsupported board (${activeBoardId}) — click to resolve in Board Manager`
+              : `Target Board: ${activeBoardName ?? activeBoardId} — click to configure`
+          }
+          side="top"
+        >
+          <button
+            type="button"
+            onClick={onOpenBoardManager}
+            className={`hidden items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[11px] transition-colors hover:bg-white/[0.07] md:inline-flex ${
+              !activeProjectName
+                ? "text-[#e8ebf7]/45 hover:text-[#e8ebf7]"
+                : !activeBoardId || !boardSupported
+                ? "text-amber-300"
+                : boardCompatibility === "incompatible"
+                ? "text-red-300"
+                : "text-[#e8ebf7]/70 hover:text-[#e8ebf7]"
+            }`}
+          >
+            <Cpu className="h-3 w-3 text-[#7aa2ff]/80" />
+            <span>
+              {!activeProjectName
+                ? "No Board"
+                : !activeBoardId
+                ? "Board: None"
+                : !boardSupported
+                ? `Unsupported: ${activeBoardId}`
+                : activeBoardName ?? activeBoardId}
+            </span>
+          </button>
+        </Tooltip>
 
         <Tooltip
           label="Open VEGA SDK Doctor & environment diagnostics"
@@ -210,6 +263,55 @@ export function StatusBar({
                   : latestBuild.status === "timed_out"
                   ? "Build: Timeout"
                   : "Build: Failed"}
+              </span>
+            </button>
+          </Tooltip>
+        )}
+
+        {(selectedPort || latestUpload) && (
+          <Tooltip
+            label={
+              latestUpload
+                ? `Latest upload: ${latestUpload.artifact_path} -> ${latestUpload.port} (${latestUpload.status}) — click for Upload Output`
+                : `Selected serial port: ${selectedPort} — click for Upload Output`
+            }
+            side="top"
+          >
+            <button
+              type="button"
+              onClick={onOpenUploadOutput}
+              className={`hidden items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[11px] transition-colors hover:bg-white/[0.07] sm:inline-flex ${
+                latestUpload?.status === "running"
+                  ? "text-[#7aa2ff]"
+                  : latestUpload?.status === "succeeded"
+                  ? "text-emerald-300"
+                  : latestUpload?.status === "cancelled"
+                  ? "text-amber-300"
+                  : latestUpload?.status === "failed" ||
+                    latestUpload?.status === "timed_out"
+                  ? "text-red-300"
+                  : "text-[#e8ebf7]/65 hover:text-[#e8ebf7]"
+              }`}
+            >
+              {latestUpload?.status === "running" ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : latestUpload ? (
+                <Upload className="h-3 w-3" />
+              ) : (
+                <Usb className="h-3 w-3 text-[#7aa2ff]/80" />
+              )}
+              <span>
+                {latestUpload?.status === "running"
+                  ? `Uploading (${latestUpload.port})...`
+                  : latestUpload?.status === "succeeded"
+                  ? `Upload: OK (${latestUpload.port})`
+                  : latestUpload?.status === "cancelled"
+                  ? "Upload: Cancelled"
+                  : latestUpload?.status === "timed_out"
+                  ? "Upload: Timeout"
+                  : latestUpload
+                  ? "Upload: Failed"
+                  : selectedPort}
               </span>
             </button>
           </Tooltip>

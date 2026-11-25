@@ -393,3 +393,63 @@ def test_build_api_routes_and_websocket_stream_and_disconnect(isolated_build_env
 
         # Invalid build_id blocked safely with 400
         assert client.get("/api/build/bad!id").status_code == 400
+
+
+def test_build_enforces_board_selection_and_uses_board_profile(isolated_build_env):
+    import json
+
+    env_ctx = isolated_build_env
+    svc: BuildService = env_ctx["build_service"]
+    project_dir: Path = env_ctx["project_dir"]
+    driver_py: Path = env_ctx["driver_py"]
+    meta_path = project_dir / "vega-project.json"
+
+    # Configure mock driver to print VEGA_BOARD alongside compiler env vars
+    driver_py.write_text(
+        "import os\n"
+        "print('VEGA_BOARD=' + os.environ.get('VEGA_BOARD', ''))\n"
+        "print('RISCV_ARCH=' + os.environ.get('RISCV_ARCH', ''))\n"
+        "print('VEGA_MACHINE=' + os.environ.get('VEGA_MACHINE', ''))\n"
+        "print('CROSS_COMPILE=' + os.environ.get('CROSS_COMPILE', ''))\n",
+        encoding="utf-8",
+    )
+
+    started = svc.start_build(
+        BuildRequest(project_dir=str(project_dir), operation="build")
+    )
+    ok_state = _wait_until_finished(svc, started.build_id)
+    assert ok_state.latest_build.status == "succeeded"
+    joined_logs = "\n".join(line.text for line in ok_state.logs)
+    assert "VEGA_BOARD=VEGA_ARIES_V3" in joined_logs
+    assert "RISCV_ARCH=rv32i_zicsr" in joined_logs
+    assert "VEGA_MACHINE=THEJAS32" in joined_logs
+    assert "CROSS_COMPILE=riscv32-vega-elf-" in joined_logs
+
+    # Missing selected board fails pre-flight clearly
+    raw_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    raw_meta.pop("target", None)
+    meta_path.write_text(json.dumps(raw_meta, indent=2) + "\n", encoding="utf-8")
+    with pytest.raises(Exception) as no_board_exc:
+        svc.start_build(BuildRequest(project_dir=str(project_dir), operation="build"))
+    assert "board" in str(no_board_exc.value).lower()
+
+    # Unsupported board ID fails pre-flight clearly
+    raw_meta["target"] = {"board": "UNSUPPORTED_SOC", "arch": "rv64", "machine": "X"}
+    meta_path.write_text(json.dumps(raw_meta, indent=2) + "\n", encoding="utf-8")
+    with pytest.raises(Exception) as bad_board_exc:
+        svc.start_build(BuildRequest(project_dir=str(project_dir), operation="build"))
+    assert "unsupported" in str(bad_board_exc.value).lower()
+
+    # Restore valid board, then mismatch SDK arch -> fails board compatibility pre-flight
+    raw_meta["target"] = {
+        "board": "VEGA_ARIES_V3",
+        "arch": "rv32i_zicsr",
+        "machine": "THEJAS32",
+    }
+    meta_path.write_text(json.dumps(raw_meta, indent=2) + "\n", encoding="utf-8")
+    curr_sdk = svc._sdk.get_config_state().config
+    svc._sdk.update_config(curr_sdk.model_copy(update={"target_arch": "rv64imac"}))
+    with pytest.raises(Exception) as compat_exc:
+        svc.start_build(BuildRequest(project_dir=str(project_dir), operation="build"))
+    assert "compatibility" in str(compat_exc.value).lower() or "isa" in str(compat_exc.value).lower()
+

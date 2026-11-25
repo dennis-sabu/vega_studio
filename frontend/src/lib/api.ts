@@ -1,4 +1,11 @@
 import type {
+  BoardCompatibilityReport,
+  BoardListResponse,
+  BoardProfile,
+  ProjectBoardStatusResponse,
+  SelectProjectBoardResponse,
+} from "@/types/board";
+import type {
   BuildHistoryResponse,
   BuildRequestPayload,
   BuildStateResponse,
@@ -27,6 +34,15 @@ import type {
   SdkDiscoveryResult,
   SdkDoctorReport,
 } from "@/types/sdk";
+import type {
+  DeviceListResponse,
+  UploadHistoryResponse,
+  UploadPreflightRequestPayload,
+  UploadPreflightResponse,
+  UploadRequestPayload,
+  UploadStateResponse,
+  UploadSummary,
+} from "@/types/upload";
 
 export interface HealthResponse {
   status: string;
@@ -372,6 +388,119 @@ export async function clearBuildHistory(): Promise<BuildHistoryResponse> {
 
 export async function clearBuildOutput(): Promise<BuildStateResponse> {
   return apiFetch<BuildStateResponse>("/api/build/output/clear", {
+    method: "POST",
+  });
+}
+
+export async function fetchBoards(
+  signal?: AbortSignal
+): Promise<BoardListResponse> {
+  return apiFetch<BoardListResponse>("/api/boards", { signal });
+}
+
+export async function fetchBoardDetail(
+  boardId: string,
+  signal?: AbortSignal
+): Promise<BoardProfile> {
+  return apiFetch<BoardProfile>(`/api/boards/${encodeURIComponent(boardId)}`, {
+    signal,
+  });
+}
+
+export async function fetchProjectBoardStatus(
+  projectDir: string,
+  signal?: AbortSignal
+): Promise<ProjectBoardStatusResponse> {
+  const params = new URLSearchParams({ project_dir: projectDir });
+  return apiFetch<ProjectBoardStatusResponse>(
+    `/api/boards/project/status?${params.toString()}`,
+    { signal }
+  );
+}
+
+export async function selectProjectBoard(
+  projectDir: string,
+  boardId: string
+): Promise<SelectProjectBoardResponse> {
+  return apiFetch<SelectProjectBoardResponse>("/api/boards/project/select", {
+    method: "POST",
+    body: JSON.stringify({
+      project_dir: projectDir,
+      board_id: boardId,
+    }),
+  });
+}
+
+export async function validateBoardCompatibility(
+  boardId: string
+): Promise<BoardCompatibilityReport> {
+  return apiFetch<BoardCompatibilityReport>("/api/boards/compatibility", {
+    method: "POST",
+    body: JSON.stringify({ board_id: boardId }),
+  });
+}
+
+export function getUploadWsUrl(uploadId: string): string {
+  const baseUrl = getBackendUrl().replace(/\/+$/, "");
+  const wsBase = baseUrl.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:");
+  return `${wsBase}/api/upload/ws/${encodeURIComponent(uploadId)}`;
+}
+
+export async function fetchUploadDevices(
+  signal?: AbortSignal
+): Promise<DeviceListResponse> {
+  return apiFetch<DeviceListResponse>("/api/upload/devices", { signal });
+}
+
+export async function runUploadPreflight(
+  payload: UploadPreflightRequestPayload,
+  signal?: AbortSignal
+): Promise<UploadPreflightResponse> {
+  return apiFetch<UploadPreflightResponse>("/api/upload/preflight", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal,
+  });
+}
+
+export async function startFirmwareUpload(
+  payload: UploadRequestPayload
+): Promise<UploadSummary> {
+  return apiFetch<UploadSummary>("/api/upload/start", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function cancelFirmwareUpload(
+  uploadId?: string
+): Promise<UploadSummary> {
+  const path = uploadId
+    ? `/api/upload/${encodeURIComponent(uploadId)}/cancel`
+    : "/api/upload/cancel";
+  return apiFetch<UploadSummary>(path, { method: "POST" });
+}
+
+export async function fetchUploadState(
+  signal?: AbortSignal
+): Promise<UploadStateResponse> {
+  return apiFetch<UploadStateResponse>("/api/upload/state", { signal });
+}
+
+export async function fetchUploadHistory(
+  signal?: AbortSignal
+): Promise<UploadHistoryResponse> {
+  return apiFetch<UploadHistoryResponse>("/api/upload/history", { signal });
+}
+
+export async function clearUploadHistory(): Promise<UploadHistoryResponse> {
+  return apiFetch<UploadHistoryResponse>("/api/upload/history", {
+    method: "DELETE",
+  });
+}
+
+export async function clearUploadOutput(): Promise<UploadStateResponse> {
+  return apiFetch<UploadStateResponse>("/api/upload/output/clear", {
     method: "POST",
   });
 }

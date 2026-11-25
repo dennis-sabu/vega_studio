@@ -40,6 +40,7 @@ import {
   MonacoEditorSurface,
   type MonacoEditorHandle,
 } from "@/components/editor/MonacoEditorSurface";
+import { BoardManagerView } from "@/components/board/BoardManagerView";
 import { FileIcon } from "@/components/explorer/FileIcon";
 import { SdkDoctorView } from "@/components/sdk/SdkDoctorView";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -62,6 +63,7 @@ interface WorkspaceEditorAreaProps {
   dirtyCount: number;
   pendingReveal?: EditorRevealTarget | null;
   sdkDoctorProps: ComponentProps<typeof SdkDoctorView>;
+  boardManagerProps: ComponentProps<typeof BoardManagerView>;
   layout: ShellLayoutState;
   activeProject: WorkspaceSummary | null;
   isConnected: boolean;
@@ -99,6 +101,7 @@ const TAB_META: Record<
   overview: { label: "Shell Overview", icon: Layers },
   diagnostics: { label: "Backend Status", icon: Activity },
   "sdk-doctor": { label: "SDK Doctor", icon: Stethoscope },
+  "board-manager": { label: "Board Manager", icon: Cpu },
 };
 
 const TIME_FORMAT = new Intl.DateTimeFormat(undefined, { timeStyle: "medium" });
@@ -118,6 +121,7 @@ export function WorkspaceEditorArea({
   dirtyCount,
   pendingReveal,
   sdkDoctorProps,
+  boardManagerProps,
   layout,
   activeProject,
   isConnected,
@@ -397,6 +401,15 @@ export function WorkspaceEditorArea({
               className="rounded px-2 py-1 text-[11px] text-[#e8ebf7]/55 hover:bg-white/[0.06] hover:text-[#e8ebf7]"
             >
               + SDK Doctor
+            </button>
+          )}
+          {!openTabs.includes("board-manager") && (
+            <button
+              type="button"
+              onClick={() => onOpenTab("board-manager")}
+              className="rounded px-2 py-1 text-[11px] text-[#e8ebf7]/55 hover:bg-white/[0.06] hover:text-[#e8ebf7]"
+            >
+              + Board Manager
             </button>
           )}
         </div>
@@ -723,9 +736,18 @@ export function WorkspaceEditorArea({
                       <span className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#7aa2ff] uppercase">
                         Active Workspace
                       </span>
-                      <span className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-semibold text-emerald-300">
-                        {activeProject.project.target.board}
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onOpenTab("board-manager")}
+                        className={`rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold transition-colors ${
+                          activeProject.project.target.board &&
+                          boardManagerProps.projectBoardStatus?.board_supported !== false
+                            ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+                            : "border-amber-400/30 bg-amber-500/12 text-amber-200 hover:bg-amber-500/22"
+                        }`}
+                      >
+                        {activeProject.project.target.board ?? "No Board Selected"}
+                      </button>
                     </div>
                     <h1 className="mt-1 truncate text-lg font-medium tracking-tight text-[#e8ebf7]">
                       {activeProject.project.name}
@@ -943,6 +965,8 @@ export function WorkspaceEditorArea({
           </div>
         ) : activeTab === "sdk-doctor" ? (
           <SdkDoctorView {...sdkDoctorProps} />
+        ) : activeTab === "board-manager" ? (
+          <BoardManagerView {...boardManagerProps} />
         ) : (
           /* Live Backend Health & Status Tab */
           <div className="mx-auto flex max-w-3xl flex-col gap-4">
