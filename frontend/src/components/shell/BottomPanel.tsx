@@ -1,19 +1,25 @@
 "use client";
 
-import { useRef, type KeyboardEvent } from "react";
+import { useRef, type ComponentProps, type KeyboardEvent } from "react";
 import {
   Activity,
+  AlertCircle,
+  AlertTriangle,
   ChevronDown,
+  FileCode2,
   Hammer,
   Maximize2,
   Minimize2,
   ScrollText,
+  Stethoscope,
   Terminal,
   Trash2,
   Upload,
   Usb,
 } from "lucide-react";
+import { BuildOutputPanel } from "@/components/build/BuildOutputPanel";
 import { Tooltip } from "@/components/ui/Tooltip";
+import type { BuildDiagnostic } from "@/types/build";
 import type { BottomPanelTab, ShellLogEntry } from "@/types/shell";
 
 interface BottomPanelProps {
@@ -21,10 +27,18 @@ interface BottomPanelProps {
   height: number;
   maximized: boolean;
   logs: ShellLogEntry[];
+  buildPanelProps: ComponentProps<typeof BuildOutputPanel>;
+  buildDiagnostics: BuildDiagnostic[];
   onSelectTab: (tab: BottomPanelTab) => void;
   onToggleMaximize: () => void;
   onCollapse: () => void;
   onClearLogs: () => void;
+  onOpenDiagnosticLocation: (
+    relativePath: string,
+    line: number,
+    column?: number
+  ) => void;
+  onOpenSdkDoctor: () => void;
 }
 
 interface BottomTabMeta {
@@ -40,46 +54,46 @@ const BOTTOM_TABS: BottomTabMeta[] = [
   {
     id: "build",
     label: "Build Output",
-    phase: "Phase 5",
+    phase: "Phase 7",
     emptyTitle: "Build Output Channel Ready",
     emptyDescription:
-      "Real-time Make/riscv32-vega-elf-gcc compilation output and artifact summaries will stream here over WebSocket in Phase 5.",
+      "Make/riscv32-vega-elf-gcc compilation output and artifact summaries stream here.",
     icon: Hammer,
   },
   {
     id: "terminal",
     label: "Terminal",
-    phase: "Phase 9",
+    phase: "Phase 10",
     emptyTitle: "Interactive PTY Terminal Slot",
     emptyDescription:
-      "xterm.js interactive shell sessions anchored to the active project directory will mount here in Phase 9.",
+      "xterm.js interactive shell sessions anchored to the active project directory will mount here later.",
     icon: Terminal,
   },
   {
     id: "serial",
     label: "Serial Monitor",
-    phase: "Phase 8",
+    phase: "Phase 9",
     emptyTitle: "UART Serial Monitor Slot",
     emptyDescription:
-      "ARIES V3 UART RX/TX console (configurable baud, 115200 default) will stream here in Phase 8.",
+      "ARIES V3 UART RX/TX console (configurable baud, 115200 default) will stream here in serial phases.",
     icon: Usb,
   },
   {
     id: "diagnostics",
     label: "Diagnostics",
-    phase: "Phases 4–5",
-    emptyTitle: "No Active Diagnostics",
+    phase: "Phases 6–7",
+    emptyTitle: "No Build Errors or Warnings",
     emptyDescription:
-      "SDK Doctor checks and parsed compiler/linker warnings and errors will appear here once SDK and build integration are enabled.",
+      "Compiler and Make warnings/errors appear here cleanly during builds. Run SDK Doctor for environment checks.",
     icon: Activity,
   },
   {
     id: "upload",
     label: "Upload Output",
-    phase: "Phase 7",
+    phase: "Phase 8",
     emptyTitle: "XMODEM Upload Channel Ready",
     emptyDescription:
-      "Explicitly initiated firmware flashing logs and progress from vega_xmodem.py will stream here in Phase 7.",
+      "Explicitly initiated firmware flashing logs and progress from vega_xmodem.py will stream here in upload phase.",
     icon: Upload,
   },
   {
@@ -98,10 +112,14 @@ export function BottomPanel({
   height,
   maximized,
   logs,
+  buildPanelProps,
+  buildDiagnostics,
   onSelectTab,
   onToggleMaximize,
   onCollapse,
   onClearLogs,
+  onOpenDiagnosticLocation,
+  onOpenSdkDoctor,
 }: BottomPanelProps) {
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const activeMeta =
@@ -158,6 +176,17 @@ export function BottomPanel({
                 }`}
               >
                 <span>{label}</span>
+                {id === "build" && buildPanelProps.activeBuild?.status === "running" && (
+                  <span
+                    aria-label="Building"
+                    className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#7aa2ff]"
+                  />
+                )}
+                {id === "diagnostics" && buildDiagnostics.length > 0 && (
+                  <span className="rounded-full border border-red-400/25 bg-red-500/15 px-1.5 font-mono text-[10px] text-red-200">
+                    {buildDiagnostics.length}
+                  </span>
+                )}
                 {id === "logs" && logs.length > 0 && (
                   <span className="rounded-full bg-white/10 px-1.5 font-mono text-[10px] text-[#e8ebf7]/70">
                     {logs.length}
@@ -222,55 +251,148 @@ export function BottomPanel({
       </div>
 
       {/* Tab Content */}
-      <div className="vega-scroll min-h-0 flex-1 overflow-y-auto p-3 font-mono text-xs">
-        {activeTab === "logs" && logs.length > 0 ? (
-          <ul className="space-y-1">
-            {logs.map((entry) => (
-              <li
-                key={entry.id}
-                className="flex items-baseline gap-2.5 rounded px-2 py-0.5 text-[11px] hover:bg-white/[0.03]"
-              >
-                <span className="shrink-0 text-[#e8ebf7]/35">
-                  {entry.timestamp}
-                </span>
-                <span
-                  className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                    entry.level === "error"
-                      ? "bg-red-500/15 text-red-300"
-                      : entry.level === "warn"
-                        ? "bg-amber-500/15 text-amber-300"
-                        : "bg-[#7aa2ff]/12 text-[#7aa2ff]"
-                  }`}
-                >
-                  {entry.category}
-                </span>
-                <span className="text-[#e8ebf7]/80">{entry.message}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="flex h-full min-h-[72px] items-center justify-center">
-            <div className="flex max-w-lg items-start gap-3 rounded-xl border border-white/8 bg-[#08090f] px-4 py-3 font-sans">
-              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-[#7aa2ff]">
-                <ActiveIcon className="h-3.5 w-3.5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
+      {activeTab === "build" ? (
+        <BuildOutputPanel {...buildPanelProps} />
+      ) : activeTab === "diagnostics" ? (
+        <div className="vega-scroll min-h-0 flex-1 overflow-y-auto p-3 font-mono text-xs">
+          <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-2">
+            <span className="text-[11px] text-[#e8ebf7]/60">
+              {buildDiagnostics.length === 0
+                ? "No parsed build errors or warnings."
+                : `${buildDiagnostics.filter((d) => d.severity === "error").length} error(s), ${buildDiagnostics.filter((d) => d.severity === "warning").length} warning(s)`}
+            </span>
+            <button
+              type="button"
+              onClick={onOpenSdkDoctor}
+              className="inline-flex h-6 items-center gap-1.5 rounded border border-white/10 bg-white/[0.04] px-2.5 font-sans text-[11px] text-[#e8ebf7]/80 hover:bg-white/[0.09]"
+            >
+              <Stethoscope className="h-3 w-3 text-[#7aa2ff]" />
+              <span>Open SDK Doctor</span>
+            </button>
+          </div>
+
+          {buildDiagnostics.length === 0 ? (
+            <div className="flex h-full min-h-[72px] items-center justify-center font-sans">
+              <div className="flex max-w-lg items-start gap-3 rounded-xl border border-white/8 bg-[#08090f] px-4 py-3">
+                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-[#7aa2ff]">
+                  <ActiveIcon className="h-3.5 w-3.5" />
+                </div>
+                <div>
                   <p className="text-xs font-medium text-[#e8ebf7]">
                     {activeMeta.emptyTitle}
                   </p>
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#e8ebf7]/50">
-                    {activeMeta.phase}
-                  </span>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-[#e8ebf7]/50">
+                    {activeMeta.emptyDescription}
+                  </p>
                 </div>
-                <p className="mt-0.5 text-[11px] leading-relaxed text-[#e8ebf7]/50">
-                  {activeMeta.emptyDescription}
-                </p>
               </div>
             </div>
-          </div>
-        )}
-      </div>
+          ) : (
+            <ul className="space-y-1">
+              {buildDiagnostics.map((diag) => {
+                const canNavigate = Boolean(diag.relative_path && diag.line);
+                return (
+                  <li
+                    key={diag.id}
+                    className={`flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-[11px] ${
+                      diag.severity === "error"
+                        ? "border-red-400/20 bg-red-500/[0.07]"
+                        : "border-amber-400/20 bg-amber-500/[0.06]"
+                    }`}
+                  >
+                    <div className="flex min-w-0 items-start gap-2">
+                      {diag.severity === "error" ? (
+                        <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-300" />
+                      ) : (
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="break-words text-[#e8ebf7]/90">
+                          {diag.message}
+                        </p>
+                        {(diag.file_path || diag.relative_path) && (
+                          <p className="mt-0.5 truncate text-[10px] text-[#e8ebf7]/50">
+                            {diag.relative_path ?? diag.file_path}
+                            {diag.line ? `:${diag.line}` : ""}
+                            {diag.column ? `:${diag.column}` : ""}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {canNavigate && diag.relative_path && diag.line && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onOpenDiagnosticLocation(
+                            diag.relative_path!,
+                            diag.line!,
+                            diag.column ?? 1
+                          )
+                        }
+                        className="inline-flex h-6 shrink-0 items-center gap-1 rounded border border-white/12 bg-white/[0.05] px-2 font-sans text-[10.5px] font-medium text-[#7aa2ff] hover:bg-white/[0.10]"
+                      >
+                        <FileCode2 className="h-3 w-3" />
+                        <span>Open</span>
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      ) : (
+        <div className="vega-scroll min-h-0 flex-1 overflow-y-auto p-3 font-mono text-xs">
+          {activeTab === "logs" && logs.length > 0 ? (
+            <ul className="space-y-1">
+              {logs.map((entry) => (
+                <li
+                  key={entry.id}
+                  className="flex items-baseline gap-2.5 rounded px-2 py-0.5 text-[11px] hover:bg-white/[0.03]"
+                >
+                  <span className="shrink-0 text-[#e8ebf7]/35">
+                    {entry.timestamp}
+                  </span>
+                  <span
+                    className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                      entry.level === "error"
+                        ? "bg-red-500/15 text-red-300"
+                        : entry.level === "warn"
+                          ? "bg-amber-500/15 text-amber-300"
+                          : "bg-[#7aa2ff]/12 text-[#7aa2ff]"
+                    }`}
+                  >
+                    {entry.category}
+                  </span>
+                  <span className="text-[#e8ebf7]/80">{entry.message}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="flex h-full min-h-[72px] items-center justify-center">
+              <div className="flex max-w-lg items-start gap-3 rounded-xl border border-white/8 bg-[#08090f] px-4 py-3 font-sans">
+                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-[#7aa2ff]">
+                  <ActiveIcon className="h-3.5 w-3.5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-medium text-[#e8ebf7]">
+                      {activeMeta.emptyTitle}
+                    </p>
+                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#e8ebf7]/50">
+                      {activeMeta.phase}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-[#e8ebf7]/50">
+                    {activeMeta.emptyDescription}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }

@@ -6,6 +6,7 @@ import {
   FolderOpen,
   FolderPlus,
   Hammer,
+  Loader2,
   PanelBottom,
   PanelLeft,
   PanelRight,
@@ -13,6 +14,7 @@ import {
   RotateCw,
   Settings,
   Sparkles,
+  Square,
   TerminalSquare,
   Trash2,
   Upload,
@@ -24,11 +26,14 @@ import {
   SegmentedPill,
   type SegmentedPillOption,
 } from "@/components/shell/SegmentedPill";
+import type { BuildOperation } from "@/types/build";
 import type { WorkspaceMode } from "@/types/shell";
 
 interface AppToolbarProps {
   activeMode: WorkspaceMode;
   activeProjectName: string | null;
+  isBuilding: boolean;
+  isBackendConnected: boolean;
   sidebarOpen: boolean;
   bottomPanelOpen: boolean;
   rightPanelOpen: boolean;
@@ -38,6 +43,8 @@ interface AppToolbarProps {
   onNewProject: () => void;
   onOpenProject: () => void;
   onCloseProject: () => void;
+  onBuildAction: (op: BuildOperation) => void;
+  onCancelBuild: () => void;
   onToggleSidebar: () => void;
   onToggleBottomPanel: () => void;
   onToggleRightPanel: () => void;
@@ -53,6 +60,8 @@ const MODE_OPTIONS: SegmentedPillOption<WorkspaceMode>[] = [
 export function AppToolbar({
   activeMode,
   activeProjectName,
+  isBuilding,
+  isBackendConnected,
   sidebarOpen,
   bottomPanelOpen,
   rightPanelOpen,
@@ -62,6 +71,8 @@ export function AppToolbar({
   onNewProject,
   onOpenProject,
   onCloseProject,
+  onBuildAction,
+  onCancelBuild,
   onToggleSidebar,
   onToggleBottomPanel,
   onToggleRightPanel,
@@ -153,45 +164,78 @@ export function AppToolbar({
 
           <div className="mx-0.5 h-3.5 w-px bg-white/10" />
 
-          <Tooltip label="Build Project (Phase 5)">
+          <Tooltip
+            label={
+              !activeProjectName
+                ? "Open a project to build firmware"
+                : !isBackendConnected
+                ? "Backend disconnected"
+                : isBuilding
+                ? "Build currently running"
+                : "Build Project (Make)"
+            }
+          >
             <button
               type="button"
-              disabled
-              aria-label="Build Project (Phase 5)"
-              className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-[#e8ebf7]/40 opacity-45 disabled:cursor-not-allowed"
+              disabled={!activeProjectName || !isBackendConnected || isBuilding}
+              aria-label="Build Project"
+              onClick={() => onBuildAction("build")}
+              className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-[#e8ebf7]/80 transition-colors hover:bg-white/[0.08] hover:text-[#e8ebf7] disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <Hammer className="h-3.5 w-3.5" />
-              <span className="hidden xl:inline">Build</span>
+              {isBuilding ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-[#7aa2ff]" />
+              ) : (
+                <Hammer className="h-3.5 w-3.5 text-[#7aa2ff]" />
+              )}
+              <span className="hidden xl:inline">
+                {isBuilding ? "Building" : "Build"}
+              </span>
             </button>
           </Tooltip>
 
-          <Tooltip label="Clean Build (Phase 5)">
+          <Tooltip label="Clean Build (Make clean)">
             <button
               type="button"
-              disabled
-              aria-label="Clean Build (Phase 5)"
-              className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-[#e8ebf7]/40 opacity-45 disabled:cursor-not-allowed"
+              disabled={!activeProjectName || !isBackendConnected || isBuilding}
+              aria-label="Clean Build"
+              onClick={() => onBuildAction("clean")}
+              className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-[#e8ebf7]/70 transition-colors hover:bg-white/[0.08] hover:text-[#e8ebf7] disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </Tooltip>
 
-          <Tooltip label="Rebuild Project (Phase 5)">
+          <Tooltip label="Rebuild Project (Clean + Build)">
             <button
               type="button"
-              disabled
-              aria-label="Rebuild Project (Phase 5)"
-              className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-[#e8ebf7]/40 opacity-45 disabled:cursor-not-allowed"
+              disabled={!activeProjectName || !isBackendConnected || isBuilding}
+              aria-label="Rebuild Project"
+              onClick={() => onBuildAction("rebuild")}
+              className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-[#e8ebf7]/70 transition-colors hover:bg-white/[0.08] hover:text-[#e8ebf7] disabled:cursor-not-allowed disabled:opacity-40"
             >
               <RotateCw className="h-3.5 w-3.5" />
             </button>
           </Tooltip>
 
-          <Tooltip label="Upload Firmware (Phase 7)">
+          {isBuilding && (
+            <Tooltip label="Cancel Active Build">
+              <button
+                type="button"
+                aria-label="Cancel Active Build"
+                onClick={onCancelBuild}
+                className="inline-flex h-7 items-center gap-1 rounded-md border border-red-400/35 bg-red-500/18 px-2 text-xs font-medium text-red-200 transition-colors hover:bg-red-500/28"
+              >
+                <Square className="h-3 w-3 fill-current" />
+                <span className="hidden xl:inline">Cancel</span>
+              </button>
+            </Tooltip>
+          )}
+
+          <Tooltip label="Upload Firmware (Phase 8+)">
             <button
               type="button"
               disabled
-              aria-label="Upload Firmware (Phase 7)"
+              aria-label="Upload Firmware (Phase 8+)"
               className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-[#e8ebf7]/40 opacity-45 disabled:cursor-not-allowed"
             >
               <Upload className="h-3.5 w-3.5" />

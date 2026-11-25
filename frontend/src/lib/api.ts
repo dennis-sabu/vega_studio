@@ -1,4 +1,10 @@
 import type {
+  BuildHistoryResponse,
+  BuildRequestPayload,
+  BuildStateResponse,
+  BuildSummary,
+} from "@/types/build";
+import type {
   CreateEntryPayload,
   DeleteEntryPayload,
   DirectoryListingResponse,
@@ -310,5 +316,62 @@ export async function runSdkDiagnostics(
   return apiFetch<SdkDoctorReport>("/api/sdk/diagnostics/run", {
     method: "POST",
     body: JSON.stringify({ config_override: configOverride ?? null }),
+  });
+}
+
+export function getBuildWsUrl(buildId: string): string {
+  const baseUrl = getBackendUrl().replace(/\/+$/, "");
+  const wsBase = baseUrl.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:");
+  return `${wsBase}/api/build/ws/${encodeURIComponent(buildId)}`;
+}
+
+export async function startFirmwareBuild(
+  payload: BuildRequestPayload
+): Promise<BuildSummary> {
+  return apiFetch<BuildSummary>("/api/build/start", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function cleanFirmwareBuild(
+  payload: BuildRequestPayload
+): Promise<BuildSummary> {
+  return apiFetch<BuildSummary>("/api/build/clean", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function cancelFirmwareBuild(
+  buildId?: string
+): Promise<BuildSummary> {
+  const path = buildId
+    ? `/api/build/${encodeURIComponent(buildId)}/cancel`
+    : "/api/build/cancel";
+  return apiFetch<BuildSummary>(path, { method: "POST" });
+}
+
+export async function fetchBuildState(
+  signal?: AbortSignal
+): Promise<BuildStateResponse> {
+  return apiFetch<BuildStateResponse>("/api/build/state", { signal });
+}
+
+export async function fetchBuildHistory(
+  signal?: AbortSignal
+): Promise<BuildHistoryResponse> {
+  return apiFetch<BuildHistoryResponse>("/api/build/history", { signal });
+}
+
+export async function clearBuildHistory(): Promise<BuildHistoryResponse> {
+  return apiFetch<BuildHistoryResponse>("/api/build/history", {
+    method: "DELETE",
+  });
+}
+
+export async function clearBuildOutput(): Promise<BuildStateResponse> {
+  return apiFetch<BuildStateResponse>("/api/build/output/clear", {
+    method: "POST",
   });
 }

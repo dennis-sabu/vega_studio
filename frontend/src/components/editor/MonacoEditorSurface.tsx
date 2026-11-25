@@ -18,7 +18,11 @@ import {
   VEGA_MONACO_THEME,
   type MonacoNamespace,
 } from "@/lib/vegaMonaco";
-import type { EditorCursorPosition, EditorSettings } from "@/types/editor";
+import type {
+  EditorCursorPosition,
+  EditorRevealTarget,
+  EditorSettings,
+} from "@/types/editor";
 import type { OpenFileTab } from "@/types/explorer";
 
 export interface MonacoEditorHandle {
@@ -31,16 +35,26 @@ export interface MonacoEditorHandle {
 interface MonacoEditorSurfaceProps {
   activeTab: OpenFileTab;
   settings: EditorSettings;
+  pendingReveal?: EditorRevealTarget | null;
   onDirtyChange: (uid: string, isDirty: boolean) => void;
   onCursorChange: (pos: EditorCursorPosition) => void;
   onSaveShortcut: (uid: string) => void;
+  onConsumeReveal?: (nonce: number) => void;
 }
 
 export const MonacoEditorSurface = forwardRef<
   MonacoEditorHandle,
   MonacoEditorSurfaceProps
 >(function MonacoEditorSurface(
-  { activeTab, settings, onDirtyChange, onCursorChange, onSaveShortcut },
+  {
+    activeTab,
+    settings,
+    pendingReveal,
+    onDirtyChange,
+    onCursorChange,
+    onSaveShortcut,
+    onConsumeReveal,
+  },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -56,10 +70,12 @@ export const MonacoEditorSurface = forwardRef<
   const onDirtyChangeRef = useRef(onDirtyChange);
   const onCursorChangeRef = useRef(onCursorChange);
   const onSaveShortcutRef = useRef(onSaveShortcut);
+  const onConsumeRevealRef = useRef(onConsumeReveal);
   useEffect(() => {
     onDirtyChangeRef.current = onDirtyChange;
     onCursorChangeRef.current = onCursorChange;
     onSaveShortcutRef.current = onSaveShortcut;
+    onConsumeRevealRef.current = onConsumeReveal;
   });
 
   useImperativeHandle(
@@ -239,6 +255,31 @@ export const MonacoEditorSurface = forwardRef<
     }
     editor.layout();
   }, [settings]);
+
+  // Navigate to requested line/column (e.g. clicking a build diagnostic)
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || initializing || !pendingReveal) return;
+    if (
+      activeTab.path !== pendingReveal.path ||
+      activeTab.loading ||
+      activeTab.error
+    ) {
+      return;
+    }
+    const lineNumber = Math.max(1, pendingReveal.line);
+    const column = Math.max(1, pendingReveal.column ?? 1);
+    editor.revealLineInCenter(lineNumber);
+    editor.setPosition({ lineNumber, column });
+    editor.focus();
+    onConsumeRevealRef.current?.(pendingReveal.nonce);
+  }, [
+    initializing,
+    pendingReveal,
+    activeTab.path,
+    activeTab.loading,
+    activeTab.error,
+  ]);
 
   // Attach or switch ITextModel when activeTab changes or finishes loading
   useEffect(() => {

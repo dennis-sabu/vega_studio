@@ -6,6 +6,8 @@ import {
   Cpu,
   FolderOpen,
   GitBranch,
+  Hammer,
+  Loader2,
   PanelBottom,
   PanelLeft,
   PanelRight,
@@ -15,6 +17,7 @@ import {
 } from "lucide-react";
 import { Tooltip } from "@/components/ui/Tooltip";
 import type { HealthResponse } from "@/lib/api";
+import type { BuildSummary } from "@/types/build";
 import type { EditorCursorPosition, EditorSettings } from "@/types/editor";
 import type { OpenFileTab } from "@/types/explorer";
 import type { DiagnosticStatus } from "@/types/sdk";
@@ -29,11 +32,13 @@ interface StatusBarProps {
   editorSettings: EditorSettings;
   dirtyCount: number;
   sdkStatus: DiagnosticStatus | null;
+  latestBuild: BuildSummary | null;
   sidebarOpen: boolean;
   bottomPanelOpen: boolean;
   rightPanelOpen: boolean;
   onInspectBackend: () => void;
   onOpenSdkDoctor: () => void;
+  onOpenBuildOutput: () => void;
   onOpenProject: () => void;
   onToggleSidebar: () => void;
   onToggleBottomPanel: () => void;
@@ -50,11 +55,13 @@ export function StatusBar({
   editorSettings,
   dirtyCount,
   sdkStatus,
+  latestBuild,
   sidebarOpen,
   bottomPanelOpen,
   rightPanelOpen,
   onInspectBackend,
   onOpenSdkDoctor,
+  onOpenBuildOutput,
   onOpenProject,
   onToggleSidebar,
   onToggleBottomPanel,
@@ -169,6 +176,44 @@ export function StatusBar({
           <GitBranch className="h-3 w-3" />
           <span>No Repo</span>
         </span>
+
+        {latestBuild && (
+          <Tooltip
+            label={`Latest build: ${latestBuild.operation} (${latestBuild.status}) — click for Build Output`}
+            side="top"
+          >
+            <button
+              type="button"
+              onClick={onOpenBuildOutput}
+              className={`hidden items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[11px] transition-colors hover:bg-white/[0.07] sm:inline-flex ${
+                latestBuild.status === "running"
+                  ? "text-[#7aa2ff]"
+                  : latestBuild.status === "succeeded"
+                  ? "text-emerald-300"
+                  : latestBuild.status === "cancelled"
+                  ? "text-amber-300"
+                  : "text-red-300"
+              }`}
+            >
+              {latestBuild.status === "running" ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Hammer className="h-3 w-3" />
+              )}
+              <span>
+                {latestBuild.status === "running"
+                  ? `Building (${latestBuild.operation})...`
+                  : latestBuild.status === "succeeded"
+                  ? "Build: Passed"
+                  : latestBuild.status === "cancelled"
+                  ? "Build: Cancelled"
+                  : latestBuild.status === "timed_out"
+                  ? "Build: Timeout"
+                  : "Build: Failed"}
+              </span>
+            </button>
+          </Tooltip>
+        )}
 
         {dirtyCount > 0 && (
           <span className="hidden items-center gap-1.5 rounded border border-amber-400/25 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-amber-200 md:inline-flex">

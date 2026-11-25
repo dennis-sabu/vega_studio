@@ -12,7 +12,11 @@ import {
   markTabModelSaved,
   resetTabModelFromDisk,
 } from "@/lib/vegaMonaco";
-import type { EditorCursorPosition, UnsavedGuardPrompt } from "@/types/editor";
+import type {
+  EditorCursorPosition,
+  EditorRevealTarget,
+  UnsavedGuardPrompt,
+} from "@/types/editor";
 import type { FileNode, OpenFileTab } from "@/types/explorer";
 
 interface UseEditorTabsOptions {
@@ -66,6 +70,8 @@ export function useEditorTabs({ projectDir, onLog }: UseEditorTabsOptions) {
     column: 1,
     selectionLength: 0,
   });
+  const [pendingReveal, setPendingReveal] =
+    useState<EditorRevealTarget | null>(null);
   const [unsavedPrompt, setUnsavedPrompt] =
     useState<UnsavedGuardPrompt | null>(null);
 
@@ -249,6 +255,34 @@ export function useEditorTabs({ projectDir, onLog }: UseEditorTabsOptions) {
     },
     [loadTabContent]
   );
+
+  const openFileAtLocation = useCallback(
+    (relativePath: string, line: number, column?: number) => {
+      const base = pathBasename(relativePath);
+      const ext = pathExtension(base);
+      openFile({
+        name: base,
+        path: relativePath,
+        kind: "file",
+        size: null,
+        extension: ext,
+        has_children: false,
+        accessible: true,
+        error: null,
+      });
+      setPendingReveal({
+        path: relativePath,
+        line,
+        column,
+        nonce: Date.now() + Math.random(),
+      });
+    },
+    [openFile]
+  );
+
+  const consumeReveal = useCallback((nonce: number) => {
+    setPendingReveal((prev) => (prev && prev.nonce === nonce ? null : prev));
+  }, []);
 
   const setTabDirty = useCallback((uid: string, isDirty: boolean) => {
     setOpenFileTabs((prev) =>
@@ -619,11 +653,14 @@ export function useEditorTabs({ projectDir, onLog }: UseEditorTabsOptions) {
     dirtyPaths,
     dirtyCount: dirtyPaths.size,
     cursorPosition,
+    pendingReveal,
     unsavedPrompt,
     setActiveFileTabPath,
     setCursorPosition,
     setTabDirty,
     openFile,
+    openFileAtLocation,
+    consumeReveal,
     saveTab,
     saveAllDirtyTabs,
     reloadTabFromDisk,

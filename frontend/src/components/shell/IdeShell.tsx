@@ -23,6 +23,7 @@ import { SidebarPanel } from "@/components/shell/SidebarPanel";
 import { StatusBar } from "@/components/shell/StatusBar";
 import { WorkspaceEditorArea } from "@/components/shell/WorkspaceEditorArea";
 import { useBackendHealth } from "@/hooks/useBackendHealth";
+import { useBuildSystem } from "@/hooks/useBuildSystem";
 import { useEditorSettings } from "@/hooks/useEditorSettings";
 import { useEditorTabs } from "@/hooks/useEditorTabs";
 import { useFileExplorer } from "@/hooks/useFileExplorer";
@@ -42,6 +43,7 @@ import {
   type AtmosphereTweaks,
   type SpeciesKey,
 } from "@/lib/glyphAnimalsEngine";
+import type { BuildOperation } from "@/types/build";
 import type { CreateProjectPayload } from "@/types/project";
 import type { ShellLogEntry } from "@/types/shell";
 
@@ -207,6 +209,12 @@ export function IdeShell() {
   });
 
   const sdkDoctor = useSdkDoctor({
+    isBackendConnected: isConnected,
+    onLog: (level, message) => appendLog("SHELL", level, message),
+  });
+
+  const buildSystem = useBuildSystem({
+    projectDir: workspace.activeProject?.project_dir ?? null,
     isBackendConnected: isConnected,
     onLog: (level, message) => appendLog("SHELL", level, message),
   });
@@ -388,6 +396,36 @@ export function IdeShell() {
     await workspace.closeActiveWorkspace();
   }, [editorTabs, workspace]);
 
+  const handleBuildOperation = useCallback(
+    async (operation: BuildOperation) => {
+      if (
+        (operation === "build" || operation === "rebuild") &&
+        editorTabs.dirtyCount > 0
+      ) {
+        const proceed = await editorTabs.confirmWorkspaceTransition({
+          title: "Save modified files before building?",
+          description:
+            "Open editor tabs contain unsaved modifications. Save them so Make compiles your latest edits?",
+          confirmSaveLabel: "Save All & Build",
+          confirmDiscardLabel: "Build Saved Copy",
+        });
+        if (!proceed) return;
+      }
+      setBottomTab("build");
+      void buildSystem.runOperation(operation);
+    },
+    [buildSystem, editorTabs, setBottomTab]
+  );
+
+  const handleOpenDiagnosticLocation = useCallback(
+    (relativePath: string, line: number, column?: number) => {
+      explorer.setSelectedPath(relativePath);
+      editorTabs.openFileAtLocation(relativePath, line, column);
+      setMode("workspace");
+    },
+    [editorTabs, explorer, setMode]
+  );
+
   const activeProjectName = workspace.activeProject?.project.name ?? null;
   const activeFileTab = editorTabs.activeFileTabPath
     ? editorTabs.openFileTabs.find(
@@ -419,6 +457,8 @@ export function IdeShell() {
       <AppToolbar
         activeMode={layout.activeMode}
         activeProjectName={activeProjectName}
+        isBuilding={buildSystem.isBuilding}
+        isBackendConnected={isConnected}
         sidebarOpen={layout.sidebarOpen}
         bottomPanelOpen={layout.bottomPanelOpen}
         rightPanelOpen={layout.rightPanelOpen}
@@ -431,6 +471,8 @@ export function IdeShell() {
         onNewProject={openNewProjectDialog}
         onOpenProject={openOpenProjectDialog}
         onCloseProject={() => void handleCloseProject()}
+        onBuildAction={(op) => void handleBuildOperation(op)}
+        onCancelBuild={() => void buildSystem.cancelActive()}
         onToggleSidebar={toggleSidebar}
         onToggleBottomPanel={toggleBottomPanel}
         onToggleRightPanel={toggleRightPanel}
@@ -565,6 +607,7 @@ export function IdeShell() {
                   activeFileTabPath={editorTabs.activeFileTabPath}
                   editorSettings={editorSettings.settings}
                   dirtyCount={editorTabs.dirtyCount}
+                  pendingReveal={editorTabs.pendingReveal}
                   sdkDoctorProps={{
                     isBackendConnected: isConnected,
                     hasElectronBrowse: sdkDoctor.hasElectronBrowse,
@@ -622,6 +665,7 @@ export function IdeShell() {
                   }
                   onDirtyChange={editorTabs.setTabDirty}
                   onCursorChange={editorTabs.setCursorPosition}
+                  onConsumeReveal={editorTabs.consumeReveal}
                   onUpdateEditorSettings={editorSettings.updateSettings}
                   onOpenSettings={() => openSettingsCategory("editor")}
                   onNewProject={openNewProjectDialog}
@@ -653,10 +697,34 @@ export function IdeShell() {
                     height={effectiveDimensions.bottomPanelHeight}
                     maximized={layout.bottomPanelMaximized}
                     logs={logs}
+                    buildPanelProps={{
+                      hasActiveProject: Boolean(workspace.activeProject),
+                      isBackendConnected: isConnected,
+                      activeBuild: buildSystem.activeBuild,
+                      latestBuild: buildSystem.latestBuild,
+                      logs: buildSystem.logs,
+                      history: buildSystem.history,
+                      buildMode: buildSystem.buildMode,
+                      customTarget: buildSystem.customTarget,
+                      pendingAction: buildSystem.pendingAction,
+                      error: buildSystem.error,
+                      onModeChange: buildSystem.setBuildMode,
+                      onTargetChange: buildSystem.setCustomTarget,
+                      onRunOperation: (op) => void handleBuildOperation(op),
+                      onCancel: () => void buildSystem.cancelActive(),
+                      onClearOutput: () => void buildSystem.clearOutput(),
+                      onClearHistory: () => void buildSystem.clearHistory(),
+                      onClearError: buildSystem.clearError,
+                      onOpenDiagnosticsTab: () => setBottomTab("diagnostics"),
+                      onOpenSdkDoctor: openSdkDoctor,
+                    }}
+                    buildDiagnostics={buildSystem.diagnostics}
                     onSelectTab={setBottomTab}
                     onToggleMaximize={toggleBottomPanelMaximized}
                     onCollapse={toggleBottomPanel}
                     onClearLogs={() => setLogs([])}
+                    onOpenDiagnosticLocation={handleOpenDiagnosticLocation}
+                    onOpenSdkDoctor={openSdkDoctor}
                   />
                 </>
               )}
@@ -697,6 +765,7 @@ export function IdeShell() {
         editorSettings={editorSettings.settings}
         dirtyCount={editorTabs.dirtyCount}
         sdkStatus={sdkDoctor.report?.overall_status ?? null}
+        latestBuild={buildSystem.latestBuild}
         sidebarOpen={layout.sidebarOpen}
         bottomPanelOpen={layout.bottomPanelOpen}
         rightPanelOpen={layout.rightPanelOpen}
@@ -705,6 +774,7 @@ export function IdeShell() {
           openCenterTab("diagnostics");
         }}
         onOpenSdkDoctor={openSdkDoctor}
+        onOpenBuildOutput={() => setBottomTab("build")}
         onOpenProject={openOpenProjectDialog}
         onToggleSidebar={toggleSidebar}
         onToggleBottomPanel={toggleBottomPanel}

@@ -44,7 +44,11 @@ import { FileIcon } from "@/components/explorer/FileIcon";
 import { SdkDoctorView } from "@/components/sdk/SdkDoctorView";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { fetchStatus, type HealthResponse, type StatusResponse } from "@/lib/api";
-import type { EditorCursorPosition, EditorSettings } from "@/types/editor";
+import type {
+  EditorCursorPosition,
+  EditorRevealTarget,
+  EditorSettings,
+} from "@/types/editor";
 import type { OpenFileTab } from "@/types/explorer";
 import type { WorkspaceSummary } from "@/types/project";
 import type { CenterTabId, ShellLayoutState } from "@/types/shell";
@@ -56,6 +60,7 @@ interface WorkspaceEditorAreaProps {
   activeFileTabPath: string | null;
   editorSettings: EditorSettings;
   dirtyCount: number;
+  pendingReveal?: EditorRevealTarget | null;
   sdkDoctorProps: ComponentProps<typeof SdkDoctorView>;
   layout: ShellLayoutState;
   activeProject: WorkspaceSummary | null;
@@ -75,6 +80,7 @@ interface WorkspaceEditorAreaProps {
   onReloadFileTab: (uid: string) => void;
   onDirtyChange: (uid: string, isDirty: boolean) => void;
   onCursorChange: (pos: EditorCursorPosition) => void;
+  onConsumeReveal?: (nonce: number) => void;
   onUpdateEditorSettings: (partial: Partial<EditorSettings>) => void;
   onOpenSettings: () => void;
   onNewProject: () => void;
@@ -110,6 +116,7 @@ export function WorkspaceEditorArea({
   activeFileTabPath,
   editorSettings,
   dirtyCount,
+  pendingReveal,
   sdkDoctorProps,
   layout,
   activeProject,
@@ -129,6 +136,7 @@ export function WorkspaceEditorArea({
   onReloadFileTab,
   onDirtyChange,
   onCursorChange,
+  onConsumeReveal,
   onUpdateEditorSettings,
   onOpenSettings,
   onNewProject,
@@ -659,9 +667,11 @@ export function WorkspaceEditorArea({
                 ref={monacoHandleRef}
                 activeTab={activeFileTab}
                 settings={editorSettings}
+                pendingReveal={pendingReveal}
                 onDirtyChange={onDirtyChange}
                 onCursorChange={onCursorChange}
                 onSaveShortcut={(uid) => void onSaveFileTab(uid)}
+                onConsumeReveal={onConsumeReveal}
               />
               {activeFileTab.loading && (
                 <div className="absolute inset-0 z-20 flex items-center justify-center gap-2.5 bg-[#06070c]/88 text-xs text-[#e8ebf7]/70 backdrop-blur-[2px]">

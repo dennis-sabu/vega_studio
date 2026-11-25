@@ -9,10 +9,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.routers import build as build_router
 from app.routers import explorer as explorer_router
 from app.routers import health as health_router
 from app.routers import projects as projects_router
 from app.routers import sdk as sdk_router
+from app.services.build_service import get_build_service
 
 logging.basicConfig(
     level=settings.LOG_LEVEL.upper(),
@@ -30,6 +32,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.PORT,
     )
     yield
+    get_build_service().shutdown()
     logger.info("VEGA Studio Backend shutting down")
 
 
@@ -55,6 +58,7 @@ def create_app() -> FastAPI:
     application.include_router(projects_router.router)
     application.include_router(explorer_router.router)
     application.include_router(sdk_router.router)
+    application.include_router(build_router.router)
 
     return application
 

@@ -22,6 +22,13 @@ export interface EditorCursorPosition {
   selectionLength: number;
 }
 
+export interface EditorRevealTarget {
+  path: string;
+  line: number;
+  column?: number;
+  nonce: number;
+}
+
 export interface UnsavedGuardPrompt {
   title: string;
   description: string;
