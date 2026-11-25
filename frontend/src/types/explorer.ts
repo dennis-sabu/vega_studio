@@ -1,4 +1,5 @@
 export type EntryKind = "file" | "dir";
+export type LineEnding = "LF" | "CRLF";
 
 export interface FileNode {
   name: string;
@@ -27,6 +28,38 @@ export interface FileStatResponse {
   language: string;
   is_binary: boolean;
   modified_at: string;
+}
+
+export interface FileReadResponse {
+  name: string;
+  relative_path: string;
+  content: string;
+  encoding: string;
+  line_ending: LineEnding;
+  size: number;
+  extension: string;
+  language: string;
+  monaco_language: string;
+  modified_at: string;
+  version_stamp: string;
+}
+
+export interface FileWritePayload {
+  project_dir: string;
+  relative_path: string;
+  content: string;
+  expected_version?: string | null;
+  overwrite_conflict?: boolean;
+}
+
+export interface FileWriteResponse {
+  ok: boolean;
+  relative_path: string;
+  size: number;
+  modified_at: string;
+  version_stamp: string;
+  line_ending: LineEnding;
+  message: string;
 }
 
 export interface CreateEntryPayload {
@@ -58,10 +91,22 @@ export interface EntryOperationResponse {
 }
 
 export interface OpenFileTab {
+  uid: string;
   path: string;
   name: string;
   extension: string;
-  stat: FileStatResponse | null;
+  language: string;
+  monacoLanguage: string;
+  lineEnding: LineEnding;
+  size: number | null;
+  modifiedAt: string | null;
+  versionStamp: string | null;
+  savedContent: string;
   loading: boolean;
+  isDirty: boolean;
+  isSaving: boolean;
   error: string | null;
+  errorStatus: number | null;
+  saveError: string | null;
+  conflictError: string | null;
 }

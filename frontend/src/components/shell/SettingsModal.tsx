@@ -19,15 +19,19 @@ import {
   type AtmosphereTweaks,
   type SpeciesKey,
 } from "@/lib/glyphAnimalsEngine";
+import type { EditorSettings } from "@/types/editor";
 
 interface SettingsModalProps {
   open: boolean;
   species: SpeciesKey;
   tweaks: AtmosphereTweaks;
+  editorSettings: EditorSettings;
   onClose: () => void;
   onSpeciesChange: (species: SpeciesKey) => void;
   onTweaksChange: (partial: Partial<AtmosphereTweaks>) => void;
   onResetTweaks: () => void;
+  onEditorSettingsChange: (partial: Partial<EditorSettings>) => void;
+  onResetEditorSettings: () => void;
 }
 
 interface SliderSpec {
@@ -189,22 +193,28 @@ const GLASS_SLIDERS: SliderSpec[] = [
   },
 ];
 
+type SettingsCategory = "appearance" | "editor";
+
 const FUTURE_SETTINGS_SECTIONS = [
-  { label: "Editor", phase: "Phase 3", icon: Type },
-  { label: "SDK & Toolchain", phase: "Phase 4", icon: Stethoscope },
-  { label: "Board & Serial", phase: "Phases 6–8", icon: Cpu },
-  { label: "AI & OpenCode", phase: "Phases 11–12", icon: Sparkles },
+  { label: "SDK & Toolchain", phase: "Phase 6", icon: Stethoscope },
+  { label: "Board & Serial", phase: "Phases 7–9", icon: Cpu },
+  { label: "AI & OpenCode", phase: "Phases 12–13", icon: Sparkles },
 ];
 
 export function SettingsModal({
   open,
   species,
   tweaks,
+  editorSettings,
   onClose,
   onSpeciesChange,
   onTweaksChange,
   onResetTweaks,
+  onEditorSettingsChange,
+  onResetEditorSettings,
 }: SettingsModalProps) {
+  const [activeCategory, setActiveCategory] =
+    useState<SettingsCategory>("appearance");
   const [confirmReset, setConfirmReset] = useState(false);
   const [hoveredHint, setHoveredHint] = useState<string | null>(null);
   const defaults = SPECIES_MAP[species].defaults;
@@ -326,7 +336,11 @@ export function SettingsModal({
                   return;
                 }
                 setConfirmReset(false);
-                onResetTweaks();
+                if (activeCategory === "editor") {
+                  onResetEditorSettings();
+                } else {
+                  onResetTweaks();
+                }
               }}
               className={`inline-flex h-7 items-center rounded-full border px-3 text-[11px] font-medium transition-colors ${
                 confirmReset
@@ -357,10 +371,34 @@ export function SettingsModal({
             <div className="space-y-1">
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-lg bg-white/10 px-2.5 py-2 text-left text-xs font-medium text-[#e8ebf7]"
+                onClick={() => {
+                  setConfirmReset(false);
+                  setActiveCategory("appearance");
+                }}
+                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+                  activeCategory === "appearance"
+                    ? "bg-white/10 text-[#e8ebf7]"
+                    : "text-[#e8ebf7]/60 hover:bg-white/[0.05] hover:text-[#e8ebf7]"
+                }`}
               >
                 <SlidersHorizontal className="h-3.5 w-3.5 text-[#7aa2ff]" />
                 <span>Appearance &amp; Canvas</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmReset(false);
+                  setActiveCategory("editor");
+                }}
+                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+                  activeCategory === "editor"
+                    ? "bg-white/10 text-[#e8ebf7]"
+                    : "text-[#e8ebf7]/60 hover:bg-white/[0.05] hover:text-[#e8ebf7]"
+                }`}
+              >
+                <Type className="h-3.5 w-3.5 text-[#7aa2ff]" />
+                <span>Monaco Editor</span>
               </button>
 
               {FUTURE_SETTINGS_SECTIONS.map(({ label, phase, icon: Icon }) => (
@@ -383,12 +421,194 @@ export function SettingsModal({
             </div>
 
             <p className="px-2 font-mono text-[10px] leading-relaxed text-[#e8ebf7]/35">
-              Double-click any slider name to reset it.
+              {activeCategory === "editor"
+                ? "Applies immediately to all open code editor tabs."
+                : "Double-click any slider name to reset it."}
             </p>
           </nav>
 
           {/* Right Customization Content */}
           <div className="vega-scroll flex-1 space-y-4 overflow-y-auto p-5">
+            {activeCategory === "editor" ? (
+              <div className="space-y-4">
+                <div className="space-y-3 rounded-2xl border border-white/[0.08] bg-[#06070c]/60 p-4">
+                  <div className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/45 uppercase">
+                    Typography &amp; Wrapping
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[#e8ebf7]/80">Font Size</span>
+                        <span className="font-mono text-[11px] font-semibold text-[#7aa2ff]">
+                          {editorSettings.fontSize}px
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        aria-label="Editor font size"
+                        min={11}
+                        max={22}
+                        step={1}
+                        value={editorSettings.fontSize}
+                        onChange={(e) =>
+                          onEditorSettingsChange({
+                            fontSize: parseInt(e.target.value, 10),
+                          })
+                        }
+                        style={{
+                          ["--fill" as string]: `${(((editorSettings.fontSize - 11) / (22 - 11)) * 100).toFixed(1)}%`,
+                        }}
+                        className="vega-slider"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <span className="block text-xs text-[#e8ebf7]/80">
+                        Word Wrap
+                      </span>
+                      <div className="flex gap-1.5">
+                        {(["off", "on"] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() =>
+                              onEditorSettingsChange({ wordWrap: mode })
+                            }
+                            className={`h-7 flex-1 rounded-lg border font-mono text-[11px] font-medium transition-colors ${
+                              editorSettings.wordWrap === mode
+                                ? "border-[#7aa2ff]/45 bg-[#7aa2ff]/20 text-[#e8ebf7]"
+                                : "border-white/10 bg-white/[0.03] text-[#e8ebf7]/60 hover:bg-white/[0.07]"
+                            }`}
+                          >
+                            {mode === "on" ? "Wrap On" : "No Wrap"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-2xl border border-white/[0.08] bg-[#06070c]/60 p-4">
+                  <div className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/45 uppercase">
+                    Indentation &amp; Chrome
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <span className="block text-xs text-[#e8ebf7]/80">
+                        Tab Size
+                      </span>
+                      <div className="flex gap-1.5">
+                        {([2, 4, 8] as const).map((size) => (
+                          <button
+                            key={size}
+                            type="button"
+                            onClick={() =>
+                              onEditorSettingsChange({ tabSize: size })
+                            }
+                            className={`h-7 flex-1 rounded-lg border font-mono text-[11px] font-medium transition-colors ${
+                              editorSettings.tabSize === size
+                                ? "border-[#7aa2ff]/45 bg-[#7aa2ff]/20 text-[#e8ebf7]"
+                                : "border-white/10 bg-white/[0.03] text-[#e8ebf7]/60 hover:bg-white/[0.07]"
+                            }`}
+                          >
+                            {size}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <span className="block text-xs text-[#e8ebf7]/80">
+                        Indentation Character
+                      </span>
+                      <div className="flex gap-1.5">
+                        {[
+                          { label: "Spaces", value: true },
+                          { label: "Tabs", value: false },
+                        ].map((opt) => (
+                          <button
+                            key={opt.label}
+                            type="button"
+                            onClick={() =>
+                              onEditorSettingsChange({
+                                insertSpaces: opt.value,
+                              })
+                            }
+                            className={`h-7 flex-1 rounded-lg border font-mono text-[11px] font-medium transition-colors ${
+                              editorSettings.insertSpaces === opt.value
+                                ? "border-[#7aa2ff]/45 bg-[#7aa2ff]/20 text-[#e8ebf7]"
+                                : "border-white/10 bg-white/[0.03] text-[#e8ebf7]/60 hover:bg-white/[0.07]"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <span className="block text-xs text-[#e8ebf7]/80">
+                        Line Numbers
+                      </span>
+                      <div className="flex gap-1.5">
+                        {(["on", "relative", "off"] as const).map((ln) => (
+                          <button
+                            key={ln}
+                            type="button"
+                            onClick={() =>
+                              onEditorSettingsChange({ lineNumbers: ln })
+                            }
+                            className={`h-7 flex-1 rounded-lg border font-mono text-[11px] font-medium capitalize transition-colors ${
+                              editorSettings.lineNumbers === ln
+                                ? "border-[#7aa2ff]/45 bg-[#7aa2ff]/20 text-[#e8ebf7]"
+                                : "border-white/10 bg-white/[0.03] text-[#e8ebf7]/60 hover:bg-white/[0.07]"
+                            }`}
+                          >
+                            {ln}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-xl border border-white/8 bg-[#090b13]/70 px-3 py-2.5">
+                      <div>
+                        <p className="text-xs font-medium text-[#e8ebf7]">
+                          Code Minimap
+                        </p>
+                        <p className="text-[10px] text-[#e8ebf7]/45">
+                          Compact overview strip on the right edge
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={editorSettings.minimap}
+                        aria-label="Toggle editor minimap"
+                        onClick={() =>
+                          onEditorSettingsChange({
+                            minimap: !editorSettings.minimap,
+                          })
+                        }
+                        className={`relative h-[18px] w-[30px] shrink-0 rounded-full transition-colors ${
+                          editorSettings.minimap ? "bg-[#7aa2ff]" : "bg-white/15"
+                        }`}
+                      >
+                        <span
+                          className={`block h-[14px] w-[14px] rounded-full bg-white shadow transition-transform ${
+                            editorSettings.minimap
+                              ? "translate-x-[14px]"
+                              : "translate-x-[2px]"
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
             {/* Ambient Animal Species Switcher */}
             <div className="space-y-3 rounded-2xl border border-white/[0.08] bg-[#06070c]/60 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -441,14 +661,18 @@ export function SettingsModal({
             {renderSliderGroup("Movement", MOVEMENT_SLIDERS)}
             {renderSliderGroup("Look & Grid", LOOK_SLIDERS)}
             {renderSliderGroup("Glass Surface", GLASS_SLIDERS)}
+              </>
+            )}
           </div>
         </div>
 
         {/* Footer Hint */}
         <div className="flex h-9 shrink-0 items-center justify-between border-t border-white/[0.08] bg-[#070910]/75 px-5 font-mono text-[11px] text-[#e8ebf7]/45">
           <span>
-            {hoveredHint ??
-              "Hover a slider for details · Double-click a label to reset"}
+            {activeCategory === "editor"
+              ? "Editor preferences save locally and apply immediately"
+              : hoveredHint ??
+                "Hover a slider for details · Double-click a label to reset"}
           </span>
           <span>Saved locally</span>
         </div>

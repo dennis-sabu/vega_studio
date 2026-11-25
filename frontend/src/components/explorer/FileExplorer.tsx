@@ -44,6 +44,7 @@ interface FileExplorerProps {
   dirErrors: Record<string, string>;
   truncatedDirs: Record<string, number>;
   selectedPath: string | null;
+  dirtyPaths?: Set<string>;
   showHidden: boolean;
   actionPending: boolean;
   feedback: ExplorerFeedback | null;
@@ -130,6 +131,7 @@ export function FileExplorer({
   dirErrors,
   truncatedDirs,
   selectedPath,
+  dirtyPaths,
   showHidden,
   actionPending,
   feedback,
@@ -549,6 +551,19 @@ export function FileExplorer({
                     <span className="truncate font-mono text-[11.5px]">
                       {node.name}
                     </span>
+
+                    {dirtyPaths &&
+                      (node.kind === "file"
+                        ? dirtyPaths.has(node.path)
+                        : Array.from(dirtyPaths).some((dp) =>
+                            dp.startsWith(`${node.path}/`)
+                          )) && (
+                        <span
+                          aria-label="Unsaved modifications"
+                          title="Modified in editor"
+                          className="ml-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300"
+                        />
+                      )}
                   </div>
 
                   <button
@@ -748,6 +763,15 @@ export function FileExplorer({
         target={deleteTarget}
         pending={actionPending}
         errorMessage={deleteError}
+        unsavedFilesCount={
+          deleteTarget && dirtyPaths
+            ? Array.from(dirtyPaths).filter(
+                (dp) =>
+                  dp === deleteTarget.path ||
+                  dp.startsWith(`${deleteTarget.path}/`)
+              ).length
+            : 0
+        }
         onCancel={() => {
           setDeleteError(null);
           setDeleteTarget(null);

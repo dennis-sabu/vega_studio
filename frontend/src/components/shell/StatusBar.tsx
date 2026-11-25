@@ -15,12 +15,18 @@ import {
 } from "lucide-react";
 import { Tooltip } from "@/components/ui/Tooltip";
 import type { HealthResponse } from "@/lib/api";
+import type { EditorCursorPosition, EditorSettings } from "@/types/editor";
+import type { OpenFileTab } from "@/types/explorer";
 
 interface StatusBarProps {
   isConnected: boolean;
   health: HealthResponse | null;
   error: string | null;
   activeProjectName: string | null;
+  activeFileTab: OpenFileTab | null;
+  cursorPosition: EditorCursorPosition;
+  editorSettings: EditorSettings;
+  dirtyCount: number;
   sidebarOpen: boolean;
   bottomPanelOpen: boolean;
   rightPanelOpen: boolean;
@@ -36,6 +42,10 @@ export function StatusBar({
   health,
   error,
   activeProjectName,
+  activeFileTab,
+  cursorPosition,
+  editorSettings,
+  dirtyCount,
   sidebarOpen,
   bottomPanelOpen,
   rightPanelOpen,
@@ -129,10 +139,42 @@ export function StatusBar({
           <GitBranch className="h-3 w-3" />
           <span>No Repo</span>
         </span>
+
+        {dirtyCount > 0 && (
+          <span className="hidden items-center gap-1.5 rounded border border-amber-400/25 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-amber-200 md:inline-flex">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
+            <span>
+              {dirtyCount} unsaved {dirtyCount === 1 ? "file" : "files"}
+            </span>
+          </span>
+        )}
       </div>
 
-      {/* Right: Shell Panel Quick Toggles & Environment Info */}
+      {/* Right: Active Editor Telemetry, Panel Quick Toggles & Environment Info */}
       <div className="flex shrink-0 items-center gap-3 font-mono text-[11px] text-[#e8ebf7]/45">
+        {activeFileTab && !activeFileTab.loading && !activeFileTab.error && (
+          <div className="hidden items-center gap-2.5 text-[#e8ebf7]/65 md:flex">
+            <span>
+              Ln {cursorPosition.lineNumber}, Col {cursorPosition.column}
+              {cursorPosition.selectionLength > 0
+                ? ` (${cursorPosition.selectionLength} sel)`
+                : ""}
+            </span>
+            <span className="text-white/15">·</span>
+            <span>
+              {activeFileTab.monacoLanguage === "makefile"
+                ? "Tabs: 4"
+                : `${editorSettings.insertSpaces ? "Spaces" : "Tabs"}: ${editorSettings.tabSize}`}
+            </span>
+            <span className="hidden text-white/15 lg:inline">·</span>
+            <span className="hidden lg:inline">{activeFileTab.lineEnding}</span>
+            <span className="hidden text-white/15 lg:inline">·</span>
+            <span className="hidden text-[#7aa2ff]/85 lg:inline">
+              {activeFileTab.language}
+            </span>
+          </div>
+        )}
+
         <div className="hidden items-center gap-0.5 sm:flex">
           <Tooltip label="Toggle Sidebar" side="top">
             <button

@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -16,7 +17,11 @@ from app.models.explorer import (
     EntryKind,
     EntryOperationResponse,
     FileNode,
+    FileReadResponse,
     FileStatResponse,
+    FileWriteRequest,
+    FileWriteResponse,
+    LineEnding,
     RenameEntryRequest,
 )
 from app.models.project import PROJECT_METADATA_FILENAME
@@ -27,6 +32,7 @@ from app.services.project_service import (
 )
 
 MAX_DIR_ENTRIES = 500
+MAX_EDITABLE_FILE_BYTES = 5 * 1024 * 1024  # 5 MiB guard against freezing editor
 _INVALID_ENTRY_CHARS_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _WINDOWS_RESERVED_NAMES = frozenset(
     {
@@ -40,6 +46,38 @@ _WINDOWS_RESERVED_NAMES = frozenset(
 )
 # Internal IDE directory names that must never surface as user project files.
 _INTERNAL_IDE_DIRS = frozenset({".vega-studio"})
+_BINARY_EXTENSIONS = frozenset(
+    {
+        ".elf",
+        ".bin",
+        ".o",
+        ".a",
+        ".so",
+        ".dll",
+        ".exe",
+        ".lib",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".webp",
+        ".ico",
+        ".bmp",
+        ".pdf",
+        ".zip",
+        ".tar",
+        ".gz",
+        ".7z",
+        ".woff",
+        ".woff2",
+        ".ttf",
+        ".otf",
+        ".db",
+        ".sqlite",
+        ".sqlite3",
+        ".pyc",
+    }
+)
 
 _LANGUAGE_MAP = {
     ".c": "C Source",
@@ -48,16 +86,86 @@ _LANGUAGE_MAP = {
     ".cc": "C++ Source",
     ".cxx": "C++ Source",
     ".hpp": "C++ Header",
+    ".hh": "C++ Header",
+    ".hxx": "C++ Header",
     ".s": "Assembly",
     ".asm": "Assembly",
+    ".inc": "Assembly Include",
     ".mk": "Makefile",
+    ".mak": "Makefile",
     ".json": "JSON",
+    ".jsonc": "JSON",
     ".yaml": "YAML",
     ".yml": "YAML",
     ".md": "Markdown",
+    ".markdown": "Markdown",
     ".txt": "Plain Text",
+    ".log": "Log File",
     ".py": "Python",
+    ".pyw": "Python",
     ".sh": "Shell Script",
+    ".bash": "Shell Script",
+    ".zsh": "Shell Script",
+    ".ld": "Linker Script",
+    ".ini": "INI Config",
+    ".cfg": "Config File",
+    ".conf": "Config File",
+    ".toml": "TOML",
+    ".xml": "XML",
+    ".svg": "SVG",
+    ".js": "JavaScript",
+    ".mjs": "JavaScript",
+    ".ts": "TypeScript",
+    ".css": "CSS",
+    ".html": "HTML",
+    ".htm": "HTML",
+    ".bat": "Batch Script",
+    ".cmd": "Batch Script",
+    ".ps1": "PowerShell",
+}
+
+_MONACO_LANGUAGE_MAP = {
+    ".c": "c",
+    ".h": "c",
+    ".cpp": "cpp",
+    ".cc": "cpp",
+    ".cxx": "cpp",
+    ".hpp": "cpp",
+    ".hh": "cpp",
+    ".hxx": "cpp",
+    ".s": "riscv-asm",
+    ".asm": "riscv-asm",
+    ".inc": "riscv-asm",
+    ".mk": "makefile",
+    ".mak": "makefile",
+    ".json": "json",
+    ".jsonc": "json",
+    ".yaml": "yaml",
+    ".yml": "yaml",
+    ".md": "markdown",
+    ".markdown": "markdown",
+    ".py": "python",
+    ".pyw": "python",
+    ".sh": "shell",
+    ".bash": "shell",
+    ".zsh": "shell",
+    ".ini": "ini",
+    ".cfg": "ini",
+    ".conf": "ini",
+    ".xml": "xml",
+    ".svg": "xml",
+    ".js": "javascript",
+    ".mjs": "javascript",
+    ".ts": "typescript",
+    ".css": "css",
+    ".html": "html",
+    ".htm": "html",
+    ".bat": "bat",
+    ".cmd": "bat",
+    ".ps1": "powershell",
+    ".txt": "plaintext",
+    ".log": "plaintext",
+    ".ld": "plaintext",
 }
 
 
@@ -126,11 +234,30 @@ def _normalize_relative_path(raw_rel: str) -> Tuple[str, List[str]]:
 
 def _detect_language(name: str, ext: str) -> str:
     lower_name = name.lower()
-    if lower_name == "makefile" or lower_name.startswith("makefile."):
+    if lower_name in ("makefile", "gnumakefile") or lower_name.startswith("makefile."):
         return "Makefile"
     if lower_name == ".gitignore":
         return "Git Ignore"
+    if lower_name.startswith(".env"):
+        return "Environment Config"
     return _LANGUAGE_MAP.get(ext.lower(), "Plain Text")
+
+
+def _detect_monaco_language(name: str, ext: str) -> str:
+    lower_name = name.lower()
+    if lower_name in ("makefile", "gnumakefile") or lower_name.startswith("makefile."):
+        return "makefile"
+    if lower_name == ".gitignore" or lower_name.startswith(".env"):
+        return "ini"
+    return _MONACO_LANGUAGE_MAP.get(ext.lower(), "plaintext")
+
+
+def _version_stamp_from_stat(stat: os.stat_result) -> str:
+    return f"{stat.st_mtime_ns}:{stat.st_size}"
+
+
+def _detect_line_ending(text: str) -> LineEnding:
+    return "CRLF" if "\r\n" in text else "LF"
 
 
 class ExplorerService:
@@ -389,6 +516,173 @@ class ExplorerService:
             language=_detect_language(target.name, ext),
             is_binary=is_binary,
             modified_at=modified_at,
+        )
+
+    def read_file(
+        self, raw_project_dir: str, raw_rel_path: str
+    ) -> FileReadResponse:
+        """Read UTF-8 text contents of a regular file safely inside the project."""
+        project_root = self._resolve_project_root(raw_project_dir)
+        norm_rel, target = self._resolve_inside_root(
+            project_root, raw_rel_path, must_exist=True
+        )
+        if not norm_rel:
+            raise ExplorerServiceError("Cannot open project root as a file.", 400)
+        if not target.is_file():
+            raise ExplorerServiceError(f"'{norm_rel}' is not a regular file.", 400)
+
+        ext = target.suffix.lower()
+        if ext in _BINARY_EXTENSIONS:
+            raise ExplorerServiceError(
+                f"Binary file '{target.name}' ({ext}) cannot be opened in the text editor.",
+                415,
+            )
+
+        try:
+            stat = target.stat()
+            if stat.st_size > MAX_EDITABLE_FILE_BYTES:
+                raise ExplorerServiceError(
+                    f"File '{norm_rel}' exceeds the {MAX_EDITABLE_FILE_BYTES // (1024 * 1024)} MB editor size limit.",
+                    413,
+                )
+            raw_bytes = target.read_bytes()
+        except ExplorerServiceError:
+            raise
+        except PermissionError as exc:
+            raise ExplorerServiceError(
+                f"Permission denied reading '{norm_rel}': {exc}", 403
+            ) from exc
+        except OSError as exc:
+            raise ExplorerServiceError(
+                f"Failed to read '{norm_rel}': {exc}", 500
+            ) from exc
+
+        if b"\x00" in raw_bytes[:8192]:
+            raise ExplorerServiceError(
+                f"Binary file '{target.name}' cannot be opened in the text editor.",
+                415,
+            )
+
+        try:
+            text = raw_bytes.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ExplorerServiceError(
+                f"File '{target.name}' is not valid UTF-8 text and cannot be opened safely.",
+                415,
+            ) from exc
+
+        modified_at = datetime.fromtimestamp(
+            stat.st_mtime, tz=timezone.utc
+        ).isoformat()
+        return FileReadResponse(
+            name=target.name,
+            relative_path=norm_rel,
+            content=text,
+            encoding="utf-8",
+            line_ending=_detect_line_ending(text),
+            size=stat.st_size,
+            extension=ext,
+            language=_detect_language(target.name, ext),
+            monaco_language=_detect_monaco_language(target.name, ext),
+            modified_at=modified_at,
+            version_stamp=_version_stamp_from_stat(stat),
+        )
+
+    def write_file(self, req: FileWriteRequest) -> FileWriteResponse:
+        """Atomically save UTF-8 text changes to an existing file inside the project."""
+        project_root = self._resolve_project_root(req.project_dir)
+        norm_rel, target = self._resolve_inside_root(
+            project_root, req.relative_path, must_exist=True
+        )
+        if not norm_rel:
+            raise ExplorerServiceError("Cannot save over the active project root.", 400)
+        if not target.is_file():
+            raise ExplorerServiceError(f"'{norm_rel}' is not a regular file.", 400)
+
+        ext = target.suffix.lower()
+        if ext in _BINARY_EXTENSIONS:
+            raise ExplorerServiceError(
+                f"Refusing to write text content to binary file '{target.name}'.",
+                415,
+            )
+
+        try:
+            current_stat = target.stat()
+        except PermissionError as exc:
+            raise ExplorerServiceError(
+                f"Permission denied accessing '{norm_rel}': {exc}", 403
+            ) from exc
+        except OSError as exc:
+            raise ExplorerServiceError(
+                f"Failed to inspect '{norm_rel}' before saving: {exc}", 500
+            ) from exc
+
+        current_stamp = _version_stamp_from_stat(current_stat)
+        if (
+            req.expected_version
+            and req.expected_version != current_stamp
+            and not req.overwrite_conflict
+        ):
+            raise ExplorerServiceError(
+                f"File '{norm_rel}' was modified on disk since it was loaded.",
+                409,
+            )
+
+        encoded = req.content.encode("utf-8")
+        if len(encoded) > MAX_EDITABLE_FILE_BYTES:
+            raise ExplorerServiceError(
+                f"Content exceeds the {MAX_EDITABLE_FILE_BYTES // (1024 * 1024)} MB editor save limit.",
+                413,
+            )
+
+        tmp_path: Optional[Path] = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                dir=target.parent,
+                prefix=".vega-save-",
+                suffix=".tmp",
+                delete=False,
+            ) as tmp_file:
+                tmp_path = Path(tmp_file.name)
+                tmp_file.write(encoded)
+                tmp_file.flush()
+                os.fsync(tmp_file.fileno())
+
+            try:
+                shutil.copymode(target, tmp_path)
+            except OSError:
+                pass
+
+            os.replace(tmp_path, target)
+            tmp_path = None
+            saved_stat = target.stat()
+        except PermissionError as exc:
+            raise ExplorerServiceError(
+                f"Permission denied saving '{norm_rel}': {exc}", 403
+            ) from exc
+        except OSError as exc:
+            raise ExplorerServiceError(
+                f"Failed to save '{norm_rel}': {exc}", 500
+            ) from exc
+        finally:
+            if tmp_path is not None:
+                try:
+                    tmp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+        modified_at = datetime.fromtimestamp(
+            saved_stat.st_mtime, tz=timezone.utc
+        ).isoformat()
+        return FileWriteResponse(
+            ok=True,
+            relative_path=norm_rel,
+            size=saved_stat.st_size,
+            modified_at=modified_at,
+            version_stamp=_version_stamp_from_stat(saved_stat),
+            line_ending=_detect_line_ending(req.content),
+            message=f"Saved '{norm_rel}'.",
         )
 
     def create_entry(self, req: CreateEntryRequest) -> EntryOperationResponse:

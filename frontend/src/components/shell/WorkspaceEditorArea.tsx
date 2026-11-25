@@ -1,30 +1,47 @@
 "use client";
 
-import { useCallback, useEffect, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 import {
   Activity,
+  AlertCircle,
   AlertTriangle,
+  Check,
   ChevronRight,
-  Clock,
-  Code2,
   Cpu,
   FolderOpen,
   FolderPlus,
-  HardDrive,
   Layers,
   Loader2,
   PanelBottom,
   PanelLeft,
   PanelRight,
   RefreshCw,
+  Replace,
+  RotateCcw,
+  Save,
+  Search,
   Server,
-  Sparkles,
+  SlidersHorizontal,
   Wifi,
   WifiOff,
+  WrapText,
   X,
 } from "lucide-react";
+import {
+  MonacoEditorSurface,
+  type MonacoEditorHandle,
+} from "@/components/editor/MonacoEditorSurface";
 import { FileIcon } from "@/components/explorer/FileIcon";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { fetchStatus, type HealthResponse, type StatusResponse } from "@/lib/api";
+import type { EditorCursorPosition, EditorSettings } from "@/types/editor";
 import type { OpenFileTab } from "@/types/explorer";
 import type { WorkspaceSummary } from "@/types/project";
 import type { CenterTabId, ShellLayoutState } from "@/types/shell";
@@ -34,6 +51,8 @@ interface WorkspaceEditorAreaProps {
   activeTab: CenterTabId | null;
   openFileTabs: OpenFileTab[];
   activeFileTabPath: string | null;
+  editorSettings: EditorSettings;
+  dirtyCount: number;
   layout: ShellLayoutState;
   activeProject: WorkspaceSummary | null;
   isConnected: boolean;
@@ -45,6 +64,15 @@ interface WorkspaceEditorAreaProps {
   onOpenTab: (tab: CenterTabId) => void;
   onSelectFileTab: (path: string) => void;
   onCloseFileTab: (path: string) => void;
+  onCloseOtherFileTabs: (keepPath: string) => void;
+  onCloseAllFileTabs: () => void;
+  onSaveFileTab: (uidOrPath: string, overwriteConflict?: boolean) => void;
+  onSaveAllFileTabs: () => void;
+  onReloadFileTab: (uid: string) => void;
+  onDirtyChange: (uid: string, isDirty: boolean) => void;
+  onCursorChange: (pos: EditorCursorPosition) => void;
+  onUpdateEditorSettings: (partial: Partial<EditorSettings>) => void;
+  onOpenSettings: () => void;
   onNewProject: () => void;
   onOpenProject: () => void;
   onCloseProject: () => void;
@@ -63,21 +91,11 @@ const TAB_META: Record<
 };
 
 const TIME_FORMAT = new Intl.DateTimeFormat(undefined, { timeStyle: "medium" });
-const FILE_DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
-
-function formatModified(iso: string): string {
-  const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return iso;
-  return FILE_DATE_FORMAT.format(parsed);
+interface TabContextMenuState {
+  x: number;
+  y: number;
+  tab: OpenFileTab;
 }
 
 export function WorkspaceEditorArea({
@@ -85,6 +103,8 @@ export function WorkspaceEditorArea({
   activeTab,
   openFileTabs,
   activeFileTabPath,
+  editorSettings,
+  dirtyCount,
   layout,
   activeProject,
   isConnected,
@@ -96,6 +116,15 @@ export function WorkspaceEditorArea({
   onOpenTab,
   onSelectFileTab,
   onCloseFileTab,
+  onCloseOtherFileTabs,
+  onCloseAllFileTabs,
+  onSaveFileTab,
+  onSaveAllFileTabs,
+  onReloadFileTab,
+  onDirtyChange,
+  onCursorChange,
+  onUpdateEditorSettings,
+  onOpenSettings,
   onNewProject,
   onOpenProject,
   onCloseProject,
@@ -104,9 +133,25 @@ export function WorkspaceEditorArea({
   onToggleRightPanel,
   onOpenHome,
 }: WorkspaceEditorAreaProps) {
+  const monacoHandleRef = useRef<MonacoEditorHandle | null>(null);
+  const [tabMenu, setTabMenu] = useState<TabContextMenuState | null>(null);
   const [statusData, setStatusData] = useState<StatusResponse | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!tabMenu) return;
+    const closeMenu = () => setTabMenu(null);
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") setTabMenu(null);
+    };
+    window.addEventListener("mousedown", closeMenu);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", closeMenu);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [tabMenu]);
 
   const refreshStatus = useCallback(async () => {
     setStatusLoading(true);
@@ -175,10 +220,10 @@ export function WorkspaceEditorArea({
   return (
     <div className="vega-view-enter flex min-h-0 min-w-0 flex-1 flex-col bg-[#06070c]/58 backdrop-blur-[2px]">
       {/* Central Workspace Tab Strip */}
-      <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/[0.08] bg-[#070910]/80 px-2 select-none">
+      <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/[0.08] bg-[#070910]/85 px-2 select-none">
         <div
           role="tablist"
-          aria-label="Workspace tabs"
+          aria-label="Workspace and editor tabs"
           className="vega-scroll flex min-w-0 items-center gap-1 overflow-x-auto"
         >
           {openTabs.map((tabId, idx) => {
@@ -216,23 +261,44 @@ export function WorkspaceEditorArea({
             );
           })}
 
+          {openTabs.length > 0 && openFileTabs.length > 0 && (
+            <div
+              aria-hidden="true"
+              className="mx-1 h-4 w-px shrink-0 bg-white/10"
+            />
+          )}
+
           {openFileTabs.map((fileTab, fileIdx) => {
             const isSelected = activeFileTab?.path === fileTab.path;
             const navIndex = openTabs.length + fileIdx;
 
             return (
               <div
-                key={`file:${fileTab.path}`}
+                key={`file:${fileTab.uid}`}
                 role="tab"
-                title={fileTab.path}
+                title={
+                  fileTab.isDirty
+                    ? `${fileTab.path} (Unsaved changes)`
+                    : fileTab.path
+                }
                 aria-selected={isSelected}
                 tabIndex={isSelected ? 0 : -1}
                 onClick={() => onSelectFileTab(fileTab.path)}
+                onContextMenu={(e: MouseEvent<HTMLDivElement>) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onSelectFileTab(fileTab.path);
+                  setTabMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    tab: fileTab,
+                  });
+                }}
                 onKeyDown={(e) => handleTabKeyDown(e, navIndex)}
-                className={`group inline-flex h-7 max-w-[190px] shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7aa2ff]/50 ${
+                className={`group inline-flex h-7 max-w-[210px] shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7aa2ff]/50 ${
                   isSelected
-                    ? "border-[#7aa2ff]/30 bg-[#0e1222] text-[#e8ebf7]"
-                    : "border-transparent bg-transparent text-[#e8ebf7]/60 hover:bg-white/[0.04] hover:text-[#e8ebf7]/85"
+                    ? "border-[#7aa2ff]/35 bg-[#0e1222] text-[#e8ebf7]"
+                    : "border-transparent bg-transparent text-[#e8ebf7]/60 hover:bg-white/[0.04] hover:text-[#e8ebf7]/90"
                 }`}
               >
                 <FileIcon
@@ -243,6 +309,16 @@ export function WorkspaceEditorArea({
                 <span className="truncate font-mono text-[11px]">
                   {fileTab.name}
                 </span>
+
+                {fileTab.isSaving ? (
+                  <Loader2 className="h-3 w-3 shrink-0 animate-spin text-[#7aa2ff]" />
+                ) : fileTab.isDirty ? (
+                  <span
+                    aria-label="Unsaved changes"
+                    className="h-2 w-2 shrink-0 rounded-full bg-amber-300 shadow-[0_0_6px_rgba(252,211,77,0.45)]"
+                  />
+                ) : null}
+
                 <button
                   type="button"
                   aria-label={`Close ${fileTab.name}`}
@@ -260,6 +336,28 @@ export function WorkspaceEditorArea({
         </div>
 
         <div className="flex shrink-0 items-center gap-1 pl-2">
+          {dirtyCount > 0 && (
+            <Tooltip label="Save all modified files">
+              <button
+                type="button"
+                onClick={onSaveAllFileTabs}
+                className="inline-flex h-6 items-center gap-1 rounded border border-[#7aa2ff]/30 bg-[#7aa2ff]/12 px-2 font-mono text-[10.5px] font-medium text-[#e8ebf7] transition-colors hover:bg-[#7aa2ff]/22"
+              >
+                <Save className="h-3 w-3 text-[#7aa2ff]" />
+                <span>Save All ({dirtyCount})</span>
+              </button>
+            </Tooltip>
+          )}
+          {openFileTabs.length > 1 && (
+            <button
+              type="button"
+              onClick={onCloseAllFileTabs}
+              title="Close all editor tabs"
+              className="hidden rounded px-2 py-1 text-[11px] text-[#e8ebf7]/50 hover:bg-white/[0.06] hover:text-[#e8ebf7] lg:inline-block"
+            >
+              Close All
+            </button>
+          )}
           {!openTabs.includes("overview") && (
             <button
               type="button"
@@ -282,160 +380,294 @@ export function WorkspaceEditorArea({
       </div>
 
       {/* Central Workspace Body */}
-      <div className="vega-scroll min-h-0 flex-1 overflow-y-auto p-5">
-        {activeFileTab ? (
-          <div className="mx-auto flex max-w-4xl flex-col gap-5">
-            {/* Breadcrumb & File Header */}
-            <div className="rounded-2xl border border-white/[0.10] bg-[#090b13]/88 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-md">
-              <div className="flex flex-wrap items-center gap-1 font-mono text-[11px] text-[#e8ebf7]/50">
-                <span className="text-[#7aa2ff]">
-                  {activeProject?.project.name ?? "workspace"}
+      {activeFileTab ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#06070c]">
+          {/* Editor Header & Action Strip */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] bg-[#070910]/90 px-3 py-1.5 select-none">
+            <div className="flex min-w-0 items-center gap-1.5 font-mono text-[11px] text-[#e8ebf7]/55">
+              <span className="truncate text-[#7aa2ff]">
+                {activeProject?.project.name ?? "workspace"}
+              </span>
+              {activeFileTab.path.split("/").map((segment, index, parts) => (
+                <span
+                  key={`${segment}-${index}`}
+                  className="inline-flex min-w-0 items-center gap-1"
+                >
+                  <ChevronRight className="h-3 w-3 shrink-0 text-[#e8ebf7]/30" />
+                  <span
+                    className={`truncate ${
+                      index === parts.length - 1
+                        ? "font-semibold text-[#e8ebf7]"
+                        : "text-[#e8ebf7]/60"
+                    }`}
+                  >
+                    {segment}
+                  </span>
                 </span>
-                {activeFileTab.path.split("/").map((segment, index, parts) => (
-                  <span key={`${segment}-${index}`} className="inline-flex items-center gap-1">
-                    <ChevronRight className="h-3 w-3 text-[#e8ebf7]/30" />
-                    <span
-                      className={
-                        index === parts.length - 1
-                          ? "font-semibold text-[#e8ebf7]/90"
-                          : "text-[#e8ebf7]/55"
-                      }
-                    >
-                      {segment}
-                    </span>
-                  </span>
-                ))}
-              </div>
+              ))}
+              {activeFileTab.isDirty && (
+                <span className="ml-1 rounded-full border border-amber-400/30 bg-amber-500/12 px-2 py-0.5 text-[10px] font-medium text-amber-200">
+                  Unsaved
+                </span>
+              )}
+            </div>
 
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04]">
-                    <FileIcon
-                      name={activeFileTab.name}
-                      kind="file"
-                      extension={activeFileTab.extension}
-                      className="h-4.5 w-4.5"
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <h1 className="truncate font-mono text-base font-medium text-[#e8ebf7]">
-                      {activeFileTab.name}
-                    </h1>
-                    <p className="truncate font-mono text-[11px] text-[#e8ebf7]/45">
-                      {activeFileTab.path}
-                    </p>
-                  </div>
-                </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <Tooltip label="Find in file" shortcut="Ctrl+F" side="bottom">
+                <button
+                  type="button"
+                  disabled={activeFileTab.loading || Boolean(activeFileTab.error)}
+                  aria-label="Find in file"
+                  onClick={() => monacoHandleRef.current?.triggerFind()}
+                  className="inline-flex h-6 items-center gap-1 rounded px-1.5 font-mono text-[10.5px] text-[#e8ebf7]/65 hover:bg-white/[0.07] hover:text-[#e8ebf7] disabled:opacity-35"
+                >
+                  <Search className="h-3 w-3" />
+                  <span className="hidden xl:inline">Find</span>
+                </button>
+              </Tooltip>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  {activeFileTab.stat && (
-                    <>
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 font-mono text-[10px] font-semibold text-[#7aa2ff]">
-                        <Code2 className="h-3 w-3" />
-                        <span>{activeFileTab.stat.language}</span>
-                      </span>
-                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 font-mono text-[10px] text-[#e8ebf7]/65">
-                        {activeFileTab.stat.is_binary ? "Binary" : "Text Source"}
-                      </span>
-                    </>
+              <Tooltip label="Find & Replace" shortcut="Ctrl+H" side="bottom">
+                <button
+                  type="button"
+                  disabled={activeFileTab.loading || Boolean(activeFileTab.error)}
+                  aria-label="Find and replace in file"
+                  onClick={() => monacoHandleRef.current?.triggerReplace()}
+                  className="inline-flex h-6 items-center gap-1 rounded px-1.5 font-mono text-[10.5px] text-[#e8ebf7]/65 hover:bg-white/[0.07] hover:text-[#e8ebf7] disabled:opacity-35"
+                >
+                  <Replace className="h-3 w-3" />
+                  <span className="hidden xl:inline">Replace</span>
+                </button>
+              </Tooltip>
+
+              <div className="mx-0.5 h-3.5 w-px bg-white/10" />
+
+              <Tooltip label="Cycle Tab Size (2 / 4 / 8)" side="bottom">
+                <button
+                  type="button"
+                  disabled={activeFileTab.monacoLanguage === "makefile"}
+                  onClick={() => {
+                    const nextSize =
+                      editorSettings.tabSize === 2
+                        ? 4
+                        : editorSettings.tabSize === 4
+                        ? 8
+                        : 2;
+                    onUpdateEditorSettings({ tabSize: nextSize });
+                  }}
+                  className="hidden h-6 items-center rounded px-1.5 font-mono text-[10.5px] text-[#e8ebf7]/60 hover:bg-white/[0.07] hover:text-[#e8ebf7] disabled:opacity-45 sm:inline-flex"
+                >
+                  {activeFileTab.monacoLanguage === "makefile"
+                    ? "Tabs: 4"
+                    : `Tab: ${editorSettings.tabSize}`}
+                </button>
+              </Tooltip>
+
+              <Tooltip label="Toggle Word Wrap" side="bottom">
+                <button
+                  type="button"
+                  aria-label="Toggle Word Wrap"
+                  onClick={() =>
+                    onUpdateEditorSettings({
+                      wordWrap: editorSettings.wordWrap === "on" ? "off" : "on",
+                    })
+                  }
+                  className={`inline-flex h-6 items-center gap-1 rounded px-1.5 font-mono text-[10.5px] transition-colors ${
+                    editorSettings.wordWrap === "on"
+                      ? "bg-[#7aa2ff]/18 text-[#e8ebf7]"
+                      : "text-[#e8ebf7]/60 hover:bg-white/[0.07] hover:text-[#e8ebf7]"
+                  }`}
+                >
+                  <WrapText className="h-3 w-3" />
+                  <span className="hidden lg:inline">Wrap</span>
+                </button>
+              </Tooltip>
+
+              <Tooltip label="Toggle Minimap" side="bottom">
+                <button
+                  type="button"
+                  aria-label="Toggle Minimap"
+                  onClick={() =>
+                    onUpdateEditorSettings({
+                      minimap: !editorSettings.minimap,
+                    })
+                  }
+                  className={`hidden h-6 items-center rounded px-1.5 font-mono text-[10.5px] transition-colors md:inline-flex ${
+                    editorSettings.minimap
+                      ? "bg-[#7aa2ff]/18 text-[#e8ebf7]"
+                      : "text-[#e8ebf7]/60 hover:bg-white/[0.07] hover:text-[#e8ebf7]"
+                  }`}
+                >
+                  Minimap
+                </button>
+              </Tooltip>
+
+              <Tooltip label="Editor Settings" side="bottom">
+                <button
+                  type="button"
+                  aria-label="Open Editor Settings"
+                  onClick={onOpenSettings}
+                  className="inline-flex h-6 w-6 items-center justify-center rounded text-[#e8ebf7]/55 hover:bg-white/[0.07] hover:text-[#e8ebf7]"
+                >
+                  <SlidersHorizontal className="h-3 w-3" />
+                </button>
+              </Tooltip>
+
+              <div className="mx-0.5 h-3.5 w-px bg-white/10" />
+
+              <Tooltip label="Save File" shortcut="Ctrl+S" side="bottom">
+                <button
+                  type="button"
+                  disabled={
+                    activeFileTab.loading ||
+                    Boolean(activeFileTab.error) ||
+                    activeFileTab.isSaving ||
+                    !activeFileTab.isDirty
+                  }
+                  onClick={() => void onSaveFileTab(activeFileTab.uid)}
+                  className={`inline-flex h-6 items-center gap-1.5 rounded-md border px-2.5 font-mono text-[11px] font-medium transition-colors ${
+                    activeFileTab.isDirty
+                      ? "border-[#7aa2ff]/45 bg-[#7aa2ff]/20 text-[#e8ebf7] hover:bg-[#7aa2ff]/30"
+                      : "border-white/10 bg-white/[0.03] text-[#e8ebf7]/45 disabled:cursor-default"
+                  }`}
+                >
+                  {activeFileTab.isSaving ? (
+                    <Loader2 className="h-3 w-3 animate-spin text-[#7aa2ff]" />
+                  ) : activeFileTab.isDirty ? (
+                    <Save className="h-3 w-3 text-[#7aa2ff]" />
+                  ) : (
+                    <Check className="h-3 w-3 text-emerald-400/80" />
                   )}
-                  <span className="rounded-full border border-[#7aa2ff]/25 bg-[#7aa2ff]/10 px-2.5 py-1 font-mono text-[10px] font-semibold text-[#7aa2ff]">
-                    Phase 5 Boundary
+                  <span>
+                    {activeFileTab.isSaving
+                      ? "Saving..."
+                      : activeFileTab.isDirty
+                      ? "Save"
+                      : "Saved"}
                   </span>
+                </button>
+              </Tooltip>
+            </div>
+          </div>
+
+          {/* Conflict / Save Error Alerts */}
+          {activeFileTab.conflictError && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-400/25 bg-amber-500/12 px-3 py-2 text-xs text-amber-200">
+              <div className="flex min-w-0 items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 text-amber-300" />
+                <span className="truncate">{activeFileTab.conflictError}</span>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onReloadFileTab(activeFileTab.uid)}
+                  className="inline-flex h-6 items-center gap-1 rounded border border-white/15 bg-white/[0.08] px-2.5 text-[11px] font-medium text-[#e8ebf7] hover:bg-white/15"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  <span>Reload Disk</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSaveFileTab(activeFileTab.uid, true)}
+                  className="inline-flex h-6 items-center gap-1 rounded border border-amber-400/40 bg-amber-500/25 px-2.5 text-[11px] font-medium text-amber-100 hover:bg-amber-500/35"
+                >
+                  <Save className="h-3 w-3" />
+                  <span>Overwrite Disk</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeFileTab.saveError && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-red-400/25 bg-red-500/12 px-3 py-2 text-xs text-red-200">
+              <div className="flex min-w-0 items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 text-red-300" />
+                <span className="truncate">{activeFileTab.saveError}</span>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onSaveFileTab(activeFileTab.uid)}
+                  className="inline-flex h-6 items-center gap-1 rounded border border-red-400/35 bg-red-500/20 px-2.5 text-[11px] font-medium text-red-100 hover:bg-red-500/30"
+                >
+                  Retry Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onCloseFileTab(activeFileTab.path)}
+                  className="inline-flex h-6 items-center rounded border border-white/12 bg-white/[0.06] px-2.5 text-[11px] text-[#e8ebf7]/80 hover:bg-white/12"
+                >
+                  Close Tab
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Live Monaco Viewport or Error/Loading State */}
+          {activeFileTab.error ? (
+            <div className="flex flex-1 items-center justify-center p-6">
+              <div className="vega-glass w-full max-w-md rounded-2xl border border-red-400/25 bg-[#090b13]/92 p-6 text-center">
+                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-red-400/30 bg-red-500/12 text-red-300">
+                  <AlertCircle className="h-5 w-5" />
+                </div>
+                <h2 className="text-sm font-medium text-[#e8ebf7]">
+                  {activeFileTab.errorStatus === 415
+                    ? "Binary or Unsupported Text File"
+                    : activeFileTab.errorStatus === 404
+                    ? "File No Longer Exists"
+                    : "Unable to Open File"}
+                </h2>
+                <p className="mt-1.5 font-mono text-xs text-red-200/85">
+                  {activeFileTab.error}
+                </p>
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onReloadFileTab(activeFileTab.uid)}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.06] px-3.5 text-xs font-medium text-[#e8ebf7] hover:bg-white/12"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 text-[#7aa2ff]" />
+                    <span>Retry</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onCloseFileTab(activeFileTab.path)}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/10 bg-transparent px-3.5 text-xs font-medium text-[#e8ebf7]/70 hover:bg-white/[0.06] hover:text-[#e8ebf7]"
+                  >
+                    <span>Close Tab</span>
+                  </button>
                 </div>
               </div>
             </div>
-
-            {activeFileTab.loading ? (
-              <div className="vega-glass flex min-h-[200px] items-center justify-center gap-2.5 rounded-2xl bg-[#080a12]/65 p-8 text-xs text-[#e8ebf7]/65">
-                <Loader2 className="h-4 w-4 animate-spin text-[#7aa2ff]" />
-                <span>Inspecting project-confined file metadata...</span>
-              </div>
-            ) : activeFileTab.error ? (
-              <div className="rounded-2xl border border-red-400/25 bg-red-500/10 p-5 text-xs text-red-200">
-                <p className="font-medium">Unable to inspect file metadata</p>
-                <p className="mt-1 font-mono text-[11px] opacity-85">
-                  {activeFileTab.error}
-                </p>
-              </div>
-            ) : (
-              activeFileTab.stat && (
-                <>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <div className="rounded-xl border border-white/[0.09] bg-[#090b13]/82 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-md">
-                      <div className="flex items-center gap-1.5 font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/45 uppercase">
-                        <HardDrive className="h-3.5 w-3.5 text-[#7aa2ff]" />
-                        <span>File Size</span>
-                      </div>
-                      <p className="mt-2 font-mono text-sm font-medium text-[#e8ebf7]">
-                        {formatBytes(activeFileTab.stat.size)}
-                      </p>
-                      <p className="mt-0.5 font-mono text-[10px] text-[#e8ebf7]/45">
-                        {activeFileTab.stat.size.toLocaleString()} bytes
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border border-white/[0.09] bg-[#090b13]/82 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-md">
-                      <div className="flex items-center gap-1.5 font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/45 uppercase">
-                        <Code2 className="h-3.5 w-3.5 text-[#7aa2ff]" />
-                        <span>Detected Language</span>
-                      </div>
-                      <p className="mt-2 font-mono text-sm font-medium text-[#e8ebf7]">
-                        {activeFileTab.stat.language}
-                      </p>
-                      <p className="mt-0.5 font-mono text-[10px] text-[#e8ebf7]/45">
-                        {activeFileTab.stat.extension || "No extension"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border border-white/[0.09] bg-[#090b13]/82 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-md">
-                      <div className="flex items-center gap-1.5 font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/45 uppercase">
-                        <Clock className="h-3.5 w-3.5 text-[#7aa2ff]" />
-                        <span>Last Modified</span>
-                      </div>
-                      <p className="mt-2 font-mono text-xs font-medium text-[#e8ebf7]">
-                        {formatModified(activeFileTab.stat.modified_at)}
-                      </p>
-                      <p className="mt-0.5 font-mono text-[10px] text-[#e8ebf7]/45">
-                        {activeFileTab.stat.is_binary ? "Binary format" : "UTF-8 text candidate"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Phase 5 Editor Integration Boundary Slot */}
-                  <div className="vega-glass flex min-h-[220px] flex-col items-center justify-center rounded-[20px] border border-dashed border-white/15 bg-[#080a12]/55 p-8 text-center">
-                    <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-[#7aa2ff]/25 bg-[#7aa2ff]/10">
-                      <Sparkles className="h-4.5 w-4.5 text-[#7aa2ff]" />
-                    </div>
-                    <h2 className="text-sm font-medium text-[#e8ebf7]">
-                      Monaco Editor Integration Boundary — Phase 5
-                    </h2>
-                    <p className="mt-1.5 max-w-md text-xs leading-relaxed text-[#e8ebf7]/55">
-                      Root-confined file path verified via{" "}
-                      <code className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[11px] text-[#e8ebf7]/80">
-                        /api/explorer/stat
-                      </code>
-                      . Full text loading, Monaco syntax highlighting, dirty-tab tracking, and{" "}
-                      <code className="rounded bg-white/[0.06] px-1 py-0.5 font-mono text-[11px] text-[#e8ebf7]/80">
-                        Ctrl+S
-                      </code>{" "}
-                      atomic saving mount cleanly into this editor slot in Phase 5.
-                    </p>
-                  </div>
-                </>
-              )
-            )}
-          </div>
-        ) : activeTab === null ? (
+          ) : (
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              <MonacoEditorSurface
+                ref={monacoHandleRef}
+                activeTab={activeFileTab}
+                settings={editorSettings}
+                onDirtyChange={onDirtyChange}
+                onCursorChange={onCursorChange}
+                onSaveShortcut={(uid) => void onSaveFileTab(uid)}
+              />
+              {activeFileTab.loading && (
+                <div className="absolute inset-0 z-20 flex items-center justify-center gap-2.5 bg-[#06070c]/88 text-xs text-[#e8ebf7]/70 backdrop-blur-[2px]">
+                  <Loader2 className="h-4 w-4 animate-spin text-[#7aa2ff]" />
+                  <span>Loading {activeFileTab.name}...</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="vega-scroll min-h-0 flex-1 overflow-y-auto p-5">
+          {activeTab === null ? (
           <div className="vega-glass flex h-full min-h-[220px] flex-col items-center justify-center rounded-[20px] bg-[#080a12]/62 p-8 text-center">
             <Cpu className="mb-3 h-7 w-7 text-[#7aa2ff]/70" />
             <h2 className="text-sm font-medium text-[#e8ebf7]">
               No Workspace Tab Open
             </h2>
             <p className="mt-1 max-w-sm text-xs text-[#e8ebf7]/55">
-              Select a file from the Explorer sidebar to inspect its metadata, or
-              reopen Shell Overview / Home below. Source editing arrives with
-              Monaco Editor in Phase 5.
+              Select a file from the Explorer sidebar to open it in Monaco
+              Editor, or reopen Shell Overview / Home below.
             </p>
             <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
               <button
@@ -801,8 +1033,69 @@ export function WorkspaceEditorArea({
               </div>
             )}
           </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
+
+      {tabMenu && (
+        <div
+          role="menu"
+          onMouseDown={(e) => e.stopPropagation()}
+          style={{ left: `${tabMenu.x}px`, top: `${tabMenu.y}px` }}
+          className="fixed z-50 w-44 rounded-xl border border-white/14 bg-[#0b0e18]/96 p-1 shadow-2xl backdrop-blur-md"
+        >
+          <button
+            type="button"
+            disabled={
+              !tabMenu.tab.isDirty ||
+              tabMenu.tab.loading ||
+              Boolean(tabMenu.tab.error)
+            }
+            onClick={() => {
+              const targetUid = tabMenu.tab.uid;
+              setTabMenu(null);
+              void onSaveFileTab(targetUid);
+            }}
+            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs text-[#e8ebf7]/85 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <span>Save</span>
+            <span className="font-mono text-[10px] text-[#e8ebf7]/45">Ctrl+S</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const targetPath = tabMenu.tab.path;
+              setTabMenu(null);
+              onCloseFileTab(targetPath);
+            }}
+            className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-xs text-[#e8ebf7]/85 hover:bg-white/[0.08]"
+          >
+            Close Tab
+          </button>
+          <button
+            type="button"
+            disabled={openFileTabs.length <= 1}
+            onClick={() => {
+              const keepPath = tabMenu.tab.path;
+              setTabMenu(null);
+              onCloseOtherFileTabs(keepPath);
+            }}
+            className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-xs text-[#e8ebf7]/85 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Close Other Tabs
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setTabMenu(null);
+              onCloseAllFileTabs();
+            }}
+            className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-xs text-red-200/85 hover:bg-red-500/15"
+          >
+            Close All Tabs
+          </button>
+        </div>
+      )}
     </div>
   );
 }

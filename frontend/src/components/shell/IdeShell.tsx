@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { UnsavedChangesDialog } from "@/components/editor/UnsavedChangesDialog";
 import { NewProjectDialog } from "@/components/project/NewProjectDialog";
 import { OpenProjectDialog } from "@/components/project/OpenProjectDialog";
 import { AppToolbar } from "@/components/shell/AppToolbar";
@@ -19,6 +20,8 @@ import { SidebarPanel } from "@/components/shell/SidebarPanel";
 import { StatusBar } from "@/components/shell/StatusBar";
 import { WorkspaceEditorArea } from "@/components/shell/WorkspaceEditorArea";
 import { useBackendHealth } from "@/hooks/useBackendHealth";
+import { useEditorSettings } from "@/hooks/useEditorSettings";
+import { useEditorTabs } from "@/hooks/useEditorTabs";
 import { useFileExplorer } from "@/hooks/useFileExplorer";
 import {
   BOTTOM_PANEL_DEFAULT_HEIGHT,
@@ -30,13 +33,11 @@ import {
   useShellLayout,
 } from "@/hooks/useShellLayout";
 import { useWorkspace } from "@/hooks/useWorkspace";
-import { fetchFileStat } from "@/lib/api";
 import {
   SPECIES_MAP,
   type AtmosphereTweaks,
   type SpeciesKey,
 } from "@/lib/glyphAnimalsEngine";
-import type { FileNode, OpenFileTab } from "@/types/explorer";
 import type { CreateProjectPayload } from "@/types/project";
 import type { ShellLogEntry } from "@/types/shell";
 
@@ -76,32 +77,6 @@ function loadSavedTweaks(species: SpeciesKey): AtmosphereTweaks {
   }
 }
 
-function pathBasename(relativePath: string): string {
-  const parts = relativePath.split("/");
-  return parts[parts.length - 1] ?? relativePath;
-}
-
-function pathExtension(name: string): string {
-  const dotIdx = name.lastIndexOf(".");
-  return dotIdx > 0 ? name.slice(dotIdx).toLowerCase() : "";
-}
-
-function remapPrefixPath(
-  candidate: string,
-  oldPrefix: string,
-  newPrefix: string
-): string {
-  if (candidate === oldPrefix) return newPrefix;
-  if (candidate.startsWith(`${oldPrefix}/`)) {
-    return `${newPrefix}${candidate.slice(oldPrefix.length)}`;
-  }
-  return candidate;
-}
-
-function matchesPathOrDescendant(candidate: string, target: string): boolean {
-  return candidate === target || candidate.startsWith(`${target}/`);
-}
-
 export function IdeShell() {
   const {
     layout,
@@ -134,17 +109,12 @@ export function IdeShell() {
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [openProjectOpen, setOpenProjectOpen] = useState(false);
   const [composerFocused, setComposerFocused] = useState(false);
-  const [openFileTabs, setOpenFileTabs] = useState<OpenFileTab[]>([]);
-  const [activeFileTabPath, setActiveFileTabPath] = useState<string | null>(
-    null
-  );
-  const fileStatAbortRef = useRef<Record<string, AbortController>>({});
 
   const [logs, setLogs] = useState<ShellLogEntry[]>(() => [
     createLogEntry(
       "SHELL",
       "info",
-      "VEGA Studio Phase 4 shell, project manager & file explorer initialized."
+      "VEGA Studio Phase 5 shell, file explorer & Monaco editor initialized."
     ),
   ]);
 
@@ -161,6 +131,8 @@ export function IdeShell() {
     },
     []
   );
+
+  const editorSettings = useEditorSettings();
 
   // Hydrate saved ambient species & tweaks safely after mount
   useEffect(() => {
@@ -215,171 +187,46 @@ export function IdeShell() {
     onLog: (level, message) => appendLog("SHELL", level, message),
   });
 
-  useEffect(() => {
-    const aborts = fileStatAbortRef.current;
-    return () => {
-      Object.values(aborts).forEach((controller) => controller.abort());
-    };
-  }, []);
-
-  const resetFileTabs = useCallback(() => {
-    Object.values(fileStatAbortRef.current).forEach((controller) =>
-      controller.abort()
-    );
-    fileStatAbortRef.current = {};
-    setOpenFileTabs([]);
-    setActiveFileTabPath(null);
-  }, []);
-
-  const loadFileTabStat = useCallback(
-    async (projectDir: string, filePath: string) => {
-      fileStatAbortRef.current[filePath]?.abort();
-      const controller = new AbortController();
-      fileStatAbortRef.current[filePath] = controller;
-
-      setOpenFileTabs((prev) =>
-        prev.map((tab) =>
-          tab.path === filePath ? { ...tab, loading: true, error: null } : tab
-        )
-      );
-
-      try {
-        const stat = await fetchFileStat(projectDir, filePath, controller.signal);
-        if (controller.signal.aborted) return;
-        setOpenFileTabs((prev) =>
-          prev.map((tab) =>
-            tab.path === filePath
-              ? { ...tab, stat, loading: false, error: null }
-              : tab
-          )
-        );
-      } catch (err: unknown) {
-        if (
-          controller.signal.aborted ||
-          (err instanceof Error && err.name === "AbortError")
-        ) {
-          return;
-        }
-        const message =
-          err instanceof Error
-            ? err.message
-            : "Failed to inspect file metadata.";
-        setOpenFileTabs((prev) =>
-          prev.map((tab) =>
-            tab.path === filePath
-              ? { ...tab, loading: false, error: message }
-              : tab
-          )
-        );
-        appendLog("SHELL", "warn", `Failed to inspect ${filePath}: ${message}`);
-      }
-    },
-    [appendLog]
-  );
-
-  const handleEntryRenamed = useCallback((oldPath: string, newPath: string) => {
-    setOpenFileTabs((prev) =>
-      prev.map((tab) => {
-        const remapped = remapPrefixPath(tab.path, oldPath, newPath);
-        if (remapped === tab.path) return tab;
-        const nextName = pathBasename(remapped);
-        return {
-          ...tab,
-          path: remapped,
-          name: nextName,
-          extension: pathExtension(nextName),
-          stat: tab.stat
-            ? { ...tab.stat, name: nextName, relative_path: remapped }
-            : null,
-        };
-      })
-    );
-    setActiveFileTabPath((prev) =>
-      prev ? remapPrefixPath(prev, oldPath, newPath) : prev
-    );
-  }, []);
-
-  const handleEntryDeleted = useCallback((deletedPath: string) => {
-    for (const [key, controller] of Object.entries(fileStatAbortRef.current)) {
-      if (matchesPathOrDescendant(key, deletedPath)) {
-        controller.abort();
-        delete fileStatAbortRef.current[key];
-      }
-    }
-    setOpenFileTabs((prev) =>
-      prev.filter((tab) => !matchesPathOrDescendant(tab.path, deletedPath))
-    );
-    setActiveFileTabPath((prev) =>
-      prev && matchesPathOrDescendant(prev, deletedPath) ? null : prev
-    );
-  }, []);
+  const editorTabs = useEditorTabs({
+    projectDir: workspace.activeProject?.project_dir ?? null,
+    onLog: (level, message) => appendLog("SHELL", level, message),
+  });
 
   const explorer = useFileExplorer({
     projectDir: workspace.activeProject?.project_dir ?? null,
     isBackendConnected: isConnected,
     onLog: (level, message) => appendLog("SHELL", level, message),
-    onEntryRenamed: handleEntryRenamed,
-    onEntryDeleted: handleEntryDeleted,
+    onEntryRenamed: editorTabs.handleEntryRenamed,
+    onEntryDeleted: editorTabs.handleEntryDeleted,
   });
 
-  const handleOpenFile = useCallback(
-    (node: FileNode) => {
-      const projectDir = workspace.activeProject?.project_dir;
-      if (!projectDir || node.kind !== "file") return;
-
-      setOpenFileTabs((prev) => {
-        if (prev.some((tab) => tab.path === node.path)) {
-          return prev;
-        }
-        return [
-          ...prev,
-          {
-            path: node.path,
-            name: node.name,
-            extension: node.extension,
-            stat: null,
-            loading: true,
-            error: null,
-          },
-        ];
-      });
-      setActiveFileTabPath(node.path);
-      void loadFileTabStat(projectDir, node.path);
-    },
-    [loadFileTabStat, workspace.activeProject?.project_dir]
-  );
-
-  const handleCloseFileTab = useCallback(
-    (filePath: string) => {
-      fileStatAbortRef.current[filePath]?.abort();
-      delete fileStatAbortRef.current[filePath];
-
-      const idx = openFileTabs.findIndex((tab) => tab.path === filePath);
-      const remaining = openFileTabs.filter((tab) => tab.path !== filePath);
-      setOpenFileTabs(remaining);
-      if (activeFileTabPath === filePath) {
-        const fallback =
-          remaining[Math.min(idx, remaining.length - 1)] ?? null;
-        setActiveFileTabPath(fallback ? fallback.path : null);
-      }
-    },
-    [activeFileTabPath, openFileTabs]
-  );
-
-  // Global keyboard shortcuts for shell panel navigation & settings
+  // Global keyboard shortcuts for shell panel navigation, save & settings
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
+      const mod = event.ctrlKey || event.metaKey;
+      const key = event.key.toLowerCase();
+
+      if (mod && key === "s" && !event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        if (
+          !target?.closest(".monaco-editor") &&
+          editorTabs.activeFileTabPath &&
+          layout.activeMode === "workspace"
+        ) {
+          void editorTabs.saveTab(editorTabs.activeFileTabPath);
+        }
+        return;
+      }
+
       const isTextInput =
         target?.tagName === "INPUT" ||
         target?.tagName === "TEXTAREA" ||
         target?.isContentEditable;
       if (isTextInput) return;
 
-      const mod = event.ctrlKey || event.metaKey;
       if (!mod) return;
 
-      const key = event.key.toLowerCase();
       if (key === "\\" && !event.shiftKey && !event.altKey) {
         event.preventDefault();
         toggleSidebar();
@@ -408,6 +255,8 @@ export function IdeShell() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
+    editorTabs,
+    layout.activeMode,
     selectNav,
     toggleBottomPanel,
     toggleRightPanel,
@@ -456,32 +305,70 @@ export function IdeShell() {
 
   const handleCreateProject = useCallback(
     async (payload: CreateProjectPayload) => {
-      resetFileTabs();
+      if (workspace.activeProject) {
+        const proceed = await editorTabs.confirmWorkspaceTransition({
+          title: "Save changes before creating a project?",
+          description:
+            "Open editor tabs contain unsaved changes. Save them before switching to the new project?",
+          confirmSaveLabel: "Save All & Create",
+          confirmDiscardLabel: "Discard & Create",
+        });
+        if (!proceed) {
+          throw new Error("Project creation canceled.");
+        }
+      }
+      editorTabs.resetFileTabs();
       await workspace.createNewProject(payload);
-      setActiveFileTabPath(null);
       setMode("workspace");
       openCenterTab("overview");
     },
-    [openCenterTab, resetFileTabs, setMode, workspace]
+    [editorTabs, openCenterTab, setMode, workspace]
   );
 
   const handleOpenProjectDir = useCallback(
     async (projectDir: string) => {
-      resetFileTabs();
+      if (
+        workspace.activeProject &&
+        workspace.activeProject.project_dir !== projectDir
+      ) {
+        const proceed = await editorTabs.confirmWorkspaceTransition({
+          title: "Save changes before switching projects?",
+          description:
+            "Open editor tabs contain unsaved changes. Save them before switching to another project?",
+          confirmSaveLabel: "Save All & Switch",
+          confirmDiscardLabel: "Discard & Switch",
+        });
+        if (!proceed) {
+          throw new Error("Project switch canceled.");
+        }
+      }
+      editorTabs.resetFileTabs();
       await workspace.openExistingProject(projectDir);
-      setActiveFileTabPath(null);
       setMode("workspace");
       openCenterTab("overview");
     },
-    [openCenterTab, resetFileTabs, setMode, workspace]
+    [editorTabs, openCenterTab, setMode, workspace]
   );
 
-  const handleCloseProject = useCallback(() => {
-    resetFileTabs();
-    void workspace.closeActiveWorkspace();
-  }, [resetFileTabs, workspace]);
+  const handleCloseProject = useCallback(async () => {
+    const proceed = await editorTabs.confirmWorkspaceTransition({
+      title: "Save changes before closing workspace?",
+      description:
+        "Open editor tabs contain unsaved changes. Save them before closing the active workspace?",
+      confirmSaveLabel: "Save All & Close",
+      confirmDiscardLabel: "Discard & Close",
+    });
+    if (!proceed) return;
+    editorTabs.resetFileTabs();
+    await workspace.closeActiveWorkspace();
+  }, [editorTabs, workspace]);
 
   const activeProjectName = workspace.activeProject?.project.name ?? null;
+  const activeFileTab = editorTabs.activeFileTabPath
+    ? editorTabs.openFileTabs.find(
+        (tab) => tab.path === editorTabs.activeFileTabPath
+      ) ?? null
+    : null;
 
   return (
     <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-[#06070c] text-[#e8ebf7]">
@@ -518,7 +405,7 @@ export function IdeShell() {
         }}
         onNewProject={openNewProjectDialog}
         onOpenProject={openOpenProjectDialog}
-        onCloseProject={handleCloseProject}
+        onCloseProject={() => void handleCloseProject()}
         onToggleSidebar={toggleSidebar}
         onToggleBottomPanel={toggleBottomPanel}
         onToggleRightPanel={toggleRightPanel}
@@ -553,7 +440,9 @@ export function IdeShell() {
               onCanvasTap={(x, y) => canvasRef.current?.tapAt(x, y)}
               onNewProject={openNewProjectDialog}
               onOpenProject={openOpenProjectDialog}
-              onOpenRecentProject={(dir) => void handleOpenProjectDir(dir)}
+              onOpenRecentProject={(dir) =>
+                void handleOpenProjectDir(dir).catch(() => {})
+              }
               onDismissWarning={workspace.clearFeedback}
               onEnterWorkspace={() => {
                 setComposerFocused(false);
@@ -561,7 +450,7 @@ export function IdeShell() {
               }}
               onOpenDiagnostics={() => {
                 setComposerFocused(false);
-                setActiveFileTabPath(null);
+                editorTabs.setActiveFileTabPath(null);
                 openCenterTab("diagnostics");
               }}
               onOpenNavSection={(section) => {
@@ -592,12 +481,13 @@ export function IdeShell() {
                     dirErrors: explorer.dirErrors,
                     truncatedDirs: explorer.truncatedDirs,
                     selectedPath: explorer.selectedPath,
+                    dirtyPaths: editorTabs.dirtyPaths,
                     showHidden: explorer.showHidden,
                     actionPending:
                       explorer.actionPending || workspace.actionPending,
                     feedback: explorer.feedback,
                     onSelectPath: explorer.setSelectedPath,
-                    onOpenFile: handleOpenFile,
+                    onOpenFile: editorTabs.openFile,
                     onToggleExpand: explorer.toggleExpand,
                     onExpandDirectory: explorer.expandDirectory,
                     onCollapseDirectory: explorer.collapseDirectory,
@@ -614,8 +504,10 @@ export function IdeShell() {
                   onOpenHome={() => setMode("home")}
                   onNewProject={openNewProjectDialog}
                   onOpenProject={openOpenProjectDialog}
-                  onOpenRecentProject={(dir) => void handleOpenProjectDir(dir)}
-                  onCloseProject={handleCloseProject}
+                  onOpenRecentProject={(dir) =>
+                    void handleOpenProjectDir(dir).catch(() => {})
+                  }
+                  onCloseProject={() => void handleCloseProject()}
                 />
                 <ResizeHandle
                   orientation="vertical"
@@ -635,8 +527,10 @@ export function IdeShell() {
                 <WorkspaceEditorArea
                   openTabs={layout.openCenterTabs}
                   activeTab={layout.activeCenterTab}
-                  openFileTabs={openFileTabs}
-                  activeFileTabPath={activeFileTabPath}
+                  openFileTabs={editorTabs.openFileTabs}
+                  activeFileTabPath={editorTabs.activeFileTabPath}
+                  editorSettings={editorSettings.settings}
+                  dirtyCount={editorTabs.dirtyCount}
                   layout={layout}
                   activeProject={workspace.activeProject}
                   isConnected={isConnected}
@@ -644,19 +538,41 @@ export function IdeShell() {
                   healthError={error}
                   lastChecked={lastChecked}
                   onSelectTab={(tab) => {
-                    setActiveFileTabPath(null);
+                    editorTabs.setActiveFileTabPath(null);
                     setActiveCenterTab(tab);
                   }}
                   onCloseTab={closeCenterTab}
                   onOpenTab={(tab) => {
-                    setActiveFileTabPath(null);
+                    editorTabs.setActiveFileTabPath(null);
                     openCenterTab(tab);
                   }}
-                  onSelectFileTab={(filePath) => setActiveFileTabPath(filePath)}
-                  onCloseFileTab={handleCloseFileTab}
+                  onSelectFileTab={(filePath) => {
+                    explorer.setSelectedPath(filePath);
+                    editorTabs.setActiveFileTabPath(filePath);
+                  }}
+                  onCloseFileTab={(filePath) =>
+                    void editorTabs.requestCloseFileTab(filePath)
+                  }
+                  onCloseOtherFileTabs={(keepPath) =>
+                    void editorTabs.requestCloseOtherTabs(keepPath)
+                  }
+                  onCloseAllFileTabs={() =>
+                    void editorTabs.requestCloseAllTabs()
+                  }
+                  onSaveFileTab={(uidOrPath, overwriteConflict) =>
+                    void editorTabs.saveTab(uidOrPath, { overwriteConflict })
+                  }
+                  onSaveAllFileTabs={() => void editorTabs.saveAllDirtyTabs()}
+                  onReloadFileTab={(uid) =>
+                    void editorTabs.reloadTabFromDisk(uid)
+                  }
+                  onDirtyChange={editorTabs.setTabDirty}
+                  onCursorChange={editorTabs.setCursorPosition}
+                  onUpdateEditorSettings={editorSettings.updateSettings}
+                  onOpenSettings={() => setSettingsOpen(true)}
                   onNewProject={openNewProjectDialog}
                   onOpenProject={openOpenProjectDialog}
-                  onCloseProject={handleCloseProject}
+                  onCloseProject={() => void handleCloseProject()}
                   onToggleSidebar={toggleSidebar}
                   onToggleBottomPanel={toggleBottomPanel}
                   onToggleRightPanel={toggleRightPanel}
@@ -722,10 +638,17 @@ export function IdeShell() {
         health={health}
         error={error}
         activeProjectName={activeProjectName}
+        activeFileTab={activeFileTab}
+        cursorPosition={editorTabs.cursorPosition}
+        editorSettings={editorSettings.settings}
+        dirtyCount={editorTabs.dirtyCount}
         sidebarOpen={layout.sidebarOpen}
         bottomPanelOpen={layout.bottomPanelOpen}
         rightPanelOpen={layout.rightPanelOpen}
-        onInspectBackend={() => openCenterTab("diagnostics")}
+        onInspectBackend={() => {
+          editorTabs.setActiveFileTabPath(null);
+          openCenterTab("diagnostics");
+        }}
         onOpenProject={openOpenProjectDialog}
         onToggleSidebar={toggleSidebar}
         onToggleBottomPanel={toggleBottomPanel}
@@ -736,11 +659,16 @@ export function IdeShell() {
         open={settingsOpen}
         species={species}
         tweaks={tweaks}
+        editorSettings={editorSettings.settings}
         onClose={() => setSettingsOpen(false)}
         onSpeciesChange={handleSpeciesChange}
         onTweaksChange={handleTweaksChange}
         onResetTweaks={handleResetTweaks}
+        onEditorSettingsChange={editorSettings.updateSettings}
+        onResetEditorSettings={editorSettings.resetSettings}
       />
+
+      <UnsavedChangesDialog prompt={editorTabs.unsavedPrompt} />
 
       <NewProjectDialog
         open={newProjectOpen}

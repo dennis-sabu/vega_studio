@@ -278,6 +278,19 @@ html.liquid .vega-glass-liquid {
   display: none;
 }
 
+/* Monaco obsidian widget refinement */
+.vega-monaco-host .monaco-editor,
+.vega-monaco-host .monaco-editor-background {
+  background-color: #06070c;
+}
+
+.vega-monaco-host .monaco-editor .find-widget {
+  border-radius: 0 0 12px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-top: none;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
 /* Reduced motion compliance */
 @media (prefers-reduced-motion: reduce) {
   *,

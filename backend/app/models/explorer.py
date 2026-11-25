@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 EntryKind = Literal["file", "dir"]
 ExplorerAction = Literal["create", "rename", "delete"]
+LineEnding = Literal["LF", "CRLF"]
 
 
 class FileNode(BaseModel):
@@ -33,7 +34,7 @@ class DirectoryListingResponse(BaseModel):
 
 
 class FileStatResponse(BaseModel):
-    """Read-only metadata for a selected file (Phase 5 editor boundary)."""
+    """Read-only metadata for a selected file."""
 
     name: str
     relative_path: str
@@ -42,6 +43,44 @@ class FileStatResponse(BaseModel):
     language: str
     is_binary: bool
     modified_at: str
+
+
+class FileReadResponse(BaseModel):
+    """Text file content and metadata returned to the Monaco editor."""
+
+    name: str
+    relative_path: str
+    content: str
+    encoding: str = "utf-8"
+    line_ending: LineEnding = "LF"
+    size: int
+    extension: str
+    language: str
+    monaco_language: str
+    modified_at: str
+    version_stamp: str
+
+
+class FileWriteRequest(BaseModel):
+    """Payload to save edited file content inside the active project root."""
+
+    project_dir: str
+    relative_path: str
+    content: str
+    expected_version: Optional[str] = None
+    overwrite_conflict: bool = False
+
+
+class FileWriteResponse(BaseModel):
+    """Result of an atomic save operation inside the active project."""
+
+    ok: bool = True
+    relative_path: str
+    size: int
+    modified_at: str
+    version_stamp: str
+    line_ending: LineEnding
+    message: str
 
 
 class CreateEntryRequest(BaseModel):

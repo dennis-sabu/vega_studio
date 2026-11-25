@@ -8,6 +8,7 @@ interface DeleteConfirmDialogProps {
   target: FileNode | null;
   pending: boolean;
   errorMessage: string | null;
+  unsavedFilesCount?: number;
   onCancel: () => void;
   onConfirm: (recursive: boolean) => Promise<void>;
 }
@@ -16,6 +17,7 @@ export function DeleteConfirmDialog({
   target,
   pending,
   errorMessage,
+  unsavedFilesCount = 0,
   onCancel,
   onConfirm,
 }: DeleteConfirmDialogProps) {
@@ -96,6 +98,14 @@ export function DeleteConfirmDialog({
           <div className="rounded-xl border border-white/8 bg-[#06070c]/75 px-3 py-2 font-mono text-[11px] text-[#e8ebf7]/60">
             {target.path}
           </div>
+
+          {unsavedFilesCount > 0 && (
+            <div className="rounded-xl border border-amber-400/35 bg-amber-500/15 p-3 leading-relaxed text-amber-200">
+              {unsavedFilesCount === 1
+                ? "Warning: This target has unsaved edits open in the editor that will be discarded if deleted."
+                : `Warning: ${unsavedFilesCount} open files inside this folder have unsaved edits that will be discarded if deleted.`}
+            </div>
+          )}
 
           {needsRecursiveCheck && (
             <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-amber-400/25 bg-amber-500/10 p-3 text-amber-200">

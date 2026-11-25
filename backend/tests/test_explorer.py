@@ -315,3 +315,189 @@ async def test_explorer_stat_boundary_and_symlink_escape(
             ]
             assert len(escape_nodes) == 1
             assert escape_nodes[0]["accessible"] is False
+
+
+@pytest.mark.asyncio
+async def test_read_and_write_file_lifecycle_and_languages(
+    project_workspace: tuple[Path, Path],
+):
+    project_dir, _ = project_workspace
+    (project_dir / "script.py").write_text("print('vega')\r\n", encoding="utf-8")
+    (project_dir / "config.yaml").write_text("board: aries_v3\n", encoding="utf-8")
+    (project_dir / "startup.s").write_text(".globl _start\n_start:\n  nop\n", encoding="utf-8")
+    (project_dir / "flash.sh").write_text("#!/bin/sh\necho ok\n", encoding="utf-8")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        r_main = await client.get(
+            "/api/explorer/file",
+            params={"project_dir": str(project_dir), "path": "src/main.c"},
+        )
+        assert r_main.status_code == 200
+        main_data = r_main.json()
+        assert main_data["monaco_language"] == "c"
+        assert main_data["language"] == "C Source"
+        assert main_data["version_stamp"]
+        assert "main(" in main_data["content"]
+
+        r_make = await client.get(
+            "/api/explorer/file",
+            params={"project_dir": str(project_dir), "path": "Makefile"},
+        )
+        assert r_make.status_code == 200
+        assert r_make.json()["monaco_language"] == "makefile"
+
+        r_py = await client.get(
+            "/api/explorer/file",
+            params={"project_dir": str(project_dir), "path": "script.py"},
+        )
+        assert r_py.status_code == 200
+        assert r_py.json()["monaco_language"] == "python"
+        assert r_py.json()["line_ending"] == "CRLF"
+
+        r_yaml = await client.get(
+            "/api/explorer/file",
+            params={"project_dir": str(project_dir), "path": "config.yaml"},
+        )
+        assert r_yaml.status_code == 200
+        assert r_yaml.json()["monaco_language"] == "yaml"
+
+        r_asm = await client.get(
+            "/api/explorer/file",
+            params={"project_dir": str(project_dir), "path": "startup.s"},
+        )
+        assert r_asm.status_code == 200
+        assert r_asm.json()["monaco_language"] == "riscv-asm"
+
+        r_sh = await client.get(
+            "/api/explorer/file",
+            params={"project_dir": str(project_dir), "path": "flash.sh"},
+        )
+        assert r_sh.status_code == 200
+        assert r_sh.json()["monaco_language"] == "shell"
+
+        # Save edited content cleanly with matching version_stamp
+        updated_src = "int main(void) {\n    return 0;\n}\n"
+        w_res = await client.put(
+            "/api/explorer/file",
+            json={
+                "project_dir": str(project_dir),
+                "relative_path": "src/main.c",
+                "content": updated_src,
+                "expected_version": main_data["version_stamp"],
+            },
+        )
+        assert w_res.status_code == 200
+        assert (project_dir / "src" / "main.c").read_text(encoding="utf-8") == updated_src
+        new_stamp = w_res.json()["version_stamp"]
+        assert new_stamp
+
+
+@pytest.mark.asyncio
+async def test_write_file_conflict_missing_binary_and_confinement(
+    project_workspace: tuple[Path, Path],
+):
+    project_dir, _ = project_workspace
+    (project_dir / "bad_bytes.txt").write_bytes(b"\xff\xfe\xfd\x80")
+    (project_dir / "artifact.bin").write_bytes(b"\x00\x01\x02")
+    (project_dir / "huge.txt").write_bytes(b"a" * (5 * 1024 * 1024 + 64))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        # Stale version conflict detection
+        r_main = await client.get(
+            "/api/explorer/file",
+            params={"project_dir": str(project_dir), "path": "src/main.c"},
+        )
+        stale_stamp = r_main.json()["version_stamp"]
+
+        # Simulate external edit on disk (bump size & mtime cleanly)
+        (project_dir / "src" / "main.c").write_text(
+            "// external change on disk\nint main(void) { return 42; }\n",
+            encoding="utf-8",
+        )
+
+        w_conflict = await client.put(
+            "/api/explorer/file",
+            json={
+                "project_dir": str(project_dir),
+                "relative_path": "src/main.c",
+                "content": "// editor change\n",
+                "expected_version": stale_stamp,
+                "overwrite_conflict": False,
+            },
+        )
+        assert w_conflict.status_code == 409
+
+        # Explicit conflict override succeeds
+        w_force = await client.put(
+            "/api/explorer/file",
+            json={
+                "project_dir": str(project_dir),
+                "relative_path": "src/main.c",
+                "content": "// editor override\n",
+                "expected_version": stale_stamp,
+                "overwrite_conflict": True,
+            },
+        )
+        assert w_force.status_code == 200
+        assert (project_dir / "src" / "main.c").read_text(encoding="utf-8") == "// editor override\n"
+
+        # Binary, invalid UTF-8, and huge files blocked safely
+        r_bin = await client.get(
+            "/api/explorer/file",
+            params={"project_dir": str(project_dir), "path": "artifact.bin"},
+        )
+        assert r_bin.status_code == 415
+
+        r_bad_utf8 = await client.get(
+            "/api/explorer/file",
+            params={"project_dir": str(project_dir), "path": "bad_bytes.txt"},
+        )
+        assert r_bad_utf8.status_code == 415
+
+        r_huge = await client.get(
+            "/api/explorer/file",
+            params={"project_dir": str(project_dir), "path": "huge.txt"},
+        )
+        assert r_huge.status_code == 413
+
+        # Saving missing / deleted file fails with 404 instead of recreating silently
+        w_missing = await client.put(
+            "/api/explorer/file",
+            json={
+                "project_dir": str(project_dir),
+                "relative_path": "src/deleted.c",
+                "content": "int x;\n",
+            },
+        )
+        assert w_missing.status_code == 404
+
+        # Path traversal & .vega-studio blocked on read & write
+        r_trav = await client.get(
+            "/api/explorer/file",
+            params={"project_dir": str(project_dir), "path": "../outside.txt"},
+        )
+        assert r_trav.status_code == 400
+
+        w_trav = await client.put(
+            "/api/explorer/file",
+            json={
+                "project_dir": str(project_dir),
+                "relative_path": "../outside.txt",
+                "content": "hacked",
+            },
+        )
+        assert w_trav.status_code == 400
+
+        w_ide = await client.put(
+            "/api/explorer/file",
+            json={
+                "project_dir": str(project_dir),
+                "relative_path": ".vega-studio/state.json",
+                "content": "{}",
+            },
+        )
+        assert w_ide.status_code == 403

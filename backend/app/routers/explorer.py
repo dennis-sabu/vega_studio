@@ -8,7 +8,10 @@ from app.models.explorer import (
     DeleteEntryRequest,
     DirectoryListingResponse,
     EntryOperationResponse,
+    FileReadResponse,
     FileStatResponse,
+    FileWriteRequest,
+    FileWriteResponse,
     RenameEntryRequest,
 )
 from app.services.explorer_service import (
@@ -49,6 +52,37 @@ async def stat_file(
 ) -> FileStatResponse:
     try:
         return service.stat_file(project_dir, path)
+    except ExplorerServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+
+
+@router.get(
+    "/file",
+    response_model=FileReadResponse,
+    summary="Read UTF-8 text contents of a project file for editing",
+)
+async def read_file_content(
+    project_dir: str = Query(..., description="Absolute path to the active project"),
+    path: str = Query(..., description="Project-relative file path"),
+    service: ExplorerService = Depends(get_explorer_service),
+) -> FileReadResponse:
+    try:
+        return service.read_file(project_dir, path)
+    except ExplorerServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+
+
+@router.put(
+    "/file",
+    response_model=FileWriteResponse,
+    summary="Save updated text contents to a project file",
+)
+async def write_file_content(
+    payload: FileWriteRequest,
+    service: ExplorerService = Depends(get_explorer_service),
+) -> FileWriteResponse:
+    try:
+        return service.write_file(payload)
     except ExplorerServiceError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
 

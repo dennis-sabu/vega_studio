@@ -3,7 +3,10 @@ import type {
   DeleteEntryPayload,
   DirectoryListingResponse,
   EntryOperationResponse,
+  FileReadResponse,
   FileStatResponse,
+  FileWritePayload,
+  FileWriteResponse,
   RenameEntryPayload,
 } from "@/types/explorer";
 import type {
@@ -228,6 +231,30 @@ export async function deleteExplorerEntry(
 ): Promise<EntryOperationResponse> {
   return apiFetch<EntryOperationResponse>("/api/explorer/delete", {
     method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchFileContent(
+  projectDir: string,
+  relativePath: string,
+  signal?: AbortSignal
+): Promise<FileReadResponse> {
+  const params = new URLSearchParams({
+    project_dir: projectDir,
+    path: relativePath,
+  });
+  return apiFetch<FileReadResponse>(
+    `/api/explorer/file?${params.toString()}`,
+    { signal }
+  );
+}
+
+export async function saveFileContent(
+  payload: FileWritePayload
+): Promise<FileWriteResponse> {
+  return apiFetch<FileWriteResponse>("/api/explorer/file", {
+    method: "PUT",
     body: JSON.stringify(payload),
   });
 }
