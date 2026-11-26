@@ -6,6 +6,7 @@ import type { MonacoEditorHandle } from "@/components/editor/MonacoEditorSurface
 import { UnsavedChangesDialog } from "@/components/editor/UnsavedChangesDialog";
 import { GitConfirmDialog } from "@/components/git/GitConfirmDialog";
 import { GitHubConfirmDialog } from "@/components/git/GitHubConfirmDialog";
+import { CreateFromExampleModal } from "@/components/learning/CreateFromExampleModal";
 import { NewProjectDialog } from "@/components/project/NewProjectDialog";
 import { OpenProjectDialog } from "@/components/project/OpenProjectDialog";
 import { AppToolbar } from "@/components/shell/AppToolbar";
@@ -34,6 +35,7 @@ import { useEditorTabs } from "@/hooks/useEditorTabs";
 import { useFileExplorer } from "@/hooks/useFileExplorer";
 import { useGitIntegration } from "@/hooks/useGitIntegration";
 import { useGitHubIntegration } from "@/hooks/useGitHubIntegration";
+import { useLearning, type LearningSubTab } from "@/hooks/useLearning";
 import { useNativeAi } from "@/hooks/useNativeAi";
 import { useOpenCode } from "@/hooks/useOpenCode";
 import { useSdkDoctor } from "@/hooks/useSdkDoctor";
@@ -60,8 +62,15 @@ import type {
   PendingCodeApplyProposal,
 } from "@/types/ai";
 import type { BuildDiagnostic, BuildOperation } from "@/types/build";
+import type {
+  CreateProjectFromExamplePayload,
+  DocPageDetailResponse,
+  ExampleDetailResponse,
+  ExampleFileContentResponse,
+  IdeActionId,
+} from "@/types/learning";
 import type { OpenCodeContextAttachment } from "@/types/opencode";
-import type { CreateProjectPayload } from "@/types/project";
+import type { CreateProjectPayload, WorkspaceSummary } from "@/types/project";
 import type { ShellLogEntry } from "@/types/shell";
 
 const SPECIES_STORAGE_KEY = "vega-studio:ambient-species:v1";
@@ -694,6 +703,186 @@ export function IdeShell() {
     setOpenProjectOpen(true);
   }, [workspace]);
 
+  const handleExampleProjectCreated = useCallback(
+    async (summary: WorkspaceSummary) => {
+      editorTabs.resetFileTabs();
+      await workspace.refreshWorkspace();
+      setMode("workspace");
+      selectNav("explorer");
+      openCenterTab("overview");
+      appendLog(
+        "SHELL",
+        "info",
+        `Created & opened project '${summary.project.name}' from firmware example.`
+      );
+    },
+    [appendLog, editorTabs, openCenterTab, selectNav, setMode, workspace]
+  );
+
+  const learning = useLearning({
+    isBackendConnected: isConnected,
+    activeProjectDir: workspace.activeProject?.project_dir ?? null,
+    activeBoardId:
+      boardManager.activeProjectBoardId ??
+      workspace.activeProject?.project.target.board ??
+      "VEGA_ARIES_V3",
+    sdkConfigUpdatedAt: sdkDoctor.configState?.updated_at ?? null,
+    onProjectCreated: handleExampleProjectCreated,
+    onLog: (level, message) => appendLog("SHELL", level, message),
+  });
+
+  const openExamplesLibrary = useCallback(
+    (tab: LearningSubTab = "examples") => {
+      setComposerFocused(false);
+      setSettingsOpen(false);
+      editorTabs.setActiveFileTabPath(null);
+      learning.setSubTab(tab);
+      setMode("workspace");
+      selectNav("examples");
+      openCenterTab("examples-docs");
+    },
+    [editorTabs, learning, openCenterTab, selectNav, setMode]
+  );
+
+  const handleSubmitCreateFromExample = useCallback(
+    async (payload: CreateProjectFromExamplePayload): Promise<boolean> => {
+      if (workspace.activeProject && editorTabs.dirtyCount > 0) {
+        const proceed = await editorTabs.confirmWorkspaceTransition({
+          title: "Save changes before creating a project?",
+          description:
+            "Open editor tabs contain unsaved changes. Save them before switching to the new example project?",
+          confirmSaveLabel: "Save All & Create",
+          confirmDiscardLabel: "Discard & Create",
+        });
+        if (!proceed) {
+          return false;
+        }
+      }
+      return learning.submitCreateProject(payload);
+    },
+    [editorTabs, learning, workspace.activeProject]
+  );
+
+  const handleRunIdeAction = useCallback(
+    (actionId: IdeActionId) => {
+      if (actionId === "new_project") {
+        openNewProjectDialog();
+      } else if (actionId === "open_project") {
+        openOpenProjectDialog();
+      } else if (actionId === "open_sdk_doctor") {
+        openSdkDoctor();
+      } else if (actionId === "open_sdk_settings") {
+        openSettingsCategory("sdk");
+      } else if (actionId === "open_board_manager") {
+        openBoardManager();
+      } else if (actionId === "open_build") {
+        setMode("workspace");
+        setBottomTab("build");
+      } else if (actionId === "open_upload") {
+        openUploadPanel();
+      } else if (actionId === "open_serial") {
+        openSerialMonitor();
+      } else if (actionId === "open_terminal") {
+        openTerminalPanel();
+      } else if (actionId === "open_git") {
+        openSourceControl();
+      } else if (actionId === "open_native_ai") {
+        setMode("workspace");
+        setRightTab("native-ai");
+      } else if (actionId === "open_opencode") {
+        setMode("workspace");
+        setRightTab("opencode");
+      } else if (actionId === "open_examples") {
+        openExamplesLibrary("examples");
+      }
+    },
+    [
+      openBoardManager,
+      openExamplesLibrary,
+      openNewProjectDialog,
+      openOpenProjectDialog,
+      openSdkDoctor,
+      openSerialMonitor,
+      openSettingsCategory,
+      openSourceControl,
+      openTerminalPanel,
+      openUploadPanel,
+      setBottomTab,
+      setMode,
+      setRightTab,
+    ]
+  );
+
+  const handleAskAiAboutExample = useCallback(
+    (
+      detail: ExampleDetailResponse,
+      fileContent: ExampleFileContentResponse | null
+    ) => {
+      const header = [
+        `Example: ${detail.example.title} (${detail.example.id})`,
+        `Verification Status: ${detail.example.verification_status}`,
+        `Note: ${detail.example.verification_note}`,
+        `Boards: ${detail.example.compatible_boards.join(", ")}`,
+      ].join("\n");
+      const body = fileContent
+        ? `\n\n--- ${fileContent.relative_path} ---\n${fileContent.content}`
+        : detail.readme_content
+        ? `\n\n--- README.md ---\n${detail.readme_content}`
+        : "";
+      const combined = `${header}${body}`;
+      const truncated = combined.length > 5800;
+      askNativeAiWithContext(
+        {
+          kind: "file",
+          title: fileContent
+            ? `Example: ${detail.example.title} (${fileContent.relative_path})`
+            : `Example: ${detail.example.title}`,
+          relative_path: fileContent?.relative_path ?? null,
+          language: fileContent?.language ?? null,
+          snippet: truncated ? combined.slice(0, 5800) : combined,
+          truncated: truncated || Boolean(fileContent?.truncated),
+        },
+        `Explain how this VEGA firmware example works and how to adapt it safely for VEGA ARIES V3:`
+      );
+    },
+    [askNativeAiWithContext]
+  );
+
+  const handleAskAiAboutDoc = useCallback(
+    (detail: DocPageDetailResponse) => {
+      const truncated = detail.markdown_content.length > 5800;
+      askNativeAiWithContext(
+        {
+          kind: "project_summary",
+          title: `Docs: ${detail.doc.title}`,
+          snippet: truncated
+            ? detail.markdown_content.slice(0, 5800)
+            : detail.markdown_content,
+          truncated,
+        },
+        `Summarize key takeaways from "${detail.doc.title}" and help apply it to my VEGA firmware project:`
+      );
+    },
+    [askNativeAiWithContext]
+  );
+
+  const handleAskAiAboutSnippet = useCallback(
+    (snippet: string, title: string, language?: string) => {
+      const truncated = snippet.length > 5000;
+      askNativeAiWithContext(
+        {
+          kind: "selection",
+          title,
+          language: language ?? null,
+          snippet: truncated ? snippet.slice(0, 5000) : snippet,
+          truncated,
+        },
+        "Explain this code snippet from the VEGA Studio documentation:"
+      );
+    },
+    [askNativeAiWithContext]
+  );
+
   const handleCreateProject = useCallback(
     async (payload: CreateProjectPayload) => {
       if (workspace.activeProject) {
@@ -892,6 +1081,8 @@ export function IdeShell() {
                   openSdkDoctor();
                 } else if (section === "tools") {
                   openBoardManager();
+                } else if (section === "examples") {
+                  openExamplesLibrary("examples");
                 } else {
                   setMode("workspace");
                   selectNav(section);
@@ -1025,6 +1216,28 @@ export function IdeShell() {
                         void githubIntegration.inspectRemoteInfo(remote),
                     },
                   }}
+                  examplesSidebarProps={{
+                    subTab: learning.subTab,
+                    onChangeSubTab: learning.setSubTab,
+                    onOpenCenterLibrary: (tab) =>
+                      openExamplesLibrary(tab ?? learning.subTab),
+                    exampleCatalog: learning.exampleCatalog,
+                    filteredExamples: learning.filteredExamples,
+                    exampleSearch: learning.exampleSearch,
+                    onExampleSearchChange: learning.setExampleSearch,
+                    selectedExampleId: learning.selectedExampleId,
+                    onSelectExample: (id) => void learning.selectExample(id),
+                    onCreateFromExample: learning.openCreateProjectModal,
+                    docCatalog: learning.docCatalog,
+                    filteredDocs: learning.filteredDocs,
+                    docSearch: learning.docSearch,
+                    onDocSearchChange: learning.setDocSearch,
+                    selectedDocSlug: learning.selectedDocSlug,
+                    onSelectDoc: (slug) => void learning.selectDoc(slug),
+                    loading: learning.loadingExamples || learning.loadingDocs,
+                    onRefresh: () => void learning.refreshCatalogs(),
+                    isBackendConnected: isConnected,
+                  }}
                   sdkReport={sdkDoctor.report}
                   sdkRunning={sdkDoctor.runningDiagnostics}
                   boardStatus={boardManager.projectBoardStatus}
@@ -1120,6 +1333,47 @@ export function IdeShell() {
                       explorer.setSelectedPath(relativePath);
                       editorTabs.openFileAtLocation(relativePath, 1, 1);
                     },
+                  }}
+                  examplesDocsProps={{
+                    subTab: learning.subTab,
+                    onChangeSubTab: learning.setSubTab,
+                    activeBoardId: boardManager.activeProjectBoardId,
+                    isBackendConnected: isConnected,
+                    exampleCatalog: learning.exampleCatalog,
+                    filteredExamples: learning.filteredExamples,
+                    exampleSearch: learning.exampleSearch,
+                    onExampleSearchChange: learning.setExampleSearch,
+                    exampleCategory: learning.exampleCategory,
+                    onExampleCategoryChange: learning.setExampleCategory,
+                    boardFilterOnly: learning.boardFilterOnly,
+                    onBoardFilterOnlyChange: learning.setBoardFilterOnly,
+                    selectedExampleId: learning.selectedExampleId,
+                    selectedExampleDetail: learning.selectedExampleDetail,
+                    selectedFileRelPath: learning.selectedFileRelPath,
+                    selectedFileContent: learning.selectedFileContent,
+                    loadingExampleDetail: learning.loadingExampleDetail,
+                    loadingFilePreview: learning.loadingFilePreview,
+                    onSelectExample: (id) => void learning.selectExample(id),
+                    onPreviewExampleFile: (id, rel) =>
+                      void learning.previewExampleFile(id, rel),
+                    onOpenCreateModal: learning.openCreateProjectModal,
+                    docCatalog: learning.docCatalog,
+                    filteredDocs: learning.filteredDocs,
+                    docSearch: learning.docSearch,
+                    onDocSearchChange: learning.setDocSearch,
+                    docCategory: learning.docCategory,
+                    onDocCategoryChange: learning.setDocCategory,
+                    docSearchResults: learning.docSearchResults,
+                    searchingDocs: learning.searchingDocs,
+                    selectedDocSlug: learning.selectedDocSlug,
+                    selectedDocDetail: learning.selectedDocDetail,
+                    loadingDocDetail: learning.loadingDocDetail,
+                    onSelectDoc: (slug) => void learning.selectDoc(slug),
+                    onRefresh: () => void learning.refreshCatalogs(),
+                    onRunIdeAction: handleRunIdeAction,
+                    onAskAiAboutExample: handleAskAiAboutExample,
+                    onAskAiAboutDoc: handleAskAiAboutDoc,
+                    onAskAiAboutSnippet: handleAskAiAboutSnippet,
                   }}
                   layout={layout}
                   activeProject={workspace.activeProject}
@@ -1677,6 +1931,27 @@ export function IdeShell() {
         }
         onOpenProject={handleOpenProjectDir}
         onForgetRecent={workspace.forgetRecentProject}
+      />
+
+      <CreateFromExampleModal
+        example={learning.createModalExample}
+        boards={boardManager.boards}
+        defaultParentDir={workspace.defaultProjectsDir}
+        isBackendConnected={isConnected}
+        isElectronBridge={workspace.isElectronBridge}
+        validating={learning.validatingExample}
+        validationReport={learning.validationReport}
+        pending={learning.creatingProject}
+        serverError={learning.createError}
+        collisionPrompted={learning.collisionPrompted}
+        onValidateForBoard={(exampleId, boardId) =>
+          void learning.runValidation(exampleId, boardId)
+        }
+        onBrowseParent={(currentPath) =>
+          workspace.browseDirectory("Select Project Location", currentPath)
+        }
+        onClose={learning.closeCreateProjectModal}
+        onSubmit={handleSubmitCreateFromExample}
       />
     </div>
   );

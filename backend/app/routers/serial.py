@@ -6,6 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 
+from app.config import is_allowed_ws_origin
 from app.models.serial import (
     SerialConnectRequest,
     SerialSendRequest,
@@ -105,6 +106,9 @@ async def stream_serial_output(
     service: SerialService = Depends(get_serial_service),
 ) -> None:
     """Stream real-time serial log lines and status events over WebSocket."""
+    if not is_allowed_ws_origin(websocket.headers.get("origin")):
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
 
     loop = asyncio.get_running_loop()

@@ -335,24 +335,33 @@ class GitService:
             except ValueError as exc:
                 raise GitServiceError(str(exc), status_code=400) from exc
             target = root_resolved / norm
-            target_resolved = target.resolve(strict=False)
-            if not target_resolved.is_relative_to(root_resolved):
+            try:
+                target_resolved = target.resolve(strict=False)
+                resolved_rel = target_resolved.relative_to(root_resolved).as_posix()
+            except (OSError, ValueError) as exc:
                 raise GitServiceError(
                     f"Path '{raw}' escapes the active project repository boundary.",
                     status_code=400,
+                ) from exc
+            if any(part.lower() == ".git" for part in resolved_rel.split("/") if part):
+                raise GitServiceError(
+                    f"Resolved path for '{raw}' targets protected internal '.git' metadata.",
+                    status_code=400,
                 )
-            # Reject symlinks whose targets resolve outside the repository root
+            # Reject symlinks whose targets resolve outside the repository root or into .git
             if target.is_symlink():
                 try:
                     real = Path(os.path.realpath(target))
-                    if not real.is_relative_to(root_resolved):
+                    real_rel = real.relative_to(root_resolved).as_posix()
+                    if any(part.lower() == ".git" for part in real_rel.split("/") if part):
                         raise GitServiceError(
-                            f"Symlink '{raw}' points outside the repository root.",
+                            f"Symlink '{raw}' targets protected '.git' metadata.",
                             status_code=400,
                         )
-                except OSError as exc:
+                except (OSError, ValueError) as exc:
                     raise GitServiceError(
-                        f"Invalid symlink path '{raw}': {exc}", status_code=400
+                        f"Symlink '{raw}' points outside the repository root.",
+                        status_code=400,
                     ) from exc
             confined.append(norm)
         return confined
@@ -410,7 +419,10 @@ class GitService:
         is_repo, repo_root, has_parent, parent_root = self._inspect_repo_boundary(
             project_dir, git_exe
         )
-        id_ok, u_name, u_email = self._read_git_identity(git_exe, project_dir)
+        if is_repo and repo_root is not None:
+            id_ok, u_name, u_email = self._read_git_identity(git_exe, repo_root)
+        else:
+            id_ok, u_name, u_email = False, None, None
         return GitInfoResponse(
             git_available=True,
             git_version=version,
@@ -891,13 +903,25 @@ class GitService:
                     )
 
             for rel in safe_paths:
-                target = (root_resolved / rel).resolve(strict=False)
-                if not target.is_relative_to(root_resolved):
-                    raise GitServiceError(
-                        f"Path '{rel}' escapes the repository root.", status_code=400
-                    )
+                raw_target = root_resolved / rel
                 try:
-                    if target.is_symlink() or target.is_file():
+                    parent_resolved = raw_target.parent.resolve(strict=False)
+                    if not parent_resolved.is_relative_to(root_resolved):
+                        raise GitServiceError(
+                            f"Path '{rel}' escapes the repository root.",
+                            status_code=400,
+                        )
+                    # Unlink symlinks directly BEFORE calling resolve(), never deleting symlink targets
+                    if raw_target.is_symlink():
+                        raw_target.unlink()
+                        continue
+                    target = raw_target.resolve(strict=False)
+                    if not target.is_relative_to(root_resolved):
+                        raise GitServiceError(
+                            f"Path '{rel}' escapes the repository root.",
+                            status_code=400,
+                        )
+                    if target.is_file():
                         target.unlink()
                     elif target.is_dir():
                         shutil.rmtree(target)
@@ -1030,7 +1054,10 @@ class GitService:
     def precheck_switch(
         self, target_branch: str, raw_project_dir: Optional[str] = None
     ) -> GitSwitchPrecheckResponse:
-        branch = validate_branch_name(target_branch)
+        try:
+            branch = validate_branch_name(target_branch)
+        except ValueError as exc:
+            raise GitServiceError(str(exc), status_code=400) from exc
         git_exe, repo_root = self._require_git_and_repo(raw_project_dir)
 
         rc_ref, _, _ = self._run_git_text(

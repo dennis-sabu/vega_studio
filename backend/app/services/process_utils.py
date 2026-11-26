@@ -50,3 +50,7 @@ def terminate_process_tree(proc: subprocess.Popen[str]) -> None:
                 proc.kill()
             except OSError:
                 pass
+        try:
+            proc.wait(timeout=1.0)
+        except (subprocess.TimeoutExpired, OSError):
+            pass

@@ -36,6 +36,16 @@ import type {
   RenameEntryPayload,
 } from "@/types/explorer";
 import type {
+  CreateProjectFromExamplePayload,
+  DocCatalogResponse,
+  DocPageDetailResponse,
+  DocSearchResponse,
+  ExampleCatalogResponse,
+  ExampleDetailResponse,
+  ExampleFileContentResponse,
+  ExampleValidationResponse,
+} from "@/types/learning";
+import type {
   GitBranchActionResponse,
   GitBranchesResponse,
   GitCommitDetailResponse,
@@ -1448,4 +1458,101 @@ export async function validateAiCodeApply(payload: {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+// ── Phase 16: Examples, Documentation & Guided Learning ──────────────────────
+
+export async function fetchExampleCatalog(
+  filters?: { category?: string | null; q?: string | null; board_id?: string | null },
+  signal?: AbortSignal
+): Promise<ExampleCatalogResponse> {
+  const params = new URLSearchParams();
+  if (filters?.category) params.set("category", filters.category);
+  if (filters?.q) params.set("q", filters.q);
+  if (filters?.board_id) params.set("board_id", filters.board_id);
+  const qs = params.toString();
+  return apiFetch<ExampleCatalogResponse>(
+    `/api/examples${qs ? `?${qs}` : ""}`,
+    { signal }
+  );
+}
+
+export async function fetchExampleDetail(
+  exampleId: string,
+  signal?: AbortSignal
+): Promise<ExampleDetailResponse> {
+  return apiFetch<ExampleDetailResponse>(
+    `/api/examples/${encodeURIComponent(exampleId)}`,
+    { signal }
+  );
+}
+
+export async function fetchExampleFileContent(
+  exampleId: string,
+  relativePath: string,
+  signal?: AbortSignal
+): Promise<ExampleFileContentResponse> {
+  const params = new URLSearchParams({ path: relativePath });
+  return apiFetch<ExampleFileContentResponse>(
+    `/api/examples/${encodeURIComponent(exampleId)}/files?${params.toString()}`,
+    { signal }
+  );
+}
+
+export async function validateExampleCompatibility(
+  exampleId: string,
+  payload: { project_dir?: string | null; board_id?: string | null }
+): Promise<ExampleValidationResponse> {
+  return apiFetch<ExampleValidationResponse>(
+    `/api/examples/${encodeURIComponent(exampleId)}/validate`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export async function createProjectFromExample(
+  payload: CreateProjectFromExamplePayload
+): Promise<WorkspaceSummary> {
+  return apiFetch<WorkspaceSummary>("/api/examples/create-project", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchDocCatalog(
+  filters?: { category?: string | null; q?: string | null },
+  signal?: AbortSignal
+): Promise<DocCatalogResponse> {
+  const params = new URLSearchParams();
+  if (filters?.category) params.set("category", filters.category);
+  if (filters?.q) params.set("q", filters.q);
+  const qs = params.toString();
+  return apiFetch<DocCatalogResponse>(`/api/docs${qs ? `?${qs}` : ""}`, {
+    signal,
+  });
+}
+
+export async function fetchDocDetail(
+  slug: string,
+  signal?: AbortSignal
+): Promise<DocPageDetailResponse> {
+  return apiFetch<DocPageDetailResponse>(
+    `/api/docs/${encodeURIComponent(slug)}`,
+    { signal }
+  );
+}
+
+export async function searchDocsCatalog(
+  query: string,
+  category?: string | null,
+  signal?: AbortSignal
+): Promise<DocSearchResponse> {
+  const params = new URLSearchParams({ q: query });
+  if (category) params.set("category", category);
+  return apiFetch<DocSearchResponse>(
+    `/api/docs/search?${params.toString()}`,
+    { signal }
+  );
 }

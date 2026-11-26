@@ -16,6 +16,7 @@ from app.routers import explorer as explorer_router
 from app.routers import git as git_router
 from app.routers import github as github_router
 from app.routers import health as health_router
+from app.routers import learning as learning_router
 from app.routers import opencode as opencode_router
 from app.routers import projects as projects_router
 from app.routers import sdk as sdk_router
@@ -87,6 +88,7 @@ def create_app() -> FastAPI:
     application.include_router(github_router.router)
     application.include_router(opencode_router.router)
     application.include_router(ai_router.router)
+    application.include_router(learning_router.router)
 
     return application
 

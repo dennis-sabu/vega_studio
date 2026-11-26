@@ -6,6 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 
+from app.config import is_allowed_ws_origin
 from app.models.build import (
     BuildHistoryResponse,
     BuildRequest,
@@ -149,6 +150,9 @@ async def stream_build_output(
     service: BuildService = Depends(get_build_service),
 ) -> None:
     """Stream real-time build log lines and diagnostics over local WebSocket."""
+    if not is_allowed_ws_origin(websocket.headers.get("origin")):
+        await websocket.close(code=1008)
+        return
     try:
         record = service.get_build_record(build_id)
     except BuildServiceError as exc:

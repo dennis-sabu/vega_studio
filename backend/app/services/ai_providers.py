@@ -310,6 +310,17 @@ class _OpenAIChatCompletionsAdapter(AIProviderAdapter):
                 message=f"Connection to {endpoint} timed out.",
                 error_code="timeout",
             )
+        except (httpx.InvalidURL, UnicodeEncodeError, ValueError) as exc:
+            latency_ms = int((time.monotonic() - started) * 1000)
+            return AIConnectionTestResponse(
+                ok=False,
+                provider_id=self.descriptor.id,
+                endpoint=endpoint,
+                model=clean_model,
+                latency_ms=latency_ms,
+                message=scrub_ai_secrets(f"Invalid provider endpoint or header characters: {exc}", (api_key,) if api_key else ()),
+                error_code="invalid_request",
+            )
         except httpx.HTTPError as exc:
             latency_ms = int((time.monotonic() - started) * 1000)
             return AIConnectionTestResponse(
@@ -483,6 +494,16 @@ class _OpenAIChatCompletionsAdapter(AIProviderAdapter):
                 status_code=504,
                 error_code="timeout",
                 retryable=True,
+            ) from exc
+        except (httpx.InvalidURL, UnicodeEncodeError, ValueError) as exc:
+            raise AIProviderError(
+                scrub_ai_secrets(
+                    f"Invalid request configuration for {self.descriptor.label}: {exc}",
+                    (api_key,) if api_key else (),
+                ),
+                status_code=400,
+                error_code="invalid_request",
+                retryable=False,
             ) from exc
         except httpx.HTTPError as exc:
             raise AIProviderError(

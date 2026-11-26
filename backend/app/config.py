@@ -67,12 +67,21 @@ class Settings(BaseSettings):
     @field_validator("HOST")
     @classmethod
     def _host_local_only(cls, v: str) -> str:
-        """Reject 0.0.0.0 to prevent accidental public network exposure."""
-        if v.strip() == "0.0.0.0":
+        """Restrict backend binding strictly to loopback addresses."""
+        cleaned = v.strip()
+        if cleaned not in ("127.0.0.1", "localhost", "::1"):
             raise ValueError(
-                "HOST must not be 0.0.0.0 – use 127.0.0.1 for local-only binding."
+                f"HOST '{cleaned}' is not allowed – only loopback hosts ('127.0.0.1', 'localhost', '::1') are permitted."
             )
-        return v.strip()
+        return cleaned
+
+    @field_validator("LOG_LEVEL")
+    @classmethod
+    def _validate_log_level(cls, v: str) -> str:
+        cleaned = v.strip().lower()
+        if cleaned not in ("debug", "info", "warning", "error", "critical"):
+            return "info"
+        return cleaned
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
@@ -99,3 +108,24 @@ class Settings(BaseSettings):
 
 # Singleton – import this everywhere
 settings = Settings()
+
+
+def is_allowed_ws_origin(origin: Optional[str]) -> bool:
+    """Validate browser/Electron WebSocket Origin headers against local origins.
+
+    Non-browser clients (and Starlette TestClient) omit Origin (`None`). When
+    present, reject `'null'` and any origin outside configured loopback/app origins.
+    """
+    if origin is None or origin == "":
+        return True
+    cleaned = origin.strip()
+    if cleaned.lower() == "null":
+        return False
+    if cleaned in settings.CORS_ORIGINS:
+        return True
+    parsed = urlparse(cleaned)
+    if parsed.scheme in ("app", "vega"):
+        return True
+    if parsed.scheme in ("http", "https") and parsed.hostname in ("localhost", "127.0.0.1", "::1"):
+        return True
+    return False

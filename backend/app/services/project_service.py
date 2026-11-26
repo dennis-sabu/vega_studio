@@ -404,16 +404,54 @@ class ProjectService:
 
         return self.open_project(str(target_dir))
 
+    def load_project(self, raw_project_dir: str) -> WorkspaceSummary:
+        """Inspect and validate a VEGA project read-only without mutating active workspace state."""
+        project_path = validate_directory_input(
+            raw_project_dir, label="Project directory"
+        )
+        try:
+            exists = project_path.exists()
+            is_dir = project_path.is_dir()
+        except OSError as exc:
+            raise ProjectServiceError(
+                f"Cannot access project directory '{project_path}': {exc}", 403
+            ) from exc
+        if not exists:
+            raise ProjectServiceError(
+                f"Project directory '{project_path}' does not exist.", 404
+            )
+        if not is_dir:
+            raise ProjectServiceError(
+                f"'{project_path}' is not a directory.", 400
+            )
+        metadata, structure_valid, warnings, entries = (
+            self._inspect_project_directory(project_path)
+        )
+        return WorkspaceSummary(
+            project=metadata,
+            project_dir=str(project_path),
+            structure_valid=structure_valid,
+            warnings=warnings,
+            top_level_entries=entries,
+        )
+
     def open_project(self, raw_project_dir: str) -> WorkspaceSummary:
         """Validate and open an existing VEGA Studio project without modifying it."""
         project_path = validate_directory_input(
             raw_project_dir, label="Project directory"
         )
-        if not project_path.exists():
+        try:
+            exists = project_path.exists()
+            is_dir = project_path.is_dir()
+        except OSError as exc:
+            raise ProjectServiceError(
+                f"Cannot access project directory '{project_path}': {exc}", 403
+            ) from exc
+        if not exists:
             raise ProjectServiceError(
                 f"Project directory '{project_path}' does not exist.", 404
             )
-        if not project_path.is_dir():
+        if not is_dir:
             raise ProjectServiceError(
                 f"'{project_path}' is not a directory.", 400
             )
@@ -460,7 +498,14 @@ class ProjectService:
         result: List[RecentProjectEntry] = []
         for rec in records:
             p = Path(rec["project_dir"])
-            exists = p.exists() and p.is_dir() and (p / PROJECT_METADATA_FILENAME).is_file()
+            try:
+                exists = (
+                    p.exists()
+                    and p.is_dir()
+                    and (p / PROJECT_METADATA_FILENAME).is_file()
+                )
+            except OSError:
+                exists = False
             result.append(
                 RecentProjectEntry(
                     name=rec["name"],
@@ -485,7 +530,14 @@ class ProjectService:
                 active_path = validate_directory_input(
                     active_dir, label="Saved workspace"
                 )
-                if not active_path.exists() or not active_path.is_dir():
+                try:
+                    exists = active_path.exists() and active_path.is_dir()
+                except OSError as exc:
+                    raise ProjectServiceError(
+                        f"Cannot access saved workspace '{active_dir}': {exc}",
+                        403,
+                    ) from exc
+                if not exists:
                     raise ProjectServiceError(
                         f"Previously opened workspace '{active_dir}' no longer exists.",
                         404,

@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
+from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 import json
 import sqlite3
 import threading
 import uuid
 from pathlib import Path
-from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
+from typing import Any, Callable, Deque, Dict, Iterator, List, Optional, Tuple
 
 import httpx
 
@@ -60,8 +61,12 @@ from app.services.ai_providers import (
     get_provider_adapter,
     list_provider_adapters,
 )
-from app.services.persistence import AppPersistence
-from app.services.project_service import ProjectService
+from app.services.persistence import AppPersistence, PersistenceError
+from app.services.project_service import (
+    ProjectService,
+    ProjectServiceError,
+    validate_directory_input,
+)
 
 _AI_CONFIG_STATE_KEY = "native_ai_config_v1"
 _MAX_CONVERSATION_LIST = 60
@@ -137,54 +142,88 @@ class AIService:
         if self._schema_ready and self._persistence.db_path.exists():
             return
         self._persistence.ensure_schema()
-        with sqlite3.connect(self._persistence.db_path) as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS ai_conversations (
-                    conversation_id TEXT PRIMARY KEY,
-                    title TEXT NOT NULL,
-                    project_dir TEXT,
-                    project_name TEXT,
-                    provider_id TEXT,
-                    model TEXT,
-                    allow_tools INTEGER NOT NULL DEFAULT 1,
-                    status TEXT NOT NULL DEFAULT 'idle',
-                    last_error TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+        try:
+            with closing(sqlite3.connect(self._persistence.db_path, timeout=10.0)) as conn:
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA busy_timeout=5000")
+                conn.execute("PRAGMA foreign_keys=ON")
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS ai_conversations (
+                        conversation_id TEXT PRIMARY KEY,
+                        title TEXT NOT NULL,
+                        project_dir TEXT,
+                        project_name TEXT,
+                        provider_id TEXT,
+                        model TEXT,
+                        allow_tools INTEGER NOT NULL DEFAULT 1,
+                        status TEXT NOT NULL DEFAULT 'idle',
+                        last_error TEXT,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                    """
                 )
-                """
-            )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS ai_messages (
-                    id TEXT PRIMARY KEY,
-                    conversation_id TEXT NOT NULL,
-                    seq INTEGER NOT NULL,
-                    role TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    attachments_json TEXT,
-                    tool_traces_json TEXT,
-                    provider_id TEXT,
-                    model TEXT,
-                    finish_reason TEXT,
-                    usage_json TEXT,
-                    error_message TEXT,
-                    created_at TEXT NOT NULL
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS ai_messages (
+                        id TEXT PRIMARY KEY,
+                        conversation_id TEXT NOT NULL,
+                        seq INTEGER NOT NULL,
+                        role TEXT NOT NULL,
+                        content TEXT NOT NULL,
+                        attachments_json TEXT,
+                        tool_traces_json TEXT,
+                        provider_id TEXT,
+                        model TEXT,
+                        finish_reason TEXT,
+                        usage_json TEXT,
+                        error_message TEXT,
+                        created_at TEXT NOT NULL
+                    )
+                    """
                 )
-                """
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_ai_messages_conv_seq ON ai_messages (conversation_id, seq)"
-            )
-            conn.commit()
-        self._schema_ready = True
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_ai_messages_conv_seq ON ai_messages (conversation_id, seq)"
+                )
+                # Reconcile any orphaned streaming status left behind after an unclean restart
+                with self._lock:
+                    active_ids = [cid for cid, t in self._active_tasks.items() if not t.done()]
+                if not active_ids:
+                    conn.execute(
+                        """
+                        UPDATE ai_conversations
+                        SET status = 'error',
+                            last_error = COALESCE(last_error, 'Previous response was interrupted by backend restart.')
+                        WHERE status = 'streaming'
+                        """
+                    )
+                conn.commit()
+            self._schema_ready = True
+        except (OSError, sqlite3.Error) as exc:
+            raise AIServiceError(f"Failed initializing local AI database: {exc}", status_code=503) from exc
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         self._ensure_ai_schema()
-        conn = sqlite3.connect(self._persistence.db_path)
+        try:
+            conn = sqlite3.connect(self._persistence.db_path, timeout=10.0)
+        except sqlite3.Error as exc:
+            raise AIServiceError(f"Unable to open local AI database: {exc}", status_code=503) from exc
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            conn.execute("PRAGMA busy_timeout=5000")
+            conn.execute("PRAGMA foreign_keys=ON")
+            yield conn
+            conn.commit()
+        except sqlite3.Error as exc:
+            try:
+                conn.rollback()
+            except sqlite3.Error:
+                pass
+            raise AIServiceError(f"AI database operation failed: {exc}", status_code=503) from exc
+        finally:
+            conn.close()
 
     # ── Non-Secret Config & Providers ─────────────────────────────────────────
 
@@ -334,29 +373,52 @@ class AIService:
         )
 
     def _row_to_message(self, row: sqlite3.Row) -> AIMessageItem:
-        atts_raw = json.loads(row["attachments_json"]) if row["attachments_json"] else []
-        tools_raw = json.loads(row["tool_traces_json"]) if row["tool_traces_json"] else []
-        usage_raw = json.loads(row["usage_json"]) if row["usage_json"] else None
+        try:
+            atts_raw = json.loads(row["attachments_json"]) if row["attachments_json"] else []
+            atts = [AIContextAttachment.model_validate(a) for a in atts_raw] if isinstance(atts_raw, list) else []
+        except (ValueError, TypeError):
+            atts = []
+        try:
+            tools_raw = json.loads(row["tool_traces_json"]) if row["tool_traces_json"] else []
+            tools = [AIToolTraceItem.model_validate(t) for t in tools_raw] if isinstance(tools_raw, list) else []
+        except (ValueError, TypeError):
+            tools = []
+        usage = None
+        if row["usage_json"]:
+            try:
+                usage_raw = json.loads(row["usage_json"])
+                usage = AIUsageInfo.model_validate(usage_raw) if isinstance(usage_raw, dict) else None
+            except (ValueError, TypeError):
+                usage = None
         return AIMessageItem(
             id=str(row["id"]),
             seq=int(row["seq"]),
             role=str(row["role"]),  # type: ignore[arg-type]
             content=str(row["content"]),
-            attachments=[AIContextAttachment.model_validate(a) for a in atts_raw],
-            tool_traces=[AIToolTraceItem.model_validate(t) for t in tools_raw],
+            attachments=atts,
+            tool_traces=tools,
             provider_id=row["provider_id"],
             model=row["model"],
             finish_reason=row["finish_reason"],
-            usage=AIUsageInfo.model_validate(usage_raw) if usage_raw else None,
+            usage=usage,
             error_message=row["error_message"],
             created_at=str(row["created_at"]),
             is_streaming=False,
         )
 
+    @staticmethod
+    def _normalize_project_dir(raw: Optional[str]) -> Optional[str]:
+        if raw is None or not str(raw).strip():
+            return None
+        try:
+            return str(validate_directory_input(str(raw), label="Project directory"))
+        except ProjectServiceError as exc:
+            raise AIServiceError(exc.message, status_code=exc.status_code) from exc
+
     def list_conversations(self, project_dir: Optional[str] = None) -> AIConversationListResponse:
+        norm = self._normalize_project_dir(project_dir)
         with self._connect() as conn:
-            if project_dir:
-                norm = str(Path(project_dir).resolve(strict=False))
+            if norm:
                 rows = conn.execute(
                     """
                     SELECT c.*, (SELECT COUNT(*) FROM ai_messages m WHERE m.conversation_id = c.conversation_id) AS msg_cnt
@@ -383,10 +445,9 @@ class AIService:
     def create_conversation(self, req: AIConversationCreateRequest) -> AIConversationDetailResponse:
         cfg, _ = self._load_config()
         active_prof = cfg.providers.get(cfg.active_provider)
-        norm_proj: Optional[str] = None
+        norm_proj = self._normalize_project_dir(req.project_dir)
         proj_name: Optional[str] = None
-        if req.project_dir:
-            norm_proj = str(Path(req.project_dir).resolve(strict=False))
+        if norm_proj:
             try:
                 proj_name = self._projects.load_project(norm_proj).project.name
             except Exception:
@@ -593,8 +654,8 @@ class AIService:
                 )
 
         # Workspace confinement check if conversation already bound to a project
-        if conv.project_dir and req.project_dir:
-            req_norm = str(Path(req.project_dir).resolve(strict=False))
+        req_norm = self._normalize_project_dir(req.project_dir)
+        if conv.project_dir and req_norm:
             if Path(req_norm) != Path(conv.project_dir):
                 raise AIServiceError(
                     "Active workspace does not match this conversation's project. Start a new conversation for this project.",
@@ -602,9 +663,7 @@ class AIService:
                     error_code="cross_project_conflict",
                 )
 
-        effective_project_dir = conv.project_dir or (
-            str(Path(req.project_dir).resolve(strict=False)) if req.project_dir else None
-        )
+        effective_project_dir = conv.project_dir or req_norm
 
         cfg, _ = self._load_config()
         provider_id: AIProviderId = req.provider_id or conv.provider_id or cfg.active_provider
@@ -883,13 +942,14 @@ class AIService:
                                     remaining = MAX_AI_RESPONSE_CHARS - len(collected_text)
                                     piece = chunk.text_delta[:remaining] if remaining > 0 else ""
                                     if piece:
-                                        collected_text += piece
-                                        round_text += piece
+                                        safe_piece = scrub_ai_secrets(piece, extra_secrets=extra_secrets)
+                                        collected_text += safe_piece
+                                        round_text += safe_piece
                                         with self._lock:
                                             self._streaming_buffers[cid] = (collected_text, list(collected_traces))
                                         self._emit_ws(
                                             cid,
-                                            {"type": "chunk_delta", "conversation_id": cid, "delta": piece},
+                                            {"type": "chunk_delta", "conversation_id": cid, "delta": safe_piece},
                                         )
                                 for td in chunk.tool_deltas:
                                     entry = tool_acc.setdefault(
@@ -900,8 +960,8 @@ class AIService:
                                         entry["id"] = td.call_id
                                     if td.name:
                                         entry["name"] += td.name
-                                    if td.arguments_delta:
-                                        entry["arguments"] += td.arguments_delta
+                                    if td.arguments_delta and len(entry["arguments"]) < 32_000:
+                                        entry["arguments"] += td.arguments_delta[: max(0, 32_000 - len(entry["arguments"]))]
                                 if chunk.finish_reason:
                                     finish_reason = chunk.finish_reason
                                 if chunk.usage:
@@ -939,10 +999,13 @@ class AIService:
                         }
                     )
                     for tc in ordered_calls:
+                        safe_args_prev = scrub_ai_secrets(
+                            (tc["arguments"] or "{}")[:240], extra_secrets=extra_secrets
+                        )
                         trace = AIToolTraceItem(
                             call_id=tc["id"],
                             name=tc["name"],
-                            arguments_preview=(tc["arguments"] or "{}")[:240],
+                            arguments_preview=safe_args_prev,
                             status="running",
                         )
                         collected_traces.append(trace)
@@ -1073,6 +1136,12 @@ class AIService:
         now = _utc_now()
         msg_id = f"msg_{uuid.uuid4().hex[:12]}"
         with self._connect() as conn:
+            exists_row = conn.execute(
+                "SELECT 1 FROM ai_conversations WHERE conversation_id = ?",
+                (cid,),
+            ).fetchone()
+            if exists_row is None:
+                return
             row = conn.execute(
                 "SELECT MAX(seq) AS max_seq FROM ai_messages WHERE conversation_id = ?",
                 (cid,),
@@ -1120,12 +1189,24 @@ class AIService:
 
     def shutdown(self) -> None:
         with self._lock:
+            active_cids = list(self._active_tasks.keys())
             tasks = list(self._active_tasks.values())
             self._active_tasks.clear()
             self._streaming_buffers.clear()
         for task in tasks:
             if not task.done():
                 task.cancel()
+        if active_cids:
+            now = _utc_now()
+            try:
+                with self._connect() as conn:
+                    for cid in active_cids:
+                        conn.execute(
+                            "UPDATE ai_conversations SET status = 'cancelled', updated_at = ? WHERE conversation_id = ? AND status = 'streaming'",
+                            (now, cid),
+                        )
+            except Exception:
+                pass
 
 
 _ai_service_instance: Optional[AIService] = None

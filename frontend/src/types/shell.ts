@@ -22,7 +22,8 @@ export type CenterTabId =
   | "diagnostics"
   | "sdk-doctor"
   | "board-manager"
-  | "git-diff";
+  | "git-diff"
+  | "examples-docs";
 
 export interface ShellLayoutState {
   activeMode: WorkspaceMode;

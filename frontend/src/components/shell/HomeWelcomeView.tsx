@@ -12,6 +12,7 @@ import {
   Activity,
   AlertTriangle,
   ArrowUp,
+  BookOpen,
   Cpu,
   FolderOpen,
   LayoutGrid,
@@ -155,6 +156,12 @@ export function HomeWelcomeView({
         label: "Source Control",
         hint: "Phase 10 slot",
         action: () => onOpenNavSection("git"),
+      },
+      {
+        id: "examples",
+        label: "Examples & Offline Docs",
+        hint: "VEGA ARIES V3",
+        action: () => onOpenNavSection("examples"),
       },
       {
         id: "build",
@@ -413,6 +420,15 @@ export function HomeWelcomeView({
               >
                 <FolderOpen className="h-3.5 w-3.5 text-[#7aa2ff]" />
                 <span>Open project</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onOpenNavSection("examples")}
+                className="inline-flex h-[34px] items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.04] px-3.5 pl-3 text-[13px] font-medium text-[#e0e4f2] transition-colors hover:bg-white/[0.09] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7aa2ff]/50"
+              >
+                <BookOpen className="h-3.5 w-3.5 text-[#7aa2ff]" />
+                <span>Examples &amp; Docs</span>
               </button>
 
               <button

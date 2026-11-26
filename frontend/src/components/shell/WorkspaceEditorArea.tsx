@@ -13,6 +13,7 @@ import {
   Activity,
   AlertCircle,
   AlertTriangle,
+  BookOpen,
   Check,
   ChevronRight,
   Cpu,
@@ -44,6 +45,7 @@ import {
 import { BoardManagerView } from "@/components/board/BoardManagerView";
 import { FileIcon } from "@/components/explorer/FileIcon";
 import { GitDiffView } from "@/components/git/GitDiffView";
+import { ExamplesDocsView } from "@/components/learning/ExamplesDocsView";
 import { SdkDoctorView } from "@/components/sdk/SdkDoctorView";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { fetchStatus, type HealthResponse, type StatusResponse } from "@/lib/api";
@@ -69,6 +71,7 @@ interface WorkspaceEditorAreaProps {
   sdkDoctorProps: ComponentProps<typeof SdkDoctorView>;
   boardManagerProps: ComponentProps<typeof BoardManagerView>;
   gitDiffProps: ComponentProps<typeof GitDiffView>;
+  examplesDocsProps: ComponentProps<typeof ExamplesDocsView>;
   layout: ShellLayoutState;
   activeProject: WorkspaceSummary | null;
   isConnected: boolean;
@@ -117,6 +120,7 @@ const TAB_META: Record<
   "sdk-doctor": { label: "SDK Doctor", icon: Stethoscope },
   "board-manager": { label: "Board Manager", icon: Cpu },
   "git-diff": { label: "Git Diff", icon: FileDiff },
+  "examples-docs": { label: "Examples & Docs", icon: BookOpen },
 };
 
 const TIME_FORMAT = new Intl.DateTimeFormat(undefined, { timeStyle: "medium" });
@@ -138,6 +142,7 @@ export function WorkspaceEditorArea({
   sdkDoctorProps,
   boardManagerProps,
   gitDiffProps,
+  examplesDocsProps,
   layout,
   activeProject,
   isConnected,
@@ -447,6 +452,15 @@ export function WorkspaceEditorArea({
               + Git Diff
             </button>
           )}
+          {!openTabs.includes("examples-docs") && (
+            <button
+              type="button"
+              onClick={() => onOpenTab("examples-docs")}
+              className="rounded px-2 py-1 text-[11px] text-[#e8ebf7]/55 hover:bg-white/[0.06] hover:text-[#e8ebf7]"
+            >
+              + Examples
+            </button>
+          )}
         </div>
       </div>
 
@@ -734,6 +748,8 @@ export function WorkspaceEditorArea({
         </div>
       ) : activeTab === "git-diff" ? (
         <GitDiffView {...gitDiffProps} />
+      ) : activeTab === "examples-docs" ? (
+        <ExamplesDocsView {...examplesDocsProps} />
       ) : (
         <div className="vega-scroll min-h-0 flex-1 overflow-y-auto p-5">
           {activeTab === null ? (

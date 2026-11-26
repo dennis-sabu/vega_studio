@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { FileExplorer } from "@/components/explorer/FileExplorer";
 import { GitSidebarPanel } from "@/components/git/GitSidebarPanel";
+import { ExamplesSidebarSection } from "@/components/learning/ExamplesSidebarSection";
 import { Tooltip } from "@/components/ui/Tooltip";
 import type { ProjectBoardStatusResponse } from "@/types/board";
 import type { RecentProjectEntry, WorkspaceSummary } from "@/types/project";
@@ -37,6 +38,7 @@ interface SidebarPanelProps {
   actionPending: boolean;
   explorer: SidebarExplorerBridge;
   gitPanelProps: ComponentProps<typeof GitSidebarPanel>;
+  examplesSidebarProps: ComponentProps<typeof ExamplesSidebarSection>;
   sdkReport: SdkDoctorReport | null;
   sdkRunning: boolean;
   boardStatus: ProjectBoardStatusResponse | null;
@@ -89,16 +91,16 @@ const SECTION_META: Record<PrimaryNavSection, SectionConfig> = {
     ],
   },
   examples: {
-    title: "SDK Examples",
-    phase: "Phase 13",
-    heading: "VEGA ARIES V3 Examples",
+    title: "Examples & Docs",
+    phase: "Phase 16 · Active",
+    heading: "VEGA ARIES V3 Examples & Docs",
     description:
-      "Browse and instantiate verified VEGA SDK examples once the SDK integration layer is active.",
+      "Browse verified templates, conceptual firmware patterns, local SDK examples, and offline documentation.",
     icon: BookOpen,
     details: [
-      "Validated VEGA SDK peripheral samples",
-      "UART, GPIO, Timer, Interrupt & ADC demos",
-      "Create portable project from example",
+      "Verified templates & conceptual firmware patterns",
+      "Safe local VEGA SDK example discovery",
+      "Create portable vega-project.json workspaces",
     ],
   },
   sdk: {
@@ -137,6 +139,7 @@ export function SidebarPanel({
   actionPending,
   explorer,
   gitPanelProps,
+  examplesSidebarProps,
   sdkReport,
   sdkRunning,
   boardStatus,
@@ -202,6 +205,8 @@ export function SidebarPanel({
         </div>
       ) : activeNav === "git" ? (
         <GitSidebarPanel {...gitPanelProps} />
+      ) : activeNav === "examples" ? (
+        <ExamplesSidebarSection {...examplesSidebarProps} />
       ) : (
         <div className="vega-scroll flex flex-1 flex-col gap-4 overflow-y-auto p-3">
           <>

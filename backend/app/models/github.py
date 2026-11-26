@@ -28,7 +28,7 @@ GitHubOpStatus = Literal[
 _REMOTE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _REPO_NAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,100}$")
 _SSH_GITHUB_RE = re.compile(
-    r"^git@([A-Za-z0-9.-]+):([A-Za-z0-9._-]+)/([A-Za-z0-9._-]+?)(?:\.git)?$"
+    r"^git@([A-Za-z0-9][A-Za-z0-9.-]*):([A-Za-z0-9][A-Za-z0-9._-]*)/([A-Za-z0-9][A-Za-z0-9._-]*?)(?:\.git)?$"
 )
 
 
@@ -81,8 +81,8 @@ def validate_remote_url(raw_url: str) -> str:
     if parsed.scheme == "ssh":
         if parsed.password or (parsed.username and parsed.username != "git"):
             raise ValueError("SSH remote URL cannot contain embedded passwords or non-git userinfo.")
-        if not parsed.hostname or not parsed.path or parsed.path == "/":
-            raise ValueError("SSH remote URL must include host and repository path.")
+        if not parsed.hostname or parsed.hostname.startswith("-") or not parsed.path or parsed.path == "/":
+            raise ValueError("SSH remote URL must include valid host and repository path.")
         return cleaned
 
     raise ValueError(

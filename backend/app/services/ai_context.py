@@ -52,7 +52,7 @@ def is_sensitive_relative_path(relative_path: str) -> Optional[str]:
     parts = [p for p in norm.split("/") if p and p != "."]
     for idx, seg in enumerate(parts):
         low = seg.lower()
-        if seg in _SENSITIVE_DIR_NAMES:
+        if low in _SENSITIVE_DIR_NAMES:
             return f"Directory '{seg}' is excluded from AI context."
         if idx == len(parts) - 1:
             if any(low.startswith(pref) for pref in _SENSITIVE_NAME_PREFIXES):
@@ -81,15 +81,26 @@ def resolve_workspace_file(project_dir: Path, raw_relative_path: str) -> Tuple[P
     if not parts or any(p == ".." for p in parts):
         raise ValueError("Path traversal ('..') outside the active workspace is forbidden.")
 
-    root_resolved = project_dir.resolve(strict=True)
-    candidate = root_resolved.joinpath(*parts)
-    resolved = candidate.resolve(strict=False)
     try:
-        resolved.relative_to(root_resolved)
+        root_resolved = project_dir.resolve(strict=True)
+    except OSError as exc:
+        raise ValueError("Active project directory is unavailable.") from exc
+    candidate = root_resolved.joinpath(*parts)
+    try:
+        resolved = candidate.resolve(strict=False)
+    except OSError as exc:
+        raise ValueError(f"Unable to resolve relative path '{raw_relative_path}': {exc}") from exc
+    try:
+        resolved_rel = resolved.relative_to(root_resolved).as_posix()
     except ValueError as exc:
         raise ValueError("Resolved file escapes the active workspace boundary.") from exc
 
     rel_norm = "/".join(parts)
+    if resolved_rel and resolved_rel != rel_norm:
+        sens_target = is_sensitive_relative_path(resolved_rel)
+        if sens_target:
+            raise ValueError(sens_target)
+        return resolved, resolved_rel
     return resolved, rel_norm
 
 
@@ -108,15 +119,15 @@ def _collect_bounded_tree(project_dir: Path, max_depth: int = 2, limit: int = _M
             if len(results) >= limit:
                 return
             name = entry.name
-            if name in _SENSITIVE_DIR_NAMES:
+            if name.lower() in _SENSITIVE_DIR_NAMES:
                 continue
             rel = f"{prefix}/{name}" if prefix else name
             try:
                 resolved = entry.resolve(strict=False)
-                resolved.relative_to(root_resolved)
-            except ValueError:
+                resolved_rel = resolved.relative_to(root_resolved).as_posix()
+            except (OSError, ValueError):
                 continue
-            if is_sensitive_relative_path(rel):
+            if is_sensitive_relative_path(rel) or (resolved_rel and is_sensitive_relative_path(resolved_rel)):
                 continue
             if entry.is_dir():
                 results.append(f"{rel}/")
@@ -614,10 +625,13 @@ class AIContextToolExecutor:
             return "denied", json.dumps({"error": sens}), False
         if not target.is_file():
             return "error", json.dumps({"error": f"File '{rel_norm}' does not exist."}), False
-        size = target.stat().st_size
-        if size > _MAX_READ_FILE_BYTES:
-            return "denied", json.dumps({"error": f"File '{rel_norm}' ({size} bytes) exceeds 512KB context limit."}), False
-        raw_bytes = target.read_bytes()
+        try:
+            size = target.stat().st_size
+            if size > _MAX_READ_FILE_BYTES:
+                return "denied", json.dumps({"error": f"File '{rel_norm}' ({size} bytes) exceeds 512KB context limit."}), False
+            raw_bytes = target.read_bytes()
+        except OSError as exc:
+            return "error", json.dumps({"error": f"Unable to read '{rel_norm}': {exc}"}), False
         if b"\x00" in raw_bytes[:4096]:
             return "denied", json.dumps({"error": f"Binary file '{rel_norm}' cannot be inspected."}), False
         lines = raw_bytes.decode("utf-8", errors="replace").splitlines()

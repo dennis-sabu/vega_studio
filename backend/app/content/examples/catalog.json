@@ -1,0 +1,140 @@
+{
+  "schema_version": "1.0",
+  "examples": [
+    {
+      "id": "minimal_c_entry",
+      "title": "Minimal C Firmware & Portable Makefile",
+      "category": "Getting Started",
+      "difficulty": "beginner",
+      "verification_status": "template_verified",
+      "verification_note": "Verified against VEGA Studio's portable project scaffold (vega-project.json v1.0) and Make environment contract (CROSS_COMPILE, RISCV_ARCH=rv32i_zicsr, VEGA_MACHINE=THEJAS32). Hardware execution requires configuring a local VEGA SDK & target board.",
+      "short_description": "Clean freestanding C firmware entry point, app header, and portable Makefile wired to VEGA Studio build variables.",
+      "long_description": "Starts from a minimal, portable VEGA ARIES V3 firmware layout without hardcoding host paths. Demonstrates how VEGA Studio injects CROSS_COMPILE, RISCV_ARCH, and VEGA_MACHINE cleanly during Make builds.",
+      "compatible_boards": ["VEGA_ARIES_V3"],
+      "required_sdk": "riscv32-vega-elf-gcc + GNU Make (or local VEGA SDK for board startup linking)",
+      "tags": ["hello-world", "makefile", "rv32i_zicsr", "THEJAS32", "starter"],
+      "entry_file": "src/main.c",
+      "learning_objectives": [
+        "Understand portable vega-project.json + Makefile structure",
+        "Inspect freestanding C entry point without dynamic heap allocation",
+        "See how VEGA Studio passes CROSS_COMPILE, RISCV_ARCH, and VEGA_MACHINE"
+      ],
+      "prerequisites": [
+        "VEGA Studio Workspace",
+        "Optional: Phase 6 SDK Doctor configured for actual ELF compilation"
+      ],
+      "board_compatibility_note": "Configured for VEGA_ARIES_V3 (VEGA ET1031, rv32i_zicsr, THEJAS32).",
+      "related_doc_slugs": ["getting-started-ide", "building-firmware", "project-structure-and-workflows"]
+    },
+    {
+      "id": "riscv_rv32i_zicsr_csrs",
+      "title": "RISC-V rv32i_zicsr CSR & Cycle Counter Patterns",
+      "category": "RISC-V Architecture",
+      "difficulty": "intermediate",
+      "verification_status": "conceptual",
+      "verification_note": "Conceptual RISC-V ISA reference based on the ratified rv32i_zicsr specification (mcycle/mstatus CSR instructions). Check your local C-DAC VEGA SDK startup headers before enabling privileged CSR writes on hardware.",
+      "short_description": "Portable inline-assembly patterns for reading RISC-V Zicsr counters (mcycle/mstatus) with host-compile safety guards.",
+      "long_description": "Shows how the Zicsr ISA extension (explicitly configured in VEGA ARIES V3's target ISA `rv32i_zicsr`) provides atomic Control and Status Register reads/writes cleanly in embedded C.",
+      "compatible_boards": ["VEGA_ARIES_V3"],
+      "required_sdk": "RISC-V 32-bit GCC with -march=rv32i_zicsr; SDK startup code for hardware execution",
+      "tags": ["riscv", "zicsr", "csr", "mcycle", "assembly"],
+      "entry_file": "src/main.c",
+      "learning_objectives": [
+        "Read 64-bit mcycle safely on a 32-bit RISC-V core (avoiding rollover tearing)",
+        "Use GCC constraints cleanly with csrr/csrs/csrc instructions",
+        "Guard target-specific inline assembly with #ifdef __riscv"
+      ],
+      "prerequisites": ["Basic C pointers and inline assembly syntax"],
+      "board_compatibility_note": "Aligned with VEGA ARIES V3 ISA `rv32i_zicsr`. Board-specific machine CSRs beyond standard RISC-V require VEGA SDK documentation.",
+      "related_doc_slugs": ["riscv-basics", "vega-aries-v3-overview"]
+    },
+    {
+      "id": "embedded_c_sram_ringbuf",
+      "title": "256 KB SRAM Static Memory & SPSC Ring Buffer",
+      "category": "Memory & Embedded C",
+      "difficulty": "beginner",
+      "verification_status": "conceptual",
+      "verification_note": "Conceptual firmware architecture pattern using standard C11/freestanding code sized appropriately for VEGA ARIES V3's verified 256 KB on-chip SRAM.",
+      "short_description": "Deterministic static allocation, _Static_assert budget guards, and a lock-free single-producer ring buffer without malloc.",
+      "long_description": "Bare-metal VEGA ARIES V3 firmware runs inside 256 KB SRAM shared across code/rodata, .data/.bss, and call stack. This example avoids heap fragmentation using compile-time bounded ring buffers and static capacity checks.",
+      "compatible_boards": ["VEGA_ARIES_V3"],
+      "required_sdk": "Standard C toolchain; no external SDK peripherals required",
+      "tags": ["sram", "memory", "ring-buffer", "volatile", "embedded-c"],
+      "entry_file": "src/main.c",
+      "learning_objectives": [
+        "Use fixed-width integer types (<stdint.h>) cleanly",
+        "Implement a bounded single-producer/single-consumer ring buffer",
+        "Verify static buffer footprints with _Static_assert against SRAM limits"
+      ],
+      "prerequisites": ["C arrays, structs, and bitwise masking"],
+      "board_compatibility_note": "Respects VEGA_ARIES_V3 verified 256 KB on-chip SRAM ceiling.",
+      "related_doc_slugs": ["embedded-c-basics", "vega-aries-v3-overview"]
+    },
+    {
+      "id": "uart_framing_concepts",
+      "title": "UART Telemetry Framing & Serial Parser",
+      "category": "Serial & UART",
+      "difficulty": "intermediate",
+      "verification_status": "conceptual",
+      "verification_note": "Conceptual framing & parser implementation; UART hardware initialization must be plugged in from your verified local VEGA SDK driver.",
+      "short_description": "Bounded line/frame telemetry state machine with XOR checksum verification built for USB-UART serial debugging.",
+      "long_description": "Demonstrates how to structure deterministic UART telemetry lines (`$VEGA,<seq>,<mv>*CS\\r\\n`) and parse incoming commands cleanly without buffer overruns before binding to VEGA ARIES V3 UART drivers.",
+      "compatible_boards": ["VEGA_ARIES_V3"],
+      "required_sdk": "VEGA SDK UART RX/TX primitives required to run on USB-UART hardware",
+      "tags": ["uart", "serial", "telemetry", "checksum", "parser"],
+      "entry_file": "src/main.c",
+      "learning_objectives": [
+        "Build bounded non-blocking UART line parsers",
+        "Compute NMEA-style XOR checksums for noisy serial links",
+        "Match CR/LF line endings configured in VEGA Studio Serial Monitor"
+      ],
+      "prerequisites": ["Embedded C state machines"],
+      "board_compatibility_note": "Compatible conceptually with VEGA_ARIES_V3 CP210x/USB-UART workflows.",
+      "related_doc_slugs": ["serial-monitor", "uploading-firmware"]
+    },
+    {
+      "id": "isr_deferred_work_pattern",
+      "title": "ISR Flag Deferral & Event Queue Pattern",
+      "category": "Interrupts & Timing",
+      "difficulty": "intermediate",
+      "verification_status": "conceptual",
+      "verification_note": "Conceptual interrupt design pattern. Exact ET1031 PLIC/CLINT IRQ numbers and VEGA SDK ISR registration macros are omitted until inspected in your local SDK.",
+      "short_description": "Keep interrupt service routines minimal: latch compact event flags cleanly and process heavy work in the main loop.",
+      "long_description": "Long loops or blocking serial writes inside ISRs cause missed ticks and latency spikes. This example separates fast interrupt capture (`volatile uint32_t`) from bounded main-loop dispatch.",
+      "compatible_boards": ["VEGA_ARIES_V3"],
+      "required_sdk": "Local VEGA SDK interrupt/timer headers required to attach real hardware IRQs",
+      "tags": ["interrupts", "isr", "volatile", "timing", "architecture"],
+      "entry_file": "src/main.c",
+      "learning_objectives": [
+        "Minimize ISR execution time via deferred work flags",
+        "Protect shared state against compiler reordering with volatile",
+        "Recognize where verified SDK vector table/CSR setup hooks connect"
+      ],
+      "prerequisites": ["C bitfields and main-loop superloop timing"],
+      "board_compatibility_note": "Applies to bare-metal VEGA ET1031 single-core superloop firmware.",
+      "related_doc_slugs": ["riscv-basics", "embedded-c-basics"]
+    },
+    {
+      "id": "mpu6050_bmp280_driver_architecture",
+      "title": "MPU6050 IMU & BMP280 Barometer HAL Interface",
+      "category": "Sensors & Peripherals",
+      "difficulty": "advanced",
+      "verification_status": "conceptual",
+      "verification_note": "Conceptual fixed-point sensor architecture for the verified onboard sensors (MPU6050 IMU, BMP280 Barometer) on VEGA ARIES V3. Register addresses/HAL callbacks must be supplied by your verified local VEGA SDK I2C driver.",
+      "short_description": "Clean hardware-independent C sensor abstraction injecting your VEGA SDK I2C read/write callbacks cleanly.",
+      "long_description": "Separates fixed-point IMU/barometer scaling and health state tracking from low-level I2C bus calls using a small vtable (`vega_i2c_bus_t`) ready to bind to verified VEGA SDK headers without hardcoding unverified registers.",
+      "compatible_boards": ["VEGA_ARIES_V3"],
+      "required_sdk": "VEGA SDK I2C bus driver & verified sensor datasheet register definitions",
+      "tags": ["mpu6050", "bmp280", "sensors", "i2c", "hal"],
+      "entry_file": "src/main.c",
+      "learning_objectives": [
+        "Decouple sensor logic from unverified board I2C driver signatures",
+        "Use integer scaling instead of linking software floating-point math on rv32i",
+        "Propagate deterministic I2C error codes safely"
+      ],
+      "prerequisites": ["C structs, function pointers, fixed-point scaling"],
+      "board_compatibility_note": "Matches VEGA_ARIES_V3 verified onboard sensors (MPU6050 IMU + BMP280 Barometer); no unverified I2C register constants fabricated.",
+      "related_doc_slugs": ["vega-aries-v3-overview", "embedded-c-basics"]
+    }
+  ]
+}

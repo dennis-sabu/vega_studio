@@ -31,7 +31,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: "explorer", label: "Explorer", shortcut: "Ctrl+Shift+E", icon: Files },
   { id: "git", label: "Source Control", shortcut: "Ctrl+Shift+G", icon: GitBranch },
-  { id: "examples", label: "SDK Examples", icon: BookOpen },
+  { id: "examples", label: "Examples & Docs", icon: BookOpen },
   { id: "sdk", label: "SDK & Doctor", icon: Stethoscope },
   { id: "tools", label: "Project & Board Tools", icon: Cpu },
 ];

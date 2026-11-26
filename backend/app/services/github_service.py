@@ -34,7 +34,7 @@ from app.models.github import (
     GitRemoteInfo,
     validate_remote_name,
 )
-from app.services.git_service import GitService, GitServiceError
+from app.services.git_service import GitService, GitServiceError, get_git_service
 from app.services.process_utils import terminate_process_tree, utc_now_iso
 
 _MAX_OUTPUT_LINES = 500
@@ -181,7 +181,9 @@ class GitHubService:
 
     def __init__(self, app_settings: Optional[Settings] = None) -> None:
         self._settings = app_settings or settings
-        self._git_service = GitService(self._settings)
+        self._git_service = (
+            get_git_service() if app_settings is None else GitService(self._settings)
+        )
         self._op_lock = threading.Lock()
         self._active_op: Optional[_LiveOperation] = None
         self._latest_op: Optional[_LiveOperation] = None
@@ -212,10 +214,10 @@ class GitHubService:
         return env
 
     @staticmethod
-    def _creation_flags() -> int:
+    def _popen_kwargs() -> Dict[str, Any]:
         if os.name == "nt":
-            return getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-        return 0
+            return {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)}
+        return {"start_new_session": True}
 
     # ── GitHub CLI Detection & Auth ──────────────────────────────────────────────
 
@@ -254,7 +256,7 @@ class GitHubService:
                     errors="replace",
                     timeout=8,
                     env=self._subprocess_env(),
-                    creationflags=self._creation_flags(),
+                    **self._popen_kwargs(),
                 )
             except (OSError, subprocess.SubprocessError):
                 continue
@@ -293,7 +295,7 @@ class GitHubService:
                 errors="replace",
                 timeout=10,
                 env=self._subprocess_env(),
-                creationflags=self._creation_flags(),
+                **self._popen_kwargs(),
             )
         except subprocess.TimeoutExpired:
             return GitHubCliInfo(
@@ -493,7 +495,10 @@ class GitHubService:
             return self._parse_remotes(git_exe, repo_root)
 
     def update_remote(self, remote_name: str, req: GitHubRemoteUpdateRequest) -> List[GitRemoteInfo]:
-        cleaned_name = validate_remote_name(remote_name)
+        try:
+            cleaned_name = validate_remote_name(remote_name)
+        except ValueError as exc:
+            raise GitHubServiceError(str(exc), status_code=400) from exc
         if not req.confirm:
             raise GitHubServiceError(
                 "Changing an existing remote URL requires explicit confirmation.",
@@ -521,7 +526,10 @@ class GitHubService:
             return self._parse_remotes(git_exe, repo_root)
 
     def remove_remote(self, remote_name: str, req: GitHubRemoteRemoveRequest) -> List[GitRemoteInfo]:
-        cleaned_name = validate_remote_name(remote_name)
+        try:
+            cleaned_name = validate_remote_name(remote_name)
+        except ValueError as exc:
+            raise GitHubServiceError(str(exc), status_code=400) from exc
         if not req.confirm:
             raise GitHubServiceError(
                 "Removing a Git remote requires explicit confirmation.", status_code=400
@@ -650,7 +658,7 @@ class GitHubService:
                 errors="replace",
                 bufsize=1,
                 env=self._subprocess_env(disable_prompts=disable_prompts),
-                creationflags=self._creation_flags(),
+                **self._popen_kwargs(),
             )
         except OSError as exc:
             err = redact_secrets(f"Failed to start command: {exc}")
@@ -672,10 +680,17 @@ class GitHubService:
         def _reader() -> None:
             if proc.stdout is None:
                 return
-            for line in proc.stdout:
-                clean = redact_secrets(line.rstrip("\r\n"))
-                collected.append(clean)
-                op.append_line(clean)
+            try:
+                for line in proc.stdout:
+                    clean = redact_secrets(line.rstrip("\r\n"))
+                    if len(collected) < 2000:
+                        collected.append(clean)
+                    op.append_line(clean)
+            finally:
+                try:
+                    proc.stdout.close()
+                except OSError:
+                    pass
 
         reader_thread = threading.Thread(target=_reader, daemon=True)
         reader_thread.start()
@@ -808,7 +823,7 @@ class GitHubService:
                 errors="replace",
                 timeout=30,
                 env=self._subprocess_env(),
-                creationflags=self._creation_flags(),
+                **self._popen_kwargs(),
             )
         except subprocess.TimeoutExpired as exc:
             raise GitHubServiceError("Timed out waiting for GitHub repository creation.", status_code=504) from exc
@@ -1024,7 +1039,8 @@ class GitHubService:
 
         try:
             if not remote_exists:
-                op.cancellable = False
+                with self._op_lock:
+                    op.cancellable = False
                 op.append_line(f"Creating GitHub repository '{req.name}' ({req.visibility})...")
                 with self._git_service._get_repo_lock(repo_root):
                     https_url, remote_url, _ = self._create_remote_repo_blocking(
@@ -1047,18 +1063,20 @@ class GitHubService:
             self._finish_operation(op, status="failed", exit_code=1, error_message=exc.message)
             raise
 
-        op.cancellable = True
+        with self._op_lock:
+            op.cancellable = True
         op.append_line(f"Pushing branch '{status.current_branch}' to '{req.remote_name}' with upstream tracking...")
         push_cmd = [git_exe, "push", "-u", "--", req.remote_name, status.current_branch]
 
         def _worker() -> None:
-            self._run_streaming_command(
-                op,
-                push_cmd,
-                repo_root,
-                timeout_seconds=_SYNC_TIMEOUT_SECONDS,
-                classify_error=self._classify_push_error,
-            )
+            with self._git_service._get_repo_lock(repo_root):
+                self._run_streaming_command(
+                    op,
+                    push_cmd,
+                    repo_root,
+                    timeout_seconds=_SYNC_TIMEOUT_SECONDS,
+                    classify_error=self._classify_push_error,
+                )
 
         threading.Thread(target=_worker, daemon=True).start()
         return op.to_summary()
@@ -1407,7 +1425,11 @@ class GitHubService:
         )
 
         # If remote targets GitHub and gh is authenticated, enrich with metadata
-        if remote_info.is_github and remote_info.github_owner_repo:
+        if (
+            remote_info.is_github
+            and remote_info.github_owner_repo
+            and not remote_info.github_owner_repo.startswith("-")
+        ):
             available, gh_exe, _, _ = self.detect_gh()
             if available and gh_exe:
                 try:
@@ -1416,9 +1438,10 @@ class GitHubService:
                             gh_exe,
                             "repo",
                             "view",
-                            remote_info.github_owner_repo,
                             "--json",
                             "nameWithOwner,url,sshUrl,visibility,description,defaultBranchRef",
+                            "--",
+                            remote_info.github_owner_repo,
                         ],
                         cwd=str(repo_root),
                         capture_output=True,
@@ -1427,7 +1450,7 @@ class GitHubService:
                         errors="replace",
                         timeout=_QUICK_TIMEOUT_SECONDS,
                         env=self._subprocess_env(),
-                        creationflags=self._creation_flags(),
+                        **self._popen_kwargs(),
                     )
                     if proc.returncode == 0 and proc.stdout.strip():
                         import json

@@ -3,55 +3,88 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from contextlib import contextmanager
+import threading
+from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator, List, Optional
+
+_SCHEMA_LOCKS_GUARD = threading.Lock()
+_INITIALIZED_DBS: set[Path] = set()
+
+
+class PersistenceError(RuntimeError):
+    """Safe wrapper for local SQLite persistence failures."""
 
 
 class AppPersistence:
     """Manages local application state in SQLite without touching project files."""
 
     def __init__(self, db_path: Path) -> None:
-        self.db_path = db_path
+        self.db_path = db_path.resolve(strict=False)
         self._initialized = False
 
     def ensure_schema(self) -> None:
-        if self._initialized and self.db_path.exists():
+        if self._initialized and self.db_path in _INITIALIZED_DBS and self.db_path.exists():
             return
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS app_state (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-                """
-            )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS recent_projects (
-                    project_dir TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    board TEXT NOT NULL,
-                    schema_version TEXT NOT NULL,
-                    last_opened_at TEXT NOT NULL
-                )
-                """
-            )
-            conn.commit()
-        self._initialized = True
+        with _SCHEMA_LOCKS_GUARD:
+            if self.db_path in _INITIALIZED_DBS and self.db_path.exists():
+                self._initialized = True
+                return
+            try:
+                self.db_path.parent.mkdir(parents=True, exist_ok=True)
+                with closing(sqlite3.connect(self.db_path, timeout=10.0)) as conn:
+                    conn.execute("PRAGMA journal_mode=WAL")
+                    conn.execute("PRAGMA busy_timeout=5000")
+                    conn.execute("PRAGMA foreign_keys=ON")
+                    conn.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS app_state (
+                            key TEXT PRIMARY KEY,
+                            value TEXT NOT NULL,
+                            updated_at TEXT NOT NULL
+                        )
+                        """
+                    )
+                    conn.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS recent_projects (
+                            project_dir TEXT PRIMARY KEY,
+                            name TEXT NOT NULL,
+                            board TEXT NOT NULL,
+                            schema_version TEXT NOT NULL,
+                            last_opened_at TEXT NOT NULL
+                        )
+                        """
+                    )
+                    ver_row = conn.execute("PRAGMA user_version").fetchone()
+                    if ver_row is not None and int(ver_row[0]) == 0:
+                        conn.execute("PRAGMA user_version = 1")
+                    conn.commit()
+                _INITIALIZED_DBS.add(self.db_path)
+                self._initialized = True
+            except (OSError, sqlite3.Error) as exc:
+                raise PersistenceError(f"Failed initializing local application database: {exc}") from exc
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
         self.ensure_schema()
-        conn = sqlite3.connect(self.db_path)
+        try:
+            conn = sqlite3.connect(self.db_path, timeout=10.0)
+        except sqlite3.Error as exc:
+            raise PersistenceError(f"Unable to open local application database: {exc}") from exc
         conn.row_factory = sqlite3.Row
         try:
+            conn.execute("PRAGMA busy_timeout=5000")
+            conn.execute("PRAGMA foreign_keys=ON")
             yield conn
             conn.commit()
+        except sqlite3.Error as exc:
+            try:
+                conn.rollback()
+            except sqlite3.Error:
+                pass
+            raise PersistenceError(f"Local database operation failed: {exc}") from exc
         finally:
             conn.close()
 

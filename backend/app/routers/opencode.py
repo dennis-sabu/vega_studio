@@ -17,6 +17,7 @@ from fastapi import (
 )
 from pydantic import ValidationError
 
+from app.config import is_allowed_ws_origin
 from app.models.opencode import (
     OpenCodeConfigStateResponse,
     OpenCodeConfigUpdateRequest,

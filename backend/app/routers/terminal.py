@@ -8,6 +8,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
 
+from app.config import is_allowed_ws_origin
 from app.models.terminal import (
     TerminalCloseResponse,
     TerminalResizeRequest,
@@ -150,6 +151,9 @@ async def stream_terminal_session(
     service: TerminalService = Depends(get_terminal_service),
 ) -> None:
     """Bidirectional WebSocket channel carrying PTY output, input, resize, and lifecycle events."""
+    if not is_allowed_ws_origin(websocket.headers.get("origin")):
+        await websocket.close(code=1008)
+        return
     try:
         record = service.get_session_record(session_id)
     except TerminalServiceError as exc:

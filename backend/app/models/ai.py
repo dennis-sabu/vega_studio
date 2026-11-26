@@ -57,9 +57,15 @@ def validate_ai_base_url(raw: Optional[str]) -> Optional[str]:
         return None
     if len(cleaned) > 512:
         raise ValueError("Base URL exceeds 512 characters.")
+    if any(ch.isspace() or ord(ch) < 32 for ch in cleaned):
+        raise ValueError("Base URL contains invalid whitespace or control characters.")
     parsed = urlparse(cleaned)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+    if parsed.scheme not in ("http", "https") or not parsed.netloc or not parsed.hostname:
         raise ValueError("Base URL must be a valid http:// or https:// URL.")
+    try:
+        _ = parsed.port
+    except ValueError as exc:
+        raise ValueError("Base URL contains an invalid port number.") from exc
     if parsed.username is not None or parsed.password is not None:
         raise ValueError(
             "Base URL must not embed credentials (user:pass@host). Configure API keys in the credential store instead."
@@ -190,6 +196,18 @@ class AIConnectionTestRequest(BaseModel):
     @classmethod
     def _clean_url(cls, value: Optional[str]) -> Optional[str]:
         return validate_ai_base_url(value)
+
+    @field_validator("api_key_override")
+    @classmethod
+    def _clean_key_override(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        if not cleaned.isascii() or any(ord(c) < 32 for c in cleaned):
+            raise ValueError("API key override must contain printable ASCII characters only.")
+        return cleaned
 
 
 class AIConnectionTestResponse(BaseModel):

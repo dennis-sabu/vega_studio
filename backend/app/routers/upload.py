@@ -6,6 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 
+from app.config import is_allowed_ws_origin
 from app.models.upload import (
     DeviceListResponse,
     UploadHistoryResponse,
@@ -161,6 +162,9 @@ async def stream_upload_output(
     service: UploadService = Depends(get_upload_service),
 ) -> None:
     """Stream real-time upload log lines and progress events over local WebSocket."""
+    if not is_allowed_ws_origin(websocket.headers.get("origin")):
+        await websocket.close(code=1008)
+        return
     try:
         record = service.get_upload_record(upload_id)
     except UploadServiceError as exc:

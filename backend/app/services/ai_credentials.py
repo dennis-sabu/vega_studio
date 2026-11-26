@@ -266,13 +266,24 @@ class KeyringLibraryBackend(OSCredentialBackend):
     def get_secret(self, provider_id: AIProviderId) -> Optional[str]:
         if self._keyring is None:
             return None
-        val = self._keyring.get_password(self._service, provider_id)
-        return str(val) if val else None
+        try:
+            val = self._keyring.get_password(self._service, provider_id)
+            return str(val) if val else None
+        except Exception as exc:
+            raise CredentialStorageUnavailableError(
+                f"OS keyring read unavailable: {exc}", status_code=503
+            ) from exc
 
     def set_secret(self, provider_id: AIProviderId, secret: str) -> None:
         if self._keyring is None:
             raise CredentialStorageUnavailableError(self._reason, status_code=503)
-        self._keyring.set_password(self._service, provider_id, secret)
+        try:
+            self._keyring.set_password(self._service, provider_id, secret)
+        except Exception as exc:
+            raise CredentialStorageUnavailableError(
+                f"OS keyring write failed (ensure keyring is unlocked): {exc}",
+                status_code=503,
+            ) from exc
 
     def delete_secret(self, provider_id: AIProviderId) -> None:
         if self._keyring is None:
@@ -305,13 +316,19 @@ class LinuxSecretToolBackend(OSCredentialBackend):
         ok, _ = self.is_available()
         if not ok or not self._exe:
             return None
-        res = subprocess.run(
-            [self._exe, "lookup", "service", self._service, "provider", provider_id],
-            capture_output=True,
-            text=True,
-            timeout=5.0,
-            check=False,
-        )
+        try:
+            res = subprocess.run(
+                [self._exe, "lookup", "service", self._service, "provider", provider_id],
+                capture_output=True,
+                text=True,
+                timeout=5.0,
+                check=False,
+            )
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            raise CredentialStorageUnavailableError(
+                f"Linux Secret Service timed out or is inaccessible: {exc}",
+                status_code=503,
+            ) from exc
         if res.returncode != 0:
             return None
         val = res.stdout.strip()
@@ -321,23 +338,29 @@ class LinuxSecretToolBackend(OSCredentialBackend):
         ok, msg = self.is_available()
         if not ok or not self._exe:
             raise CredentialStorageUnavailableError(msg, status_code=503)
-        res = subprocess.run(
-            [
-                self._exe,
-                "store",
-                "--label",
-                f"VEGA Studio AI ({provider_id})",
-                "service",
-                self._service,
-                "provider",
-                provider_id,
-            ],
-            input=secret,
-            capture_output=True,
-            text=True,
-            timeout=5.0,
-            check=False,
-        )
+        try:
+            res = subprocess.run(
+                [
+                    self._exe,
+                    "store",
+                    "--label",
+                    f"VEGA Studio AI ({provider_id})",
+                    "service",
+                    self._service,
+                    "provider",
+                    provider_id,
+                ],
+                input=secret,
+                capture_output=True,
+                text=True,
+                timeout=5.0,
+                check=False,
+            )
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            raise CredentialStorageUnavailableError(
+                f"Linux Secret Service write failed or timed out (ensure keyring is unlocked): {exc}",
+                status_code=503,
+            ) from exc
         if res.returncode != 0:
             raise CredentialStorageUnavailableError(
                 "Linux Secret Service rejected credential store write. Ensure your keyring is unlocked.",
@@ -348,13 +371,16 @@ class LinuxSecretToolBackend(OSCredentialBackend):
         ok, _ = self.is_available()
         if not ok or not self._exe:
             return
-        subprocess.run(
-            [self._exe, "clear", "service", self._service, "provider", provider_id],
-            capture_output=True,
-            text=True,
-            timeout=5.0,
-            check=False,
-        )
+        try:
+            subprocess.run(
+                [self._exe, "clear", "service", self._service, "provider", provider_id],
+                capture_output=True,
+                text=True,
+                timeout=5.0,
+                check=False,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            pass
 
 
 class UnavailableOSCredentialBackend(OSCredentialBackend):
@@ -428,9 +454,12 @@ class AICredentialManager:
         with self._lock:
             secrets.extend(self._session_keys.values())
         for pid in ("openai", "groq", "openai_compatible"):
-            val = self.get_secret(pid)  # type: ignore[arg-type]
-            if val and val not in secrets:
-                secrets.append(val)
+            try:
+                val = self.get_secret(pid)  # type: ignore[arg-type]
+                if val and val not in secrets:
+                    secrets.append(val)
+            except CredentialStorageUnavailableError:
+                continue
         return secrets
 
     def set_secret(

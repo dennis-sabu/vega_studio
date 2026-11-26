@@ -51,7 +51,7 @@ const RESERVED_NAMES = new Set([
   "LPT9",
 ]);
 
-function validateProjectNameClient(raw: string): string | null {
+export function validateProjectNameClient(raw: string): string | null {
   const name = raw.trim();
   if (!name) return null; // Shown gently before submit
   if (name.length > 64) return "Name must be 64 characters or fewer.";

@@ -1,0 +1,329 @@
+{
+  "schema_version": "1.0",
+  "docs": [
+    {
+      "slug": "getting-started-ide",
+      "title": "Getting Started with VEGA Studio",
+      "category": "Getting Started",
+      "summary": "Overview of Home mode, Workspace mode, Explorer, Monaco editor, bottom panels, and assistant docks.",
+      "tags": ["quickstart", "workspace", "shortcuts", "layout"],
+      "badge": "ide_verified",
+      "estimated_minutes": 3,
+      "related_example_ids": ["minimal_c_entry"],
+      "related_slugs": ["vega-aries-v3-overview", "sdk-setup-and-doctor", "project-structure-and-workflows"],
+      "ide_actions": [
+        { "label": "Create New Project", "action_id": "new_project" },
+        { "label": "Open SDK Doctor", "action_id": "open_sdk_doctor" },
+        { "label": "Open Board Manager", "action_id": "open_board_manager" }
+      ],
+      "external_links": []
+    },
+    {
+      "slug": "vega-aries-v3-overview",
+      "title": "VEGA ARIES V3 Hardware Overview",
+      "category": "Board & Architecture",
+      "summary": "Verified hardware specifications for C-DAC VEGA ARIES V3 (VEGA ET1031, rv32i_zicsr, THEJAS32, 256 KB SRAM, IMU & Barometer).",
+      "tags": ["aries-v3", "et1031", "thejas32", "rv32i_zicsr", "hardware"],
+      "badge": "hardware_specs_verified",
+      "estimated_minutes": 4,
+      "related_example_ids": ["minimal_c_entry", "mpu6050_bmp280_driver_architecture", "embedded_c_sram_ringbuf"],
+      "related_slugs": ["board-configuration", "riscv-basics", "embedded-c-basics"],
+      "ide_actions": [
+        { "label": "Inspect Board Manager", "action_id": "open_board_manager" }
+      ],
+      "external_links": [
+        { "label": "C-DAC VEGA Processors Portal (External)", "url": "https://vegaprocessors.in/", "external": true }
+      ]
+    },
+    {
+      "slug": "project-structure-and-workflows",
+      "title": "Project Structure & Portable Firmware Workflows",
+      "category": "Getting Started",
+      "summary": "How vega-project.json keeps workspaces portable across hosts without storing machine-specific SDK paths or API keys.",
+      "tags": ["vega-project.json", "makefile", "portability", "explorer"],
+      "badge": "ide_verified",
+      "estimated_minutes": 3,
+      "related_example_ids": ["minimal_c_entry"],
+      "related_slugs": ["getting-started-ide", "board-configuration", "building-firmware"],
+      "ide_actions": [
+        { "label": "Create New Project", "action_id": "new_project" },
+        { "label": "Open Existing Project", "action_id": "open_project" }
+      ],
+      "external_links": []
+    },
+    {
+      "slug": "sdk-setup-and-doctor",
+      "title": "SDK Configuration & SDK Doctor",
+      "category": "Toolchain & Build",
+      "summary": "Configure local VEGA SDK paths, riscv32-vega-elf-gcc toolchain, GNU Make, and vega_xmodem.py without mutating host PATH.",
+      "tags": ["sdk", "doctor", "toolchain", "riscv32-vega-elf-gcc", "make"],
+      "badge": "ide_verified",
+      "estimated_minutes": 5,
+      "related_example_ids": ["minimal_c_entry"],
+      "related_slugs": ["board-configuration", "building-firmware", "troubleshooting"],
+      "ide_actions": [
+        { "label": "Open SDK Doctor", "action_id": "open_sdk_doctor" },
+        { "label": "Open SDK Settings", "action_id": "open_sdk_settings" }
+      ],
+      "external_links": []
+    },
+    {
+      "slug": "board-configuration",
+      "title": "Board Manager & Compatibility Validation",
+      "category": "Board & Architecture",
+      "summary": "Assign verified target boards to vega-project.json and validate ISA/machine/toolchain alignment.",
+      "tags": ["board", "compatibility", "THEJAS32", "rv32i_zicsr"],
+      "badge": "ide_verified",
+      "estimated_minutes": 3,
+      "related_example_ids": ["minimal_c_entry"],
+      "related_slugs": ["vega-aries-v3-overview", "sdk-setup-and-doctor", "building-firmware"],
+      "ide_actions": [
+        { "label": "Open Board Manager", "action_id": "open_board_manager" }
+      ],
+      "external_links": []
+    },
+    {
+      "slug": "building-firmware",
+      "title": "Building Firmware & Reading Compiler Diagnostics",
+      "category": "Toolchain & Build",
+      "summary": "Run Make builds (Build, Clean, Rebuild, Debug/Release), jump to diagnostics in Monaco, and debug failures.",
+      "tags": ["build", "make", "gcc", "diagnostics", "compiler"],
+      "badge": "ide_verified",
+      "estimated_minutes": 4,
+      "related_example_ids": ["minimal_c_entry", "embedded_c_sram_ringbuf"],
+      "related_slugs": ["sdk-setup-and-doctor", "uploading-firmware", "troubleshooting"],
+      "ide_actions": [
+        { "label": "Open Build Output", "action_id": "open_build" },
+        { "label": "Open SDK Doctor", "action_id": "open_sdk_doctor" }
+      ],
+      "external_links": []
+    },
+    {
+      "slug": "uploading-firmware",
+      "title": "Uploading Firmware via vega_xmodem.py",
+      "category": "Upload & Hardware",
+      "summary": "Preflight verification, port discovery, explicit upload confirmation, and safe subprocess process control.",
+      "tags": ["upload", "xmodem", "vega_xmodem.py", "flash", "uart"],
+      "badge": "ide_verified",
+      "estimated_minutes": 4,
+      "related_example_ids": ["uart_framing_concepts"],
+      "related_slugs": ["building-firmware", "serial-monitor", "troubleshooting"],
+      "ide_actions": [
+        { "label": "Open Upload Panel", "action_id": "open_upload" },
+        { "label": "Open Serial Monitor", "action_id": "open_serial" }
+      ],
+      "external_links": []
+    },
+    {
+      "slug": "serial-monitor",
+      "title": "USB-UART Serial Monitor",
+      "category": "Upload & Hardware",
+      "summary": "Connect to USB-UART devices, configure baud/8N1 framing and line endings, stream live logs, and inspect output with AI.",
+      "tags": ["serial", "uart", "baud", "monitor", "cp210x"],
+      "badge": "ide_verified",
+      "estimated_minutes": 3,
+      "related_example_ids": ["uart_framing_concepts"],
+      "related_slugs": ["uploading-firmware", "integrated-terminal"],
+      "ide_actions": [
+        { "label": "Open Serial Monitor", "action_id": "open_serial" }
+      ],
+      "external_links": []
+    },
+    {
+      "slug": "integrated-terminal",
+      "title": "Integrated PTY Terminal",
+      "category": "Workspace Tools",
+      "summary": "Interactive PTY-backed terminal sessions (ConPTY/Unix PTY) anchored to your active workspace with multi-tab persistence.",
+      "tags": ["terminal", "pty", "shell", "xterm"],
+      "badge": "ide_verified",
+      "estimated_minutes": 3,
+      "related_example_ids": [],
+      "related_slugs": ["building-firmware", "git-and-github"],
+      "ide_actions": [
+        { "label": "Open Integrated Terminal", "action_id": "open_terminal" }
+      ],
+      "external_links": []
+    },
+    {
+      "slug": "git-and-github",
+      "title": "Git Source Control & GitHub Integration",
+      "category": "Version Control & AI",
+      "summary": "Inspect diffs, stage/unstage, switch branches, manage GitHub remotes safely, and keep secrets out of commits.",
+      "tags": ["git", "github", "gh", "diff", "commit", "branches"],
+      "badge": "ide_verified",
+      "estimated_minutes": 4,
+      "related_example_ids": [],
+      "related_slugs": ["project-structure-and-workflows", "native-ai-and-opencode"],
+      "ide_actions": [
+        { "label": "Open Source Control", "action_id": "open_git" }
+      ],
+      "external_links": []
+    },
+    {
+      "slug": "native-ai-and-opencode",
+      "title": "Native VEGA AI Assistant & OpenCode CLI",
+      "category": "Version Control & AI",
+      "summary": "How VEGA Studio pairs a provider-independent Native AI assistant (OS keyring credentials) with permission-gated OpenCode CLI.",
+      "tags": ["ai", "opencode", "credentials", "security", "code-apply"],
+      "badge": "ide_verified",
+      "estimated_minutes": 5,
+      "related_example_ids": ["minimal_c_entry"],
+      "related_slugs": ["troubleshooting", "git-and-github"],
+      "ide_actions": [
+        { "label": "Open Native VEGA AI", "action_id": "open_native_ai" },
+        { "label": "Open OpenCode Dock", "action_id": "open_opencode" }
+      ],
+      "external_links": []
+    },
+    {
+      "slug": "riscv-basics",
+      "title": "RISC-V rv32i_zicsr Architecture Basics",
+      "category": "Board & Architecture",
+      "summary": "32-bit integer register conventions (ABI names x0-x31), Zicsr CSR access instructions, and bare-metal alignment basics.",
+      "tags": ["riscv", "isa", "rv32i", "zicsr", "abi", "csr"],
+      "badge": "conceptual",
+      "estimated_minutes": 5,
+      "related_example_ids": ["riscv_rv32i_zicsr_csrs", "isr_deferred_work_pattern"],
+      "related_slugs": ["vega-aries-v3-overview", "embedded-c-basics"],
+      "ide_actions": [],
+      "external_links": [
+        { "label": "RISC-V International Specifications (External)", "url": "https://riscv.org/technical/specifications/", "external": true }
+      ]
+    },
+    {
+      "slug": "embedded-c-basics",
+      "title": "Embedded C Fundamentals for 256 KB SRAM",
+      "category": "Board & Architecture",
+      "summary": "Fixed-width <stdint.h> types, volatile MMIO/ISR discipline, static buffers over malloc, and compile-time size checks.",
+      "tags": ["embedded-c", "volatile", "sram", "stdint", "static-assert"],
+      "badge": "conceptual",
+      "estimated_minutes": 4,
+      "related_example_ids": ["embedded_c_sram_ringbuf", "isr_deferred_work_pattern", "mpu6050_bmp280_driver_architecture"],
+      "related_slugs": ["vega-aries-v3-overview", "riscv-basics", "building-firmware"],
+      "ide_actions": [],
+      "external_links": []
+    },
+    {
+      "slug": "troubleshooting",
+      "title": "Troubleshooting IDE, Toolchain & Hardware Issues",
+      "category": "Troubleshooting",
+      "summary": "Practical fixes for missing SDK paths, board compatibility errors, locked serial ports, and AI provider errors.",
+      "tags": ["troubleshooting", "errors", "sdk", "serial", "upload"],
+      "badge": "ide_verified",
+      "estimated_minutes": 4,
+      "related_example_ids": ["minimal_c_entry"],
+      "related_slugs": ["sdk-setup-and-doctor", "building-firmware", "uploading-firmware", "serial-monitor"],
+      "ide_actions": [
+        { "label": "Run SDK Doctor", "action_id": "open_sdk_doctor" },
+        { "label": "Open Board Manager", "action_id": "open_board_manager" }
+      ],
+      "external_links": []
+    }
+  ],
+  "guides": [
+    {
+      "id": "guide-first-firmware",
+      "title": "1. Create & Inspect Your First VEGA Firmware Project",
+      "description": "Set up a portable VEGA ARIES V3 project from an example or template and verify board target alignment.",
+      "difficulty": "beginner",
+      "estimated_minutes": 5,
+      "steps": [
+        {
+          "step_number": 1,
+          "title": "Select Starter Example or Create Project",
+          "detail": "Pick 'Minimal C Firmware & Portable Makefile' in the Examples tab or create a fresh workspace via New Project.",
+          "doc_slug": "project-structure-and-workflows",
+          "ide_action": { "label": "New Project", "action_id": "new_project" }
+        },
+        {
+          "step_number": 2,
+          "title": "Verify Target Board Profile",
+          "detail": "Open Board Manager and confirm vega-project.json targets VEGA_ARIES_V3 (VEGA ET1031, rv32i_zicsr, THEJAS32).",
+          "doc_slug": "board-configuration",
+          "ide_action": { "label": "Open Board Manager", "action_id": "open_board_manager" }
+        },
+        {
+          "step_number": 3,
+          "title": "Inspect src/main.c and Makefile",
+          "detail": "Open src/main.c and Makefile in Monaco Editor cleanly from the left Explorer sidebar.",
+          "doc_slug": "getting-started-ide",
+          "ide_action": null
+        }
+      ]
+    },
+    {
+      "id": "guide-sdk-build-upload",
+      "title": "2. Validate SDK, Compile Firmware & Flash via XMODEM",
+      "description": "Diagnose your local VEGA toolchain, run Make builds, and upload artifacts safely.",
+      "difficulty": "beginner",
+      "estimated_minutes": 7,
+      "steps": [
+        {
+          "step_number": 1,
+          "title": "Configure Local SDK & Toolchain Paths",
+          "detail": "Point VEGA Studio to your host VEGA SDK directory and riscv32-vega-elf toolchain bin without altering global PATH.",
+          "doc_slug": "sdk-setup-and-doctor",
+          "ide_action": { "label": "Open SDK Settings", "action_id": "open_sdk_settings" }
+        },
+        {
+          "step_number": 2,
+          "title": "Run SDK Doctor Diagnostics",
+          "detail": "Confirm compiler target triple execution, GNU Make, Python 3, and vega_xmodem.py static checks pass.",
+          "doc_slug": "sdk-setup-and-doctor",
+          "ide_action": { "label": "Open SDK Doctor", "action_id": "open_sdk_doctor" }
+        },
+        {
+          "step_number": 3,
+          "title": "Run Make Build & Inspect Diagnostics",
+          "detail": "Trigger Build in the bottom panel. Click any parsed warning or error to jump to line/column in Monaco or ask Native AI.",
+          "doc_slug": "building-firmware",
+          "ide_action": { "label": "Open Build Output", "action_id": "open_build" }
+        },
+        {
+          "step_number": 4,
+          "title": "Run Upload Preflight & Flash Hardware",
+          "detail": "Disconnect Serial Monitor cleanly, select the USB-UART port (/dev/ttyUSB0 or COMx), review preflight checks, and confirm upload.",
+          "doc_slug": "uploading-firmware",
+          "ide_action": { "label": "Open Upload Panel", "action_id": "open_upload" }
+        },
+        {
+          "step_number": 5,
+          "title": "Monitor Live UART Output",
+          "detail": "Open Serial Monitor, choose matching baud rate (e.g., 115200 8N1), and inspect live board logs.",
+          "doc_slug": "serial-monitor",
+          "ide_action": { "label": "Open Serial Monitor", "action_id": "open_serial" }
+        }
+      ]
+    },
+    {
+      "id": "guide-git-ai-workflow",
+      "title": "3. Source Control, GitHub & Safe AI Assistance",
+      "description": "Manage commits cleanly and use Native VEGA AI + OpenCode without sacrificing workspace or credential safety.",
+      "difficulty": "intermediate",
+      "estimated_minutes": 6,
+      "steps": [
+        {
+          "step_number": 1,
+          "title": "Track Firmware in Git & GitHub",
+          "detail": "Initialize Git inside your project folder, review file diffs in Monaco, and push cleanly using GitHub CLI (gh).",
+          "doc_slug": "git-and-github",
+          "ide_action": { "label": "Open Source Control", "action_id": "open_git" }
+        },
+        {
+          "step_number": 2,
+          "title": "Ask Native VEGA AI with Scoped Context",
+          "detail": "Configure OpenAI, Groq, or local Ollama in OS Credential Manager and attach selected code, compiler errors, or serial lines.",
+          "doc_slug": "native-ai-and-opencode",
+          "ide_action": { "label": "Open Native AI", "action_id": "open_native_ai" }
+        },
+        {
+          "step_number": 3,
+          "title": "Use OpenCode CLI with Explicit Approvals",
+          "detail": "For multi-file tasks with OpenCode CLI, retain Ask Before Actions mode and inspect diffs cleanly.",
+          "doc_slug": "native-ai-and-opencode",
+          "ide_action": { "label": "Open OpenCode", "action_id": "open_opencode" }
+        }
+      ]
+    }
+  ]
+}
