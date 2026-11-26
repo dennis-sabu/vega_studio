@@ -12,7 +12,7 @@ import {
 import * as fs from 'fs';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
-import { getActiveBackendUrl, killBackend, spawnBackend } from './backend';
+import { getActiveBackendUrl, killBackend, prepareBackendPort, spawnBackend } from './backend';
 import { logError, logInfo, logWarn } from './logger';
 import {
   createMainWindow,
@@ -205,6 +205,7 @@ ipcMain.handle(
   'set-titlebar-overlay-color',
   (event, color: unknown, symbolColor?: unknown): void => {
     assertTrustedIpcOrigin(event);
+    if (process.platform !== 'win32') return;
     if (!mainWindow || mainWindow.isDestroyed()) return;
     // Validate hex color strings before passing to native API.
     const isHex = (v: unknown): v is string =>
@@ -319,14 +320,18 @@ function registerPackagedAppProtocol(): void {
   });
 }
 
-function startBackendInBackground(): void {
+function startBackendInBackground(preselectedPort?: number): void {
   if (isQuitting) return;
   logInfo('main', 'Spawning backend in background...');
-  spawnBackend(REPO_ROOT, (exitMsg) => {
-    if (!isQuitting && mainWindow && !mainWindow.isDestroyed()) {
-      logWarn('main', `Backend exited while app running: ${exitMsg}`);
-    }
-  })
+  spawnBackend(
+    REPO_ROOT,
+    (exitMsg) => {
+      if (!isQuitting && mainWindow && !mainWindow.isDestroyed()) {
+        logWarn('main', `Backend exited while app running: ${exitMsg}`);
+      }
+    },
+    preselectedPort
+  )
     .then(() => {
       logInfo('main', `Backend ready at ${getActiveBackendUrl()}`);
     })
@@ -347,6 +352,13 @@ function startBackendInBackground(): void {
 async function shutdownAndQuit(exitCode?: number): Promise<void> {
   if (isQuitting) return;
   isQuitting = true;
+
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.destroy();
+    }
+  }
+  mainWindow = null;
 
   logInfo('main', 'Shutting down backend before quit...');
   try {
@@ -382,13 +394,14 @@ process.on('unhandledRejection', (reason) => {
 });
 
 if (gotSingleInstanceLock) {
-  app.on('ready', () => {
+  app.on('ready', async () => {
     logInfo('main', `Electron app ready (packaged=${app.isPackaged})`);
     registerPackagedAppProtocol();
     configureSessionSecurity();
 
-    // Start backend first so port assignment completes before renderer reads getBackendUrl()
-    startBackendInBackground();
+    // Reserve backend port before creating window so renderer getBackendUrl() is deterministic
+    const backendPort = await prepareBackendPort();
+    startBackendInBackground(backendPort);
     mainWindow = createMainWindow();
 
     mainWindow.on('closed', () => {
@@ -398,7 +411,9 @@ if (gotSingleInstanceLock) {
 
   app.on('window-all-closed', () => {
     logInfo('main', 'All windows closed — quitting');
-    app.quit();
+    if (!isQuitting) {
+      app.quit();
+    }
   });
 
   app.on('before-quit', (event) => {

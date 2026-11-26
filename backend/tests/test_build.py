@@ -176,8 +176,37 @@ def test_build_preflight_validation_and_env_construction(isolated_build_env):
             make_path=str(env_ctx["make_exe"]),
         )
     )
-    with pytest.raises(Exception) as missing_sdk:
-        svc.start_build(BuildRequest(project_dir=str(project_dir), operation="build"))
+    # Unset SDK env vars and redirect HOME to an empty directory so
+    # discover_environment cannot fall back to ~/vega/vega-sdk or the fixture's
+    # own tmp_path/vega-sdk; also patch shutil.which and system /opt paths.
+    empty_home = env_ctx["tmp_path"] / "empty_home"
+    empty_home.mkdir(exist_ok=True)
+    saved_sdk_env = {
+        k: os.environ.pop(k, None)
+        for k in ("VEGA_SDK", "VEGA_SDK_HOME", "VEGA_TOOLS", "RISCV_TOOLS")
+    }
+    saved_home = os.environ.get("HOME")
+    saved_userprofile = os.environ.get("USERPROFILE")
+    os.environ["HOME"] = str(empty_home)
+    os.environ["USERPROFILE"] = str(empty_home)
+    try:
+        from unittest.mock import patch
+
+        with patch("app.services.sdk_service.shutil.which", return_value=None):
+            with pytest.raises(Exception) as missing_sdk:
+                svc.start_build(BuildRequest(project_dir=str(project_dir), operation="build"))
+    finally:
+        for k, v in saved_sdk_env.items():
+            if v is not None:
+                os.environ[k] = v
+        if saved_home is not None:
+            os.environ["HOME"] = saved_home
+        else:
+            os.environ.pop("HOME", None)
+        if saved_userprofile is not None:
+            os.environ["USERPROFILE"] = saved_userprofile
+        else:
+            os.environ.pop("USERPROFILE", None)
     assert "sdk" in str(missing_sdk.value).lower()
 
 

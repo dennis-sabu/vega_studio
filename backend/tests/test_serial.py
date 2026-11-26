@@ -162,6 +162,46 @@ class TestDeviceDiscovery:
         assert result.devices[0].port == "COM5"
         assert result.devices[0].vendor_id == "1234"
 
+    def test_discover_devices_with_pyserial_linux_dev_paths(self):
+        """Linux /dev/ttyUSB* ports returned by PySerial must check os.access cleanly."""
+        mock_port = MagicMock()
+        mock_port.device = "/dev/ttyUSB0"
+        mock_port.description = "CP2102 USB to UART"
+        mock_port.hwid = "USB VID:PID=10C4:EA60"
+        mock_port.manufacturer = "Silicon Labs"
+        mock_port.serial_number = "0001"
+        mock_port.vid = 0x10C4
+        mock_port.pid = 0xEA60
+
+        mock_serial = _mock_serial_module()
+        mock_serial.tools.list_ports.comports.return_value = [mock_port]
+
+        svc = make_service()
+        with patch.dict(
+            "sys.modules",
+            {
+                "serial": mock_serial,
+                "serial.tools": mock_serial.tools,
+                "serial.tools.list_ports": mock_serial.tools.list_ports,
+            },
+        ):
+            with (
+                patch("app.services.serial_service._host_os_name", return_value="linux"),
+                patch("app.services.serial_service.PYSERIAL_AVAILABLE", True),
+                patch("app.services.serial_service.serial", mock_serial),
+                patch("app.services.serial_service.os.access", return_value=True),
+                patch(
+                    "app.services.upload_service.UploadService._discover_linux_devfs_ports",
+                    return_value=([], []),
+                ),
+            ):
+                result = svc.discover_devices()
+
+        assert result.discovery_method == "pyserial"
+        assert len(result.devices) == 1
+        assert result.devices[0].port == "/dev/ttyUSB0"
+        assert result.devices[0].accessible is True
+
     def test_discover_devices_no_pyserial_windows(self):
         """Without PySerial on Windows, falls back to registry (or returns empty)."""
         svc = make_service()

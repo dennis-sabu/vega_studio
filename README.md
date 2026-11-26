@@ -29,6 +29,27 @@ Phase 1 establishes the monorepo skeleton, development tooling, and the three-la
 
 ---
 
+## Quick Start (Ubuntu 24.04 LTS / Linux)
+
+```bash
+# 1. Clone the repository
+git clone <repo-url> vega_studio
+cd vega_studio
+
+# 2. Install Node dependencies & Python backend virtualenv
+npm run setup
+
+# 3. Run desktop app in development mode
+npm run dev
+
+# 4. Build distributable Ubuntu .deb & AppImage artifacts into release/
+bash scripts/build-linux-release.sh
+```
+
+See [docs/LINUX_RELEASE.md](./docs/LINUX_RELEASE.md) for end-user `.deb` / AppImage installation, serial port (`dialout`) permissions, SDK setup, and troubleshooting.
+
+---
+
 ## Quick Start (Windows)
 
 ```powershell

@@ -1,5 +1,6 @@
 {
   "name": "vega-studio-electron",
+  "productName": "VEGA Studio",
   "version": "0.1.0",
   "private": true,
   "description": "Desktop Firmware IDE for C-DAC VEGA ARIES V3 RISC-V",

@@ -60,6 +60,7 @@ linux:
         - x64
 
 deb:
+  packageName: vega-studio
   packageCategory: devel
   priority: optional
   maintainer: VEGA Studio Team <maintainers@vega-studio.local>

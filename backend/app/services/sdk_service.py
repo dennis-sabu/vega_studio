@@ -220,8 +220,14 @@ def _build_safe_subprocess_env(config: SdkConfig) -> Dict[str, str]:
     if config.toolchain_root:
         tc_path = _resolve_existing_path(config.toolchain_root)
         if tc_path:
+            _add_path_dir(str(tc_path / "toolchain" / "bin"))
             _add_path_dir(str(tc_path / "bin"))
             _add_path_dir(str(tc_path))
+
+    if config.compiler_path:
+        comp_path = _resolve_existing_path(config.compiler_path)
+        if comp_path and comp_path.parent.is_dir():
+            _add_path_dir(str(comp_path.parent))
 
     system_path = os.environ.get("PATH", "")
     if system_path:
@@ -475,7 +481,11 @@ class SdkService:
                 detected_compiler = cand
 
         if detected_compiler is None and detected_tc is not None:
-            for sub in (detected_tc / "bin", detected_tc):
+            for sub in (
+                detected_tc / "bin",
+                detected_tc / "toolchain" / "bin",
+                detected_tc,
+            ):
                 _note_searched(str(sub))
                 cand = self._find_exe_in_dir(sub, (gcc_name,))
                 if cand:
@@ -1051,7 +1061,9 @@ class SdkService:
         prefix = eff.cross_compile_prefix or DEFAULT_CROSS_COMPILE_PREFIX
 
         if resolved_tc and resolved_tc.is_dir():
-            has_bin = (resolved_tc / "bin").is_dir()
+            has_bin = (resolved_tc / "bin").is_dir() or (
+                resolved_tc / "toolchain" / "bin"
+            ).is_dir()
             checks.append(
                 DiagnosticCheckResult(
                     id="toolchain_dir_exists",

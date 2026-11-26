@@ -162,14 +162,7 @@ export function getActiveBackendPort(): number {
   return activeBackendPort;
 }
 
-export async function spawnBackend(
-  repoRoot: string,
-  onUnexpectedExit?: (reason: string) => void
-): Promise<void> {
-  const runtimeRoot = resolveRuntimeRoot(repoRoot);
-  const dataDir = getCanonicalBackendDataDir();
-  fs.mkdirSync(dataDir, { recursive: true });
-
+export async function prepareBackendPort(): Promise<number> {
   let port = DEFAULT_BACKEND_PORT;
   const preferredFree = await checkPortFree(DEFAULT_BACKEND_PORT);
   if (!preferredFree) {
@@ -179,6 +172,20 @@ export async function spawnBackend(
       `Default port ${DEFAULT_BACKEND_PORT} is occupied; selected free loopback port ${port}.`
     );
   }
+  activeBackendPort = port;
+  return port;
+}
+
+export async function spawnBackend(
+  repoRoot: string,
+  onUnexpectedExit?: (reason: string) => void,
+  preselectedPort?: number
+): Promise<void> {
+  const runtimeRoot = resolveRuntimeRoot(repoRoot);
+  const dataDir = getCanonicalBackendDataDir();
+  fs.mkdirSync(dataDir, { recursive: true });
+
+  const port = preselectedPort ?? (await prepareBackendPort());
   activeBackendPort = port;
 
   let command: string;

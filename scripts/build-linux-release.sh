@@ -47,8 +47,21 @@ rm -rf "${REPO_ROOT}/release"
 mkdir -p "${REPO_ROOT}/release"
 
 echo "=== 8. Packaging Electron (${TARGETS}) ==="
-# shellcheck disable=SC2086
-npx --yes --prefix electron electron-builder --config electron/electron-builder.yml --linux ${TARGETS} --x64 --publish never
+ELECTRON_PKG="$(node -e "console.log(require.resolve('electron/package.json', { paths: ['${REPO_ROOT}', '${REPO_ROOT}/electron'] }))")"
+ELECTRON_VERSION="$(node -e "console.log(require(process.argv[1]).version)" "${ELECTRON_PKG}")"
+ELECTRON_DIST="$(dirname "${ELECTRON_PKG}")/dist"
+(
+  cd "${REPO_ROOT}/electron"
+  # shellcheck disable=SC2086
+  "${REPO_ROOT}/node_modules/.bin/electron-builder" \
+    --config electron-builder.yml \
+    --projectDir "${REPO_ROOT}/electron" \
+    -c.electronVersion="${ELECTRON_VERSION}" \
+    -c.electronDist="${ELECTRON_DIST}" \
+    --linux ${TARGETS} \
+    --x64 \
+    --publish never
+)
 
 echo "=== 9. Computing release checksums ==="
 (

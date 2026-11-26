@@ -204,6 +204,11 @@ def test_diagnostics_missing_toolchain_missing_uploader_and_timeout(
     service, tmp_path = isolated_sdk_service
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    # Unset SDK env vars so auto-discovery cannot fall back to the real on-disk SDK
+    monkeypatch.delenv("VEGA_SDK", raising=False)
+    monkeypatch.delenv("VEGA_SDK_HOME", raising=False)
+    monkeypatch.delenv("VEGA_TOOLS", raising=False)
+    monkeypatch.delenv("RISCV_TOOLS", raising=False)
 
     # Empty temp environment with configured bad/missing paths + Make timeout
     fake_make = tmp_path / "make.exe"
@@ -255,6 +260,11 @@ def test_windows_graceful_handling_and_posix_staged_paths(
     service, tmp_path = isolated_sdk_service
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    # Unset SDK env vars so auto-discovery cannot fall back to the real on-disk SDK
+    monkeypatch.delenv("VEGA_SDK", raising=False)
+    monkeypatch.delenv("VEGA_SDK_HOME", raising=False)
+    monkeypatch.delenv("VEGA_TOOLS", raising=False)
+    monkeypatch.delenv("RISCV_TOOLS", raising=False)
 
     # Stage a Linux POSIX path while running on Windows
     with patch("app.services.sdk_service._host_os_name", return_value="windows"):
@@ -393,3 +403,39 @@ async def test_sdk_api_endpoints_contracts(isolated_sdk_service, monkeypatch):
         r_reset = await client.post("/api/sdk/config/reset")
         assert r_reset.status_code == 200
         assert r_reset.json()["is_customized"] is False
+
+
+def test_sdk_discovery_finds_nested_toolchain_bin_layout(
+    isolated_sdk_service, monkeypatch
+):
+    """Ensure C-DAC VEGA's nested `vega-tools-rv32/toolchain/bin` layout is discovered."""
+    service, tmp_path = isolated_sdk_service
+    sdk_root = tmp_path / "vega" / "vega-sdk"
+    (sdk_root / "examples").mkdir(parents=True)
+    tc_root = tmp_path / "vega" / "vega-tools-rv32"
+    tc_bin = tc_root / "toolchain" / "bin"
+    tc_bin.mkdir(parents=True)
+    gcc_exe = tc_bin / "riscv32-vega-elf-gcc"
+    gcc_exe.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    gcc_exe.chmod(0o755)
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    for var in ("VEGA_SDK", "VEGA_SDK_HOME", "VEGA_TOOLS", "RISCV_TOOLS", "VEGA_XMODEM"):
+        monkeypatch.delenv(var, raising=False)
+
+    with (
+        patch("app.services.sdk_service._host_os_name", return_value="linux"),
+        patch("app.services.sdk_service.shutil.which", return_value=None),
+    ):
+        discovery = service.discover_environment(apply_to_config=False)
+
+    assert discovery.toolchain_root == str(tc_root.resolve())
+    assert discovery.compiler_path == str(gcc_exe.resolve())
+
+    import os
+    from app.services.sdk_service import _build_safe_subprocess_env
+
+    env = _build_safe_subprocess_env(discovery.suggested_config)
+    path_entries = env["PATH"].split(os.pathsep)
+    assert str(tc_bin.resolve()) in path_entries

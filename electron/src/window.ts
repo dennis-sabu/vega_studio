@@ -208,6 +208,10 @@ export function createMainWindow(): BrowserWindow {
   });
 
   win.webContents.on('render-process-gone', (_event, details) => {
+    if (details.reason === 'clean-exit') {
+      logInfo('window', 'Renderer exited cleanly');
+      return;
+    }
     logError(
       'window',
       `Renderer process gone: reason=${details.reason}, exitCode=${details.exitCode}`

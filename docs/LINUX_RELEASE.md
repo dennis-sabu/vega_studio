@@ -10,7 +10,13 @@
 
 ### Option A — Debian `.deb` Package (Recommended)
 
-Install from a local terminal using `apt` so shared desktop libraries resolve automatically:
+#### End-User Graphical Install (No Terminal Required)
+1. Download `vega-studio_<version>_amd64.deb`.
+2. Double-click the `.deb` file in **Files** (or right-click -> **Open With App Center / Software Install**) and click **Install**.
+3. Open **VEGA Studio** from the **Ubuntu Applications** menu (under *Development* / *IDE*).
+
+#### Terminal Install (`apt`)
+If you prefer installing from a terminal (or want `apt` to resolve desktop libraries in one step):
 
 ```bash
 sha256sum -c SHA256SUMS.txt --ignore-missing
@@ -22,13 +28,13 @@ Launch VEGA Studio from:
 - **Ubuntu Application Menu** (`VEGA Studio` under Development / IDE)
 - **Terminal**: `vega-studio`
 
-To uninstall without deleting your projects or local IDE settings:
+To uninstall cleanly (via **App Center**, or via `apt`) without deleting your projects or local IDE settings:
 
 ```bash
 sudo apt remove vega-studio
 ```
 
-User projects (`~/VEGA Studio Projects`) and user application data (`~/.local/share/vega-studio` and `~/.config/VEGA Studio`) are **preserved on uninstall**.
+User projects (`~/Documents/VEGA Studio Projects` or `~/VEGA Studio Projects`) and user application data (`~/.local/share/vega-studio` and `~/.config/VEGA Studio`) are **preserved on uninstall**.
 
 ---
 
@@ -96,7 +102,7 @@ VEGA Studio strictly separates read-only installation files (`/opt/VEGA Studio/`
 - **Application Data, SQLite DB & Backend Logs:**  
   `$XDG_DATA_HOME/vega-studio` (default `~/.local/share/vega-studio/` — contains `vega_studio.db`, `logs/backend.log`)
 - **Electron Window State & Shell Logs:**  
-  `~/.config/vega-studio/` and `~/.config/vega-studio/logs/vega-electron.log`
+  `~/.config/VEGA Studio/` and `~/.config/VEGA Studio/logs/vega-electron.log`
 - **Default Firmware Projects Folder:**  
   `~/VEGA Studio Projects/`
 

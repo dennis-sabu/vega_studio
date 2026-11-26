@@ -223,13 +223,34 @@ class UploadService:
             "print(json.dumps(out))\n"
         )
 
-        # Prefer running probe under configured Python when pyserial exists there
+        # Prefer running probe under configured Python when pyserial exists there,
+        # otherwise fall back to bundled/in-process pyserial when available.
+        raw_list: Optional[List[Any]] = None
         target_py: Optional[Path] = py_exe if (py_exe and py_exe.is_file()) else None
         if target_py is None and not is_frozen_backend() and importlib.util.find_spec("serial") is not None:
             target_py = Path(sys.executable)
 
-        # In frozen packaging mode (without explicit external python_path), query bundled pyserial directly
-        if target_py is None:
+        if target_py is not None:
+            try:
+                proc = subprocess.run(
+                    [str(target_py), "-c", probe_script],
+                    shell=False,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=3.5,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+                if proc.returncode == 0:
+                    parsed = json.loads(proc.stdout.strip() or "[]")
+                    if not isinstance(parsed, list):
+                        return None, "Unexpected pyserial port enumeration format."
+                    raw_list = parsed
+            except (subprocess.TimeoutExpired, OSError, json.JSONDecodeError):
+                raw_list = None
+
+        if raw_list is None:
             if importlib.util.find_spec("serial") is None:
                 return None, None
             try:
@@ -251,25 +272,6 @@ class UploadService:
                         }
                     )
             except Exception:
-                return None, None
-        else:
-            try:
-                proc = subprocess.run(
-                    [str(target_py), "-c", probe_script],
-                    shell=False,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=3.5,
-                    encoding="utf-8",
-                    errors="replace",
-                )
-                if proc.returncode != 0:
-                    return None, None
-                raw_list = json.loads(proc.stdout.strip() or "[]")
-                if not isinstance(raw_list, list):
-                    return None, "Unexpected pyserial port enumeration format."
-            except (subprocess.TimeoutExpired, OSError, json.JSONDecodeError):
                 return None, None
 
         devices: List[SerialDeviceInfo] = []
@@ -1382,6 +1384,11 @@ class UploadService:
 
             rc = proc.returncode
             final_exit = rc
+            # If the process was killed externally (by cancel_upload) before the loop
+            # saw cancel_event, reconcile status so it is never wrongly reported as "failed".
+            if final_status not in ("cancelled", "timed_out") and record.cancel_event.is_set():
+                final_status = "cancelled"
+                final_error = "Upload cancelled by user."
             if final_status == "timed_out":
                 self._append_log(record, "system", f"[TIMEOUT] {final_error}")
             elif final_status == "cancelled":

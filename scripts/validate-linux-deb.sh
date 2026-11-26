@@ -27,11 +27,22 @@ if [ -z "${DEB_PATH}" ] || [ ! -f "${DEB_PATH}" ]; then
 fi
 
 echo "=== Inspecting Debian package: ${DEB_PATH} ==="
-dpkg-deb -I "${DEB_PATH}"
+DEB_INFO="$(dpkg-deb -I "${DEB_PATH}")"
+echo "${DEB_INFO}"
+if ! grep -Eq "^ Package: vega-studio$" <<< "${DEB_INFO}"; then
+  echo "[validate-deb] ERROR: Expected Debian Package name 'vega-studio'." >&2
+  exit 1
+fi
 
 CONTENTS_FILE="$(mktemp)"
-trap 'rm -f "${CONTENTS_FILE}"' EXIT
+DESKTOP_TMP="$(mktemp --suffix=.desktop)"
+trap 'rm -f "${CONTENTS_FILE}" "${DESKTOP_TMP}"' EXIT
 dpkg-deb -c "${DEB_PATH}" > "${CONTENTS_FILE}"
+
+if command -v desktop-file-validate >/dev/null 2>&1; then
+  dpkg-deb --fsys-tarfile "${DEB_PATH}" | tar -xO ./usr/share/applications/vega-studio.desktop > "${DESKTOP_TMP}"
+  desktop-file-validate "${DESKTOP_TMP}"
+fi
 
 echo "=== Checking required payload paths inside .deb ==="
 for required_pattern in \
