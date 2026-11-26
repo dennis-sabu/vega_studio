@@ -45,7 +45,8 @@ chmod +x vega-studio_<version>_x86_64.AppImage
 ./vega-studio_<version>_x86_64.AppImage
 ```
 
-> **Ubuntu 24.04 FUSE Note:** If AppImage complains about missing `libfuse2`, install `sudo apt install libfuse2t64` or extract with `--appimage-extract`.
+> **Ubuntu 24.04 AppImage Sandbox Limitation:** Because AppImages mount to a randomized temporary directory (`/tmp/.mount_*`), a static AppArmor path profile cannot reliably bind to the extracted binary. On Ubuntu 24.04+ (`kernel.apparmor_restrict_unprivileged_userns=1`), the AppImage's `AppRun` launcher detects that unprivileged `userns` setup is restricted and falls back to `--no-sandbox` (disabling Chromium renderer isolation). **Use the `.deb` package** for normal sandboxed desktop execution on Ubuntu 24.04+.  
+> **Ubuntu 24.04 FUSE Note:** If AppImage reports missing `libfuse2`, install `sudo apt install libfuse2t64` or extract with `--appimage-extract`.
 
 ---
 
@@ -134,8 +135,8 @@ Outputs are written cleanly to `release/` (ignored by Git):
 
 ## 8. Troubleshooting
 
-- **Sandbox launch issue on Ubuntu 24.04 AppArmor systems:**  
-  The `.deb` post-install hook sets `chmod 4755 "/opt/VEGA Studio/chrome-sandbox"`. For standalone `AppImage` runs where AppArmor restricts user namespaces, launch with `--no-sandbox` only if your local policy blocks userns, or prefer the `.deb` package.
+- **Chromium Sandbox & AppArmor on Ubuntu 24.04+:**  
+  Ubuntu 24.04 sets `kernel.apparmor_restrict_unprivileged_userns=1`, which blocks `unconfined` Electron binaries from initializing Chromium's user-namespace sandbox (`SIGTRAP`). The VEGA Studio `.deb` package installs a scoped AppArmor profile at `/etc/apparmor.d/vega-studio` (`profile "vega-studio" "/opt/VEGA Studio/vega-studio" flags=(unconfined)` with `userns,`) and reloads it during `apt install`/upgrade without modifying global `sysctl` settings or passing `--no-sandbox`. On uninstall (`apt remove` / `apt purge`), `/etc/apparmor.d/vega-studio` is unloaded and removed cleanly. On non-AppArmor distros or Ubuntu 22.04, the hook skips AppArmor installation gracefully.
 - **Wayland vs X11:**  
   Electron launches with `--ozone-platform-hint=auto`. Override cleanly with `ELECTRON_OZONE_PLATFORM_HINT=x11 vega-studio` if needed under specific compositors.
 - **Inspecting Diagnostics:**  

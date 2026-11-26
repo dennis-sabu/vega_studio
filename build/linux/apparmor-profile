@@ -1,0 +1,15 @@
+# AppArmor profile for VEGA Studio on Ubuntu 24.04+ (AppArmor 4.0+).
+# Grants the installed VEGA Studio binary a named profile with userns
+# permission so Chromium's namespace sandbox works under
+# kernel.apparmor_restrict_unprivileged_userns=1 without --no-sandbox
+# or global sysctl changes.
+
+abi <abi/4.0>,
+include <tunables/global>
+
+profile "${executable}" "/opt/${sanitizedProductName}/${executable}" flags=(unconfined) {
+  userns,
+
+  # Site-specific additions and overrides. See local/README for details.
+  include if exists <local/${executable}>
+}

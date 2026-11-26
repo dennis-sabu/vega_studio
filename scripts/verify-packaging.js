@@ -36,12 +36,23 @@ function main() {
   if (!desktop.includes('StartupWMClass=vega-studio') || !desktop.includes('Icon=vega-studio')) {
     throw new Error('Desktop entry missing expected Icon or StartupWMClass fields.');
   }
+  if (desktop.includes('--no-sandbox')) {
+    throw new Error('Desktop entry must never pass --no-sandbox.');
+  }
+
+  const appArmorProfile = assertFileExists('build/linux/apparmor-profile');
+  for (const token of ['abi <abi/4.0>', 'flags=(unconfined)', 'userns,']) {
+    if (!appArmorProfile.includes(token)) {
+      throw new Error(`build/linux/apparmor-profile missing expected AppArmor rule: ${token}`);
+    }
+  }
 
   const builderYml = assertFileExists('electron/electron-builder.yml');
   for (const token of [
     'appId: com.vega.studio',
     'productName: VEGA Studio',
     'executableName: vega-studio',
+    'appArmorProfile: ../build/linux/apparmor-profile',
     'frontend/out',
     'backend/vega-backend',
     'target: deb',
@@ -60,7 +71,20 @@ function main() {
     }
   }
 
-  // 4. Verify non-destructive Linux install/uninstall hooks (ignoring comments)
+  // 4. Verify non-destructive Linux install/uninstall hooks & AppArmor lifecycle (ignoring comments)
+  const afterInstall = assertFileExists('build/linux/after-install.sh');
+  const activeInstallLines = afterInstall
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'))
+    .join('\n');
+  if (!activeInstallLines.includes('/etc/apparmor.d/vega-studio') || !activeInstallLines.includes('apparmor_parser')) {
+    throw new Error('after-install.sh must install and load /etc/apparmor.d/vega-studio when AppArmor is active.');
+  }
+  if (activeInstallLines.includes('--no-sandbox') || activeInstallLines.includes('sysctl')) {
+    throw new Error('after-install.sh must never set --no-sandbox or modify sysctl.');
+  }
+
   const afterRemove = assertFileExists('build/linux/after-remove.sh');
   const activeLines = afterRemove
     .split(/\r?\n/)
@@ -73,6 +97,9 @@ function main() {
     activeLines.includes('/home/')
   ) {
     throw new Error('after-remove.sh must never touch user home directories or application data.');
+  }
+  if (!activeLines.includes('/etc/apparmor.d/vega-studio') || !activeLines.includes('apparmor_parser --remove')) {
+    throw new Error('after-remove.sh must unload and remove /etc/apparmor.d/vega-studio on uninstall.');
   }
 
   // 5. Verify production frontend static export + bundled backend packaging spec

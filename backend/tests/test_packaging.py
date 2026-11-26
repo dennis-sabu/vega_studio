@@ -247,3 +247,105 @@ def test_version_parity_and_packaging_manifests():
     )
     assert "usermod" not in after_install_cmd
     assert "udev" not in after_install_cmd
+    assert "sysctl" not in after_install_cmd
+    assert "--no-sandbox" not in after_install_cmd
+    assert "/etc/apparmor.d/vega-studio" in after_install_cmd
+    assert "apparmor_parser" in after_install_cmd
+
+    assert "appArmorProfile: ../build/linux/apparmor-profile" in builder_yml
+    apparmor_profile = (REPO_ROOT / "build" / "linux" / "apparmor-profile").read_text(encoding="utf-8")
+    assert "abi <abi/4.0>" in apparmor_profile
+    assert "flags=(unconfined)" in apparmor_profile
+    assert "userns," in apparmor_profile
+
+    desktop_entry = (REPO_ROOT / "build" / "linux" / "vega-studio.desktop").read_text(encoding="utf-8")
+    assert "--no-sandbox" not in desktop_entry
+
+
+def test_linux_apparmor_lifecycle_hooks_are_safe_and_distro_portable(tmp_path: Path):
+    """Verify after-install/after-remove scripts handle upgrade, remove, and missing AppArmor."""
+    import subprocess
+    import sys
+
+    if sys.platform == "win32":
+        pytest.skip("POSIX bash lifecycle check runs on Linux hosts")
+
+    after_install = (REPO_ROOT / "build" / "linux" / "after-install.sh").read_text(encoding="utf-8")
+    after_remove = (REPO_ROOT / "build" / "linux" / "after-remove.sh").read_text(encoding="utf-8")
+
+    # Render scripts against isolated temp root (no real /etc or /opt touches)
+    fake_root = tmp_path / "sysroot"
+    opt_dir = fake_root / "opt" / "VEGA Studio"
+    res_dir = opt_dir / "resources"
+    etc_aa = fake_root / "etc" / "apparmor.d"
+    usr_bin = fake_root / "usr" / "bin"
+    fake_bin = tmp_path / "fake-bin"
+    for d in (res_dir, etc_aa, usr_bin, fake_bin):
+        d.mkdir(parents=True)
+
+    app_bin = opt_dir / "vega-studio"
+    app_bin.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    app_bin.chmod(0o755)
+    (opt_dir / "chrome-sandbox").write_text("stub", encoding="utf-8")
+    (etc_aa / "unrelated-profile").write_text("# keep me\n", encoding="utf-8")
+
+    rendered_profile = (
+        (REPO_ROOT / "build" / "linux" / "apparmor-profile")
+        .read_text(encoding="utf-8")
+        .replace("${executable}", "vega-studio")
+        .replace("${sanitizedProductName}", "VEGA Studio")
+    )
+    (res_dir / "apparmor-profile").write_text(rendered_profile, encoding="utf-8")
+
+    aa_log = tmp_path / "aa_calls.log"
+    for tool, body in {
+        "apparmor_status": "#!/bin/sh\nexit 0\n",
+        "aa-status": "#!/bin/sh\nexit 0\n",
+        "apparmor_parser": f'#!/bin/sh\necho "$*" >> "{aa_log}"\nexit 0\n',
+        "chown": "#!/bin/sh\nexit 0\n",
+    }.items():
+        p = fake_bin / tool
+        p.write_text(body, encoding="utf-8")
+        p.chmod(0o755)
+
+    def _rewrite(script: str) -> str:
+        return (
+            script.replace("/opt/VEGA Studio", str(opt_dir))
+            .replace("/usr/bin/vega-studio", str(usr_bin / "vega-studio"))
+            .replace("/etc/apparmor.d/vega-studio", str(etc_aa / "vega-studio"))
+            .replace('"/etc/apparmor.d"', f'"{etc_aa}"')
+            .replace('"/usr/bin"', f'"{usr_bin}"')
+            .replace('PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"', f'PATH="{fake_bin}:$PATH"')
+        )
+
+    inst_script = tmp_path / "postinst.sh"
+    rem_script = tmp_path / "postrm.sh"
+    inst_script.write_text(_rewrite(after_install), encoding="utf-8")
+    rem_script.write_text(_rewrite(after_remove), encoding="utf-8")
+
+    # 1. Install loads profile
+    res_inst = subprocess.run(["bash", str(inst_script), "configure", ""], check=False, capture_output=True, text=True)
+    assert res_inst.returncode == 0, res_inst.stderr
+    assert (etc_aa / "vega-studio").is_file()
+    assert "userns," in (etc_aa / "vega-studio").read_text(encoding="utf-8")
+    assert "--replace --write-cache --skip-read-cache" in aa_log.read_text(encoding="utf-8")
+
+    # 2. Upgrade preserves profile during old postrm upgrade phase, then new postinst replaces it
+    res_upg = subprocess.run(["bash", str(rem_script), "upgrade", "0.2.0"], check=False, capture_output=True, text=True)
+    assert res_upg.returncode == 0, res_upg.stderr
+    assert (etc_aa / "vega-studio").is_file()
+
+    # 3. Remove unloads & deletes only VEGA Studio's profile, preserving unrelated profiles
+    app_bin.unlink()
+    res_rem = subprocess.run(["bash", str(rem_script), "remove"], check=False, capture_output=True, text=True)
+    assert res_rem.returncode == 0, res_rem.stderr
+    assert not (etc_aa / "vega-studio").exists()
+    assert (etc_aa / "unrelated-profile").is_file()
+    assert "--remove" in aa_log.read_text(encoding="utf-8")
+
+    # 4. Graceful no-op when AppArmor is disabled/unavailable
+    (fake_bin / "apparmor_status").write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    (fake_bin / "aa-status").write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    res_no_aa = subprocess.run(["bash", str(inst_script), "configure", ""], check=False, capture_output=True, text=True)
+    assert res_no_aa.returncode == 0, res_no_aa.stderr
+    assert not (etc_aa / "vega-studio").exists()
