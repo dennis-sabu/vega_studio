@@ -171,10 +171,10 @@ npm run test:frontend
 ## Development Notes
 
 - **Development OS**: Windows 11 / Windows 10 with PowerShell
-- **Production target**: Ubuntu 24.04 LTS
-- All paths in `scripts/` are cross-platform (Windows & Linux)
-- Ubuntu/Linux setup guide is deferred to a later phase
-- The backend binds to `127.0.0.1` only — never `0.0.0.0` in development
+- **Production target**: Ubuntu 24.04 LTS (`x86_64`) via `bash scripts/build-linux-release.sh`
+- All helper scripts under `scripts/` support both Windows and Linux
+- Packaging checks: `npm run test:packaging`, `npm run build:frontend:export`, `npm run build:backend`
+- The backend binds to loopback (`127.0.0.1`) only — never `0.0.0.0`
 
 ---
 
@@ -183,8 +183,10 @@ npm run test:frontend
 | Document | Description |
 |----------|-------------|
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | System design & layer responsibilities |
+| [docs/DESIGN_SYSTEM.md](./docs/DESIGN_SYSTEM.md) | Obsidian UI/UX design tokens & typography |
 | [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) | Full development workflow guide |
 | [docs/WINDOWS_SETUP.md](./docs/WINDOWS_SETUP.md) | Windows environment setup |
+| [docs/LINUX_RELEASE.md](./docs/LINUX_RELEASE.md) | Ubuntu 24.04 packaging, installation, serial & release guide |
 | [backend/README.md](./backend/README.md) | Backend-specific documentation |
 
 ---

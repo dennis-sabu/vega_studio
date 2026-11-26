@@ -6,9 +6,9 @@ import {
   useImperativeHandle,
   useRef,
   useState,
-} from "react";
-import { Loader2 } from "lucide-react";
-import type * as MonacoType from "monaco-editor";
+} from"react";
+import { Loader2 } from"lucide-react";
+import type * as MonacoType from"monaco-editor";
 import {
   getOrCreateTabModel,
   getTabModelRecord,
@@ -17,15 +17,15 @@ import {
   saveTabViewState,
   VEGA_MONACO_THEME,
   type MonacoNamespace,
-} from "@/lib/vegaMonaco";
+} from"@/lib/vegaMonaco";
 import type {
   EditorCursorPosition,
   EditorRevealTarget,
   EditorSettings,
-} from "@/types/editor";
-import type { OpenFileTab } from "@/types/explorer";
-import type { AICodeApplyMode, AIContextAttachment } from "@/types/ai";
-import type { OpenCodeContextAttachment } from "@/types/opencode";
+} from"@/types/editor";
+import type { OpenFileTab } from"@/types/explorer";
+import type { AICodeApplyMode, AIContextAttachment } from"@/types/ai";
+import type { OpenCodeContextAttachment } from"@/types/opencode";
 
 export interface MonacoEditorHandle {
   triggerFind: () => void;
@@ -188,6 +188,10 @@ export const MonacoEditorSurface = forwardRef<
         if (!mounted || !containerRef.current) return;
         monacoRef.current = monaco;
 
+        const prefersReducedMotion =
+          typeof window !== "undefined" &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
         const editor = monaco.editor.create(containerRef.current, {
           theme: VEGA_MONACO_THEME,
           automaticLayout: false,
@@ -205,9 +209,9 @@ export const MonacoEditorSurface = forwardRef<
             scale: 1,
           },
           scrollBeyondLastLine: false,
-          smoothScrolling: true,
-          cursorBlinking: "smooth",
-          cursorSmoothCaretAnimation: "on",
+          smoothScrolling: !prefersReducedMotion,
+          cursorBlinking: prefersReducedMotion ? "solid" : "smooth",
+          cursorSmoothCaretAnimation: prefersReducedMotion ? "off" : "on",
           bracketPairColorization: { enabled: true },
           guides: {
             bracketPairs: true,
@@ -553,20 +557,20 @@ export const MonacoEditorSurface = forwardRef<
 
   if (initError) {
     return (
-      <div className="flex flex-1 items-center justify-center p-6 text-center">
-        <div className="max-w-md rounded-2xl border border-red-400/25 bg-red-500/10 p-5 text-xs text-red-200">
-          <p className="font-medium">Monaco Editor Initialization Error</p>
-          <p className="mt-1 font-mono text-[11px] opacity-85">{initError}</p>
+    <div className="flex flex-1 items-center justify-center p-6 text-center">
+      <div className="max-w-md rounded-2xl border border-red-400/25 bg-red-500/10 p-5 text-xs text-red-200">
+        <p className="font-medium">Monaco Editor Initialization Error</p>
+        <p className="mt-1 font-mono text-[11px] opacity-85">{initError}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="vega-monaco-host relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[#06070c]">
+  <div className="vega-monaco-host relative flex min-h-0 flex-1 flex-col overflow-hidden bg-[#181818]">
       {initializing && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-[#06070c]/90 text-xs text-[#e8ebf7]/65">
-          <Loader2 className="h-4 w-4 animate-spin text-[#7aa2ff]" />
+      <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-[#181818] text-xs text-[#E4E4E7]">
+        <Loader2 className="h-4 w-4 animate-spin text-[#7AA2FF]" />
           <span>Initializing Monaco Editor...</span>
         </div>
       )}

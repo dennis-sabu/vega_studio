@@ -22,6 +22,7 @@ interface GlyphAnimalsCanvasProps {
   tweaks: AtmosphereTweaks;
   dimmed: boolean;
   workspaceMode: boolean;
+  forcedCount?: number | null;
   ref?: Ref<GlyphAnimalsCanvasHandle>;
 }
 
@@ -30,6 +31,7 @@ export function GlyphAnimalsCanvas({
   tweaks,
   dimmed,
   workspaceMode,
+  forcedCount = null,
   ref,
 }: GlyphAnimalsCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -39,6 +41,7 @@ export function GlyphAnimalsCanvas({
 
   useEffect(() => {
     workspaceModeRef.current = workspaceMode;
+    canvasRef.current?.dispatchEvent(new Event("vega:workspace-mode"));
   }, [workspaceMode]);
 
   useImperativeHandle(ref, () => ({
@@ -59,6 +62,7 @@ export function GlyphAnimalsCanvas({
     if (!ctx) return;
 
     const engine = new GlyphAnimalsEngine(species, tweaks);
+    if (forcedCount !== null) engine.setForcedCount(forcedCount);
     engineRef.current = engine;
 
     const computedFont = getComputedStyle(canvas).fontFamily;
@@ -72,7 +76,6 @@ export function GlyphAnimalsCanvas({
     let rafId = 0;
     let lastTime = performance.now();
     let accumulator = 0;
-    let lastDrawTime = 0;
 
     const syncSize = () => {
       const rect = canvas.getBoundingClientRect();
@@ -104,18 +107,17 @@ export function GlyphAnimalsCanvas({
 
     const tick = (now: number) => {
       rafId = 0;
-      if (reducedMotionRef.current || !isVisible || document.hidden) return;
-
-      // Subtle frame pacing in Workspace mode so background atmosphere costs minimal CPU.
-      const minInterval = workspaceModeRef.current ? 42 : 0;
-      if (minInterval > 0 && now - lastDrawTime < minInterval) {
-        rafId = requestAnimationFrame(tick);
+      if (
+        reducedMotionRef.current ||
+        workspaceModeRef.current ||
+        !isVisible ||
+        document.hidden
+      ) {
         return;
       }
 
       const dt = Math.min(0.1, Math.max(0, (now - lastTime) / 1000));
       lastTime = now;
-      lastDrawTime = now;
 
       accumulator += dt;
       const fixedStep = 1 / 60;
@@ -132,7 +134,7 @@ export function GlyphAnimalsCanvas({
     };
 
     const startLoop = () => {
-      if (reducedMotionRef.current) {
+      if (reducedMotionRef.current || workspaceModeRef.current) {
         void drawReducedStill();
         return;
       }
@@ -179,6 +181,17 @@ export function GlyphAnimalsCanvas({
     };
     document.addEventListener("visibilitychange", onVisibility);
 
+    const onWorkspaceToggle = () => {
+      if (workspaceModeRef.current || reducedMotionRef.current) {
+        stopLoop();
+        syncSize();
+        engine.render(ctx);
+      } else {
+        startLoop();
+      }
+    };
+    canvas.addEventListener("vega:workspace-mode", onWorkspaceToggle);
+
     const onMotionChange = (e: MediaQueryListEvent) => {
       reducedMotionRef.current = e.matches;
       engine.setReducedMotion(e.matches);
@@ -196,6 +209,7 @@ export function GlyphAnimalsCanvas({
       resizeObserver?.disconnect();
       intersectionObserver?.disconnect();
       document.removeEventListener("visibilitychange", onVisibility);
+      canvas.removeEventListener("vega:workspace-mode", onWorkspaceToggle);
       mediaQuery.removeEventListener("change", onMotionChange);
       engineRef.current = null;
     };
@@ -221,7 +235,7 @@ export function GlyphAnimalsCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [species]);
 
-  // Sync live tweaks
+  // Sync live tweaks & count
   useEffect(() => {
     const engine = engineRef.current;
     const canvas = canvasRef.current;
@@ -233,6 +247,17 @@ export function GlyphAnimalsCanvas({
     }
   }, [tweaks]);
 
+  useEffect(() => {
+    const engine = engineRef.current;
+    const canvas = canvasRef.current;
+    if (!engine || !canvas) return;
+    engine.setForcedCount(forcedCount);
+    if (reducedMotionRef.current) {
+      const ctx = canvas.getContext("2d", { alpha: false });
+      if (ctx) engine.render(ctx);
+    }
+  }, [forcedCount]);
+
   const handlePointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
     const engine = engineRef.current;
     if (!engine || workspaceModeRef.current) return;
@@ -241,31 +266,30 @@ export function GlyphAnimalsCanvas({
   };
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden bg-[#06070c]">
+    <div
+      className={`pointer-events-none fixed inset-0 z-0 overflow-hidden transition-colors duration-200 ${
+        workspaceMode ? "bg-[#181818]" : "bg-[#06070c]"
+      }`}
+    >
       <canvas
         ref={canvasRef}
         aria-hidden="true"
         onPointerDown={handlePointerDown}
         style={{ fontFamily: '"Geist Mono", ui-monospace, Menlo, monospace' }}
-        className={`pointer-events-auto block h-full w-full touch-none transition-opacity duration-500 ${
+        className={`block h-full w-full touch-none transition-opacity duration-200 ${
           workspaceMode
-            ? "opacity-25"
+            ? "pointer-events-none opacity-0"
             : dimmed
-              ? "opacity-45"
-              : "opacity-100"
+              ? "pointer-events-auto opacity-55"
+              : "pointer-events-auto opacity-100"
         }`}
       />
-      {/* Smooth scrim when focusing composer or working inside IDE panes */}
-      <div
-        aria-hidden="true"
-        className={`pointer-events-none absolute inset-0 transition-all duration-300 ${
-          workspaceMode
-            ? "bg-[#06070c]/55"
-            : dimmed
-              ? "bg-[#06070c]/48 backdrop-blur-[2px]"
-              : "bg-transparent"
-        }`}
-      />
+      {!workspaceMode && dimmed && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-black/45 backdrop-blur-[2px] transition-opacity duration-200"
+        />
+      )}
     </div>
   );
 }

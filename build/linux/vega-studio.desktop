@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=VEGA Studio
+Comment=Desktop Firmware IDE for C-DAC VEGA ARIES V3 RISC-V
+GenericName=Embedded Firmware IDE
+Exec=/opt/VEGA Studio/vega-studio %U
+Icon=vega-studio
+Type=Application
+StartupNotify=true
+StartupWMClass=vega-studio
+Terminal=false
+Categories=Development;IDE;Electronics;
+Keywords=RISC-V;VEGA;ARIES;Embedded;Firmware;C;IDE;

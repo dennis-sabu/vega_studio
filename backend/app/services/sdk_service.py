@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from app.config import Settings, settings
+from app.config import Settings, is_frozen_backend, settings
 from app.models.sdk import (
     DEFAULT_CROSS_COMPILE_PREFIX,
     DEFAULT_TARGET_ARCH,
@@ -530,9 +530,13 @@ class SdkService:
             for name in ("python3", "python"):
                 found = shutil.which(name, path=search_path)
                 if found:
-                    detected_python = Path(found).resolve(strict=False)
+                    cand_py = Path(found).resolve(strict=False)
+                    # Skip Microsoft Store 0-byte WindowsApps aliases that fail or open Store
+                    if host_os == "windows" and "windowsapps" in str(cand_py).lower():
+                        continue
+                    detected_python = cand_py
                     break
-            if detected_python is None and sys.executable:
+            if detected_python is None and not is_frozen_backend() and sys.executable:
                 detected_python = Path(sys.executable).resolve(strict=False)
 
         # 6. VEGA XMODEM uploader script discovery

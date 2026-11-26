@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertTriangle,
   BookOpen,
   Code2,
   Compass,
@@ -8,15 +9,16 @@ import {
   RefreshCw,
   Search,
   Sparkles,
-} from "lucide-react";
-import type { LearningSubTab } from "@/hooks/useLearning";
+  X,
+} from"lucide-react";
+import type { LearningSubTab } from"@/hooks/useLearning";
 import type {
   DocCatalogResponse,
   DocPageSummary,
   ExampleCatalogResponse,
   ExampleSummary,
   ExampleVerificationStatus,
-} from "@/types/learning";
+} from"@/types/learning";
 
 interface ExamplesSidebarSectionProps {
   subTab: LearningSubTab;
@@ -36,24 +38,26 @@ interface ExamplesSidebarSectionProps {
   selectedDocSlug: string | null;
   onSelectDoc: (slug: string) => void;
   loading: boolean;
+  error?: string | null;
+  onClearError?: () => void;
   onRefresh: () => void;
   isBackendConnected: boolean;
 }
 
 function statusPillClass(status: ExampleVerificationStatus): string {
   if (status === "template_verified") {
-    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+    return"border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
   }
   if (status === "sdk_discovered") {
-    return "border-sky-500/30 bg-sky-500/10 text-sky-300";
+    return"border-sky-500/30 bg-sky-500/10 text-sky-300";
   }
-  return "border-amber-500/30 bg-amber-500/10 text-amber-300";
+  return"border-amber-500/30 bg-amber-500/10 text-amber-300";
 }
 
 function shortStatusLabel(status: ExampleVerificationStatus): string {
-  if (status === "template_verified") return "Verified";
-  if (status === "sdk_discovered") return "Local SDK";
-  return "Conceptual";
+  if (status === "template_verified") return"Verified";
+  if (status === "sdk_discovered") return"Local SDK";
+  return"Conceptual";
 }
 
 export function ExamplesSidebarSection({
@@ -74,20 +78,44 @@ export function ExamplesSidebarSection({
   selectedDocSlug,
   onSelectDoc,
   loading,
+  error,
+  onClearError,
   onRefresh,
   isBackendConnected,
 }: ExamplesSidebarSectionProps) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      {error && (
+        <div
+          role="alert"
+          className="mx-3 mt-2.5 flex items-start justify-between gap-2 rounded-lg border border-red-400/30 bg-red-500/12 px-2.5 py-2 text-[11px] text-red-200"
+        >
+        <div className="flex min-w-0 items-start gap-1.5">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span className="break-words">{error}</span>
+          </div>
+          {onClearError && (
+            <button
+              type="button"
+              onClick={onClearError}
+              aria-label="Dismiss examples error"
+              className="rounded p-0.5 hover:bg-[#2D2D31]"
+            >
+            <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Header Controls */}
-      <div className="space-y-2 border-b border-white/8 px-3 py-2.5">
+      <div className="space-y-2 border-b border-[#2D2D30] px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <button
             type="button"
             onClick={() => onOpenCenterLibrary(subTab)}
-            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#7aa2ff]/30 bg-[#7aa2ff]/12 px-2.5 py-1.5 text-[11px] font-medium text-[#c5d7ff] transition-colors hover:bg-[#7aa2ff]/20"
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#7AA2FF]/30 bg-[#7AA2FF]/12 px-2.5 py-1.5 text-[11px] font-medium text-[#c5d7ff] transition-colors hover:bg-[#7AA2FF]/20"
           >
-            <BookOpen className="h-3.5 w-3.5" />
+          <BookOpen className="h-3.5 w-3.5" />
             <span>Open Full Library View</span>
           </button>
           <button
@@ -96,14 +124,14 @@ export function ExamplesSidebarSection({
             disabled={loading || !isBackendConnected}
             title="Refresh examples & docs catalog"
             aria-label="Refresh examples and docs"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-[#e8ebf7]/65 transition-colors hover:bg-white/[0.1] hover:text-[#e8ebf7] disabled:opacity-40"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[#2D2D30] bg-[#252527] text-[#E4E4E7] transition-colors hover:bg-[#2D2D31] hover:text-[#F4F4F5] disabled:opacity-40"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
           </button>
         </div>
 
         {/* Mode Switcher */}
-        <div className="grid grid-cols-3 gap-1 rounded-lg border border-white/8 bg-[#05060b]/80 p-0.5">
+        <div className="grid grid-cols-3 gap-1 rounded-lg border border-[#2D2D30] bg-[#1F1F1F] p-0.5">
           {(
             [
               { id: "examples", label: "Examples" },
@@ -122,8 +150,8 @@ export function ExamplesSidebarSection({
                 }}
                 className={`rounded-md py-1 text-[11px] font-medium transition-colors ${
                   active
-                    ? "bg-white/12 text-[#f0f3ff]"
-                    : "text-[#e8ebf7]/50 hover:text-[#e8ebf7]/85"
+                    ? "bg-[#2C2C30] text-[#F4F4F5]"
+                    : "text-[#B4B4BC] hover:text-[#F4F4F5]"
                 }`}
               >
                 {item.label}
@@ -134,8 +162,8 @@ export function ExamplesSidebarSection({
 
         {/* Search */}
         {subTab !== "guides" && (
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-2 left-2.5 h-3.5 w-3.5 text-[#e8ebf7]/35" />
+        <div className="relative">
+          <Search className="pointer-events-none absolute top-2 left-2.5 h-3.5 w-3.5 text-[#A1A1AA]" />
             <input
               type="text"
               value={subTab === "examples" ? exampleSearch : docSearch}
@@ -154,7 +182,7 @@ export function ExamplesSidebarSection({
                   ? "Filter firmware examples"
                   : "Search offline documentation"
               }
-              className="w-full rounded-lg border border-white/10 bg-[#05060b]/80 py-1.5 pr-2.5 pl-8 text-xs text-[#e8ebf7] placeholder:text-[#e8ebf7]/35 focus:border-[#7aa2ff]/50 focus:outline-none"
+              className="w-full rounded-lg border border-[#2D2D30] bg-[#1F1F1F] py-1.5 pr-2.5 pl-8 text-xs text-[#F4F4F5] placeholder:text-[#8E8E98] focus:border-[#7AA2FF]/50 focus:outline-none"
             />
           </div>
         )}
@@ -163,7 +191,7 @@ export function ExamplesSidebarSection({
       {/* Scrollable Catalog List */}
       <div className="vega-scroll min-h-0 flex-1 overflow-y-auto p-2.5 space-y-2">
         {!isBackendConnected && (
-          <div className="rounded-lg border border-amber-400/20 bg-amber-500/10 p-2.5 text-[11px] text-amber-200">
+        <div className="rounded-lg border border-amber-400/20 bg-amber-500/10 p-2.5 text-[11px] text-amber-200">
             Backend offline — waiting for connection to load examples and offline docs.
           </div>
         )}
@@ -171,7 +199,7 @@ export function ExamplesSidebarSection({
         {subTab === "examples" && (
           <>
             {filteredExamples.length === 0 ? (
-              <p className="px-2 py-4 text-center text-xs text-[#e8ebf7]/45">
+            <p className="px-2 py-4 text-center text-xs text-[#B4B4BC]">
                 No matching VEGA firmware examples.
               </p>
             ) : (
@@ -182,8 +210,8 @@ export function ExamplesSidebarSection({
                     key={ex.id}
                     className={`rounded-xl border p-2.5 transition-colors ${
                       selected
-                        ? "border-[#7aa2ff]/45 bg-[#7aa2ff]/[0.09]"
-                        : "border-white/8 bg-[#0b0e18]/65 hover:border-white/16 hover:bg-[#0e1220]"
+                        ? "border-[#7AA2FF]/45 bg-[#7AA2FF]/[0.09]"
+                        : "border-[#2D2D30] bg-[#1F1F1F] hover:border-[#3F3F46] hover:bg-[#7AA2FF]/[0.11]"
                     }`}
                   >
                     <button
@@ -194,8 +222,8 @@ export function ExamplesSidebarSection({
                       }}
                       className="w-full text-left"
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-xs font-medium leading-snug text-[#edf1ff]">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-xs font-medium leading-snug text-[#F4F4F5]">
                           {ex.title}
                         </span>
                         <span
@@ -204,32 +232,32 @@ export function ExamplesSidebarSection({
                           {shortStatusLabel(ex.verification_status)}
                         </span>
                       </div>
-                      <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-[#e8ebf7]/55">
+                      <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-[#E4E4E7]">
                         {ex.short_description}
                       </p>
-                      <div className="mt-2 flex items-center justify-between font-mono text-[10px] text-[#e8ebf7]/40">
+                      <div className="mt-2 flex items-center justify-between font-mono text-[10px] text-[#A1A1AA]">
                         <span>{ex.category}</span>
                         <span>{ex.file_count} files</span>
                       </div>
                     </button>
-                    <div className="mt-2 flex items-center gap-1.5 border-t border-white/6 pt-2">
+                    <div className="mt-2 flex items-center gap-1.5 border-t border-[#2D2D30]/60 pt-2">
                       <button
                         type="button"
                         onClick={() => {
                           onSelectExample(ex.id);
                           onOpenCenterLibrary("examples");
                         }}
-                        className="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-white/10 bg-white/[0.04] py-1 text-[10.5px] text-[#e8ebf7]/75 hover:bg-white/[0.1] hover:text-[#e8ebf7]"
+                        className="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-[#2D2D30] bg-[#252527] py-1 text-[10.5px] text-[#F4F4F5] hover:bg-[#2D2D31] hover:text-[#F4F4F5]"
                       >
-                        <Code2 className="h-3 w-3" />
+                      <Code2 className="h-3 w-3" />
                         <span>Inspect</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => onCreateFromExample(ex)}
-                        className="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-[#7aa2ff]/30 bg-[#7aa2ff]/12 py-1 text-[10.5px] font-medium text-[#b9d0ff] hover:bg-[#7aa2ff]/22"
+                        className="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-[#7AA2FF]/30 bg-[#7AA2FF]/12 py-1 text-[10.5px] font-medium text-[#b9d0ff] hover:bg-[#7AA2FF]/22"
                       >
-                        <FolderPlus className="h-3 w-3" />
+                      <FolderPlus className="h-3 w-3" />
                         <span>Use</span>
                       </button>
                     </div>
@@ -243,7 +271,7 @@ export function ExamplesSidebarSection({
         {subTab === "docs" && (
           <>
             {filteredDocs.length === 0 ? (
-              <p className="px-2 py-4 text-center text-xs text-[#e8ebf7]/45">
+            <p className="px-2 py-4 text-center text-xs text-[#B4B4BC]">
                 No documentation pages found.
               </p>
             ) : (
@@ -259,22 +287,22 @@ export function ExamplesSidebarSection({
                     }}
                     className={`w-full rounded-xl border p-2.5 text-left transition-colors ${
                       selected
-                        ? "border-[#7aa2ff]/45 bg-[#7aa2ff]/[0.09]"
-                        : "border-white/8 bg-[#0b0e18]/65 hover:border-white/16 hover:bg-[#0e1220]"
+                        ? "border-[#7AA2FF]/45 bg-[#7AA2FF]/[0.09]"
+                        : "border-[#2D2D30] bg-[#1F1F1F] hover:border-[#3F3F46] hover:bg-[#7AA2FF]/[0.11]"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-xs font-medium leading-snug text-[#edf1ff]">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-xs font-medium leading-snug text-[#F4F4F5]">
                         {doc.title}
                       </span>
-                      <span className="shrink-0 font-mono text-[9.5px] text-[#e8ebf7]/40">
+                      <span className="shrink-0 font-mono text-[9.5px] text-[#A1A1AA]">
                         {doc.estimated_minutes}m
                       </span>
                     </div>
-                    <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-[#e8ebf7]/55">
+                    <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-[#E4E4E7]">
                       {doc.summary}
                     </p>
-                    <div className="mt-1.5 flex items-center justify-between font-mono text-[10px] text-[#7aa2ff]/70">
+                    <div className="mt-1.5 flex items-center justify-between font-mono text-[10px] text-[#7AA2FF]">
                       <span>{doc.category}</span>
                     </div>
                   </button>
@@ -285,22 +313,22 @@ export function ExamplesSidebarSection({
         )}
 
         {subTab === "guides" && (
-          <div className="space-y-2">
+        <div className="space-y-2">
             {(docCatalog?.guides ?? []).map((guide) => (
               <button
                 key={guide.id}
                 type="button"
                 onClick={() => onOpenCenterLibrary("guides")}
-                className="w-full rounded-xl border border-white/8 bg-[#0b0e18]/65 p-2.5 text-left transition-colors hover:border-[#7aa2ff]/35 hover:bg-[#0e1220]"
+                className="w-full rounded-xl border border-[#2D2D30] bg-[#1F1F1F] p-2.5 text-left transition-colors hover:border-[#7AA2FF]/35 hover:bg-[#7AA2FF]/[0.11]"
               >
-                <div className="flex items-center gap-1.5 text-xs font-medium text-[#edf1ff]">
-                  <Compass className="h-3.5 w-3.5 text-[#7aa2ff]" />
+              <div className="flex items-center gap-1.5 text-xs font-medium text-[#F4F4F5]">
+                <Compass className="h-3.5 w-3.5 text-[#7AA2FF]" />
                   <span>{guide.title}</span>
                 </div>
-                <p className="mt-1 text-[11px] leading-relaxed text-[#e8ebf7]/55">
+                <p className="mt-1 text-[11px] leading-relaxed text-[#E4E4E7]">
                   {guide.description}
                 </p>
-                <div className="mt-2 flex items-center justify-between font-mono text-[10px] text-[#e8ebf7]/45">
+                <div className="mt-2 flex items-center justify-between font-mono text-[10px] text-[#B4B4BC]">
                   <span>{guide.steps.length} steps</span>
                   <span>~{guide.estimated_minutes} min</span>
                 </div>
@@ -311,10 +339,10 @@ export function ExamplesSidebarSection({
       </div>
 
       {/* Honest SDK Status Footer */}
-      <div className="border-t border-white/8 bg-[#05060b]/60 px-3 py-2 text-[10.5px] text-[#e8ebf7]/50">
+      <div className="border-t border-[#2D2D30] bg-[#1F1F1F] px-3 py-2 text-[10.5px] text-[#B4B4BC]">
         {exampleCatalog?.sdk_root_configured ? (
-          <div className="flex items-center gap-1.5 text-sky-300/85">
-            <Sparkles className="h-3 w-3 shrink-0" />
+        <div className="flex items-center gap-1.5 text-sky-300/85">
+          <Sparkles className="h-3 w-3 shrink-0" />
             <span>
               Local SDK scanned ({exampleCatalog.sdk_examples_count} example
               {exampleCatalog.sdk_examples_count === 1 ? "" : "s"})

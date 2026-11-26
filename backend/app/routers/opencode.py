@@ -217,6 +217,9 @@ async def stream_opencode_session(
     service: OpenCodeService = Depends(get_opencode_service),
 ) -> None:
     """Stream live OpenCode session status, assistant messages, tools, and permission prompts."""
+    if not is_allowed_ws_origin(websocket.headers.get("origin")):
+        await websocket.close(code=1008)
+        return
     try:
         service.get_session_detail(
             session_id,
@@ -272,7 +275,9 @@ async def stream_opencode_session(
                     await safe_send({"type": "pong"})
                 elif mtype == "interrupt":
                     try:
-                        service.interrupt_session(session_id, project_dir=project_dir)
+                        await asyncio.to_thread(
+                            service.interrupt_session, session_id, project_dir=project_dir
+                        )
                     except OpenCodeServiceError as exc:
                         await safe_send({"type": "error", "message": exc.message})
                 elif mtype == "permission_reply":
@@ -285,22 +290,38 @@ async def stream_opencode_session(
                                 "message": msg.get("message"),
                             }
                         )
-                        service.reply_permission(session_id, req_id, parsed)
+                        await asyncio.to_thread(
+                            service.reply_permission, session_id, req_id, parsed
+                        )
                     except (ValidationError, OpenCodeServiceError) as exc:
                         err = exc.message if isinstance(exc, OpenCodeServiceError) else str(exc)
                         await safe_send({"type": "error", "message": err})
 
         sender_task = asyncio.create_task(_sender_loop())
         receiver_task = asyncio.create_task(_receiver_loop())
-        done, pending = await asyncio.wait(
-            {sender_task, receiver_task},
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-        for task in pending:
-            task.cancel()
-        for task in done:
-            _ = task.exception()
-    except WebSocketDisconnect:
+        try:
+            done, pending = await asyncio.wait(
+                {sender_task, receiver_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            for task in done:
+                if task.cancelled():
+                    continue
+                exc = task.exception()
+                if exc is not None and not isinstance(
+                    exc, (WebSocketDisconnect, asyncio.CancelledError)
+                ):
+                    raise exc
+        finally:
+            for task in (sender_task, receiver_task):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(sender_task, receiver_task, return_exceptions=True)
+    except (WebSocketDisconnect, asyncio.CancelledError, RuntimeError, OSError):
         pass
     finally:
         service.unregister_ws_subscriber(session_id, sub_entry)

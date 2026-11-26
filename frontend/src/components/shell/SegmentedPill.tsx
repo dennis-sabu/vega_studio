@@ -67,7 +67,12 @@ export function SegmentedPill<T extends string>({
     if (!el || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => updateThumb());
     observer.observe(el);
-    return () => observer.disconnect();
+    window.addEventListener("resize", updateThumb);
+    void document.fonts?.ready.then(() => updateThumb());
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateThumb);
+    };
   }, [updateThumb]);
 
   const handleKeyDown = (
@@ -84,19 +89,82 @@ export function SegmentedPill<T extends string>({
     buttonRefs.current[nextIndex]?.focus();
   };
 
+  if (liquid) {
+    return (
+      <div
+        ref={containerRef}
+        role="radiogroup"
+        aria-label={ariaLabel}
+        className={`vega-liquid-glass relative flex max-w-[max(240px,calc(100%-220px))] items-center gap-[2px] rounded-full p-[4px] select-none ${
+          wrapOnSmall
+            ? "max-[920px]:flex-wrap max-[920px]:justify-center max-[920px]:gap-y-[2px] max-[920px]:overflow-visible max-[920px]:rounded-[22px] max-[720px]:w-full max-[720px]:max-w-full"
+            : "vega-no-scrollbar overflow-x-auto"
+        } ${className}`}
+        style={{ ["--blur" as string]: "5px" }}
+      >
+        <span
+          aria-hidden="true"
+          className="vega-thumb-overshoot pointer-events-none absolute left-0 top-0 rounded-full bg-[var(--thumb)]"
+          style={{
+            transform: `translate(${thumbStyle.left}px, ${thumbStyle.top}px)`,
+            width: `${thumbStyle.width}px`,
+            height: `${thumbStyle.height}px`,
+            opacity: thumbStyle.visible ? 1 : 0,
+            boxShadow:
+              "inset 0 1px 0 var(--glass-rim), 0 2px 8px rgba(0, 0, 0, 0.22)",
+          }}
+        />
+
+        {options.map((opt, idx) => {
+          const selected = opt.value === value;
+          return (
+            <button
+              key={opt.value}
+              ref={(node) => {
+                buttonRefs.current[idx] = node;
+              }}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              tabIndex={selected ? 0 : -1}
+              onClick={() => onChange(opt.value)}
+              onKeyDown={(e) => handleKeyDown(e, idx)}
+              className={`relative z-10 inline-flex h-[32px] shrink-0 items-center gap-[7px] rounded-full border-0 bg-transparent pr-[13px] pl-[11px] text-[13px] font-medium transition-colors duration-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#7aa2ff]/70 max-[640px]:h-[30px] max-[640px]:gap-[6px] max-[640px]:pr-[11px] max-[640px]:pl-[9px] max-[640px]:text-[12.5px] max-[360px]:gap-[5px] max-[360px]:pr-[8px] max-[360px]:pl-[7px] max-[360px]:text-[12px] ${
+                selected
+                  ? "text-[#f3f5fc]"
+                  : "text-[#c8d2ec] hover:text-[#f3f5fc]/90"
+              }`}
+            >
+              {opt.dotColor && (
+                <span
+                  aria-hidden="true"
+                  className="h-[9px] w-[9px] shrink-0 rounded-full"
+                  style={{
+                    background: `radial-gradient(circle at 35% 30%, color-mix(in srgb, ${opt.dotColor} 50%, #ffffff), ${opt.dotColor} 70%)`,
+                  }}
+                />
+              )}
+              <span>{opt.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div
       ref={containerRef}
       role="radiogroup"
       aria-label={ariaLabel}
-      className={`vega-glass ${liquid ? "vega-glass-liquid" : ""} relative inline-flex items-center gap-0.5 rounded-full p-1 select-none ${
-        wrapOnSmall ? "flex-wrap justify-center rounded-[22px] md:flex-nowrap md:rounded-full" : ""
+      className={`relative inline-flex items-center gap-0.5 rounded-[7px] border border-[#2E2E32] bg-[#141416] p-0.5 select-none ${
+        wrapOnSmall ? "flex-wrap justify-center md:flex-nowrap" : ""
       } ${className}`}
-      style={{ ["--blur" as string]: "5px" }}
+      data-liquid="false"
     >
       <span
         aria-hidden="true"
-        className="vega-thumb-transition pointer-events-none absolute left-0 top-0 rounded-full bg-white/14 shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_2px_8px_rgba(0,0,0,0.20)]"
+        className="vega-thumb-transition pointer-events-none absolute left-0 top-0 rounded-[5px] border border-[#3E3E44] bg-[#28282B] shadow-sm"
         style={{
           transform: `translate(${thumbStyle.left}px, ${thumbStyle.top}px)`,
           width: `${thumbStyle.width}px`,
@@ -119,18 +187,18 @@ export function SegmentedPill<T extends string>({
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(opt.value)}
             onKeyDown={(e) => handleKeyDown(e, idx)}
-            className={`relative z-10 inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-[12px] font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7aa2ff]/50 ${
+            className={`relative z-10 inline-flex h-6 items-center gap-1.5 rounded-[5px] px-2.5 text-[11.5px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#7AA2FF] ${
               selected
-                ? "text-[#e8ebf7]"
-                : "text-[#e8ebf7]/45 hover:text-[#e8ebf7]/75"
+                ? "text-[#F4F4F5]"
+                : "text-[#A1A1AA] hover:text-[#F4F4F5]"
             }`}
           >
             {opt.dotColor && (
               <span
                 aria-hidden="true"
-                className="h-2 w-2 rounded-full"
+                className="h-1.5 w-1.5 rounded-full"
                 style={{
-                  background: `radial-gradient(circle at 35% 30%, color-mix(in srgb, ${opt.dotColor} 50%, white), ${opt.dotColor} 70%)`,
+                  backgroundColor: opt.dotColor,
                 }}
               />
             )}

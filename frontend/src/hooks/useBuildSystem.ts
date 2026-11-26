@@ -21,6 +21,11 @@ import type {
 } from "@/types/build";
 
 const MAX_CLIENT_LOG_LINES = 5000;
+const MAX_CLIENT_DIAGNOSTICS = 1000;
+
+function normalizeFsPath(p: string | null | undefined): string {
+  return (p ?? "").replace(/[\\/]+$/, "").toLowerCase();
+}
 
 interface UseBuildSystemOptions {
   projectDir: string | null;
@@ -113,6 +118,7 @@ export function useBuildSystem({
           });
         } else if (msg.type === "diagnostic") {
           setDiagnostics((prev) => {
+            if (prev.length >= MAX_CLIENT_DIAGNOSTICS) return prev;
             if (prev.some((d) => d.id === msg.diagnostic.id)) return prev;
             return [...prev, msg.diagnostic];
           });
@@ -132,40 +138,82 @@ export function useBuildSystem({
         }
       };
 
-      ws.onerror = () => {
-        // Reconcile state cleanly via REST fallback if WebSocket drops
+      const reconcile = () => {
+        if (wsRef.current !== ws) return;
+        wsRef.current = null;
         void fetchBuildState()
           .then((state) => {
-            setActiveBuild(state.active_build);
-            setLatestBuild(state.latest_build);
-            setLogs(state.logs.slice(-MAX_CLIENT_LOG_LINES));
-            setDiagnostics(state.diagnostics);
+            const curDir = normalizeFsPath(projectDirRef.current);
+            const activeMatches =
+              !state.active_build ||
+              !curDir ||
+              normalizeFsPath(state.active_build.project_dir) === curDir;
+            const latestMatches =
+              !state.latest_build ||
+              !curDir ||
+              normalizeFsPath(state.latest_build.project_dir) === curDir;
+            setActiveBuild(activeMatches ? state.active_build : null);
+            if (latestMatches) {
+              setLatestBuild(state.latest_build);
+              setLogs(state.logs.slice(-MAX_CLIENT_LOG_LINES));
+              setDiagnostics(state.diagnostics.slice(0, MAX_CLIENT_DIAGNOSTICS));
+            }
           })
-          .catch(() => {});
+          .catch(() => {
+            setActiveBuild((prev) => (prev?.status === "running" ? null : prev));
+          });
       };
+
+      ws.onerror = reconcile;
+      ws.onclose = reconcile;
     },
     [closeSocket, refreshHistory]
   );
 
-  // Sync current build state & history when backend connects
+  // Sync or reset build state cleanly when backend connection or active project changes
   useEffect(() => {
-    if (!isBackendConnected) return;
-    const controller = new AbortController();
+    closeSocket();
+    if (!isBackendConnected) {
+      queueMicrotask(() => {
+        setActiveBuild(null);
+      });
+      return;
+    }
 
+    const controller = new AbortController();
     queueMicrotask(() => {
       if (controller.signal.aborted) return;
+      setActiveBuild(null);
+      setLatestBuild(null);
+      setLogs([]);
+      setDiagnostics([]);
+      setError(null);
+      setCustomTarget("");
+
       void Promise.all([
         fetchBuildState(controller.signal),
         fetchBuildHistory(controller.signal),
       ])
         .then(([state, hist]) => {
           if (controller.signal.aborted) return;
-          setActiveBuild(state.active_build);
-          setLatestBuild(state.latest_build);
-          setLogs(state.logs.slice(-MAX_CLIENT_LOG_LINES));
-          setDiagnostics(state.diagnostics);
           setHistory(hist.history);
-          if (state.active_build?.status === "running") {
+          if (!projectDir) {
+            return;
+          }
+          const curDir = normalizeFsPath(projectDir);
+          const activeMatches =
+            state.active_build &&
+            normalizeFsPath(state.active_build.project_dir) === curDir;
+          const latestMatches =
+            state.latest_build &&
+            normalizeFsPath(state.latest_build.project_dir) === curDir;
+          setActiveBuild(activeMatches ? state.active_build : null);
+          if (latestMatches) {
+            setLatestBuild(state.latest_build);
+            setLogs(state.logs.slice(-MAX_CLIENT_LOG_LINES));
+            setDiagnostics(state.diagnostics.slice(0, MAX_CLIENT_DIAGNOSTICS));
+          }
+          if (activeMatches && state.active_build?.status === "running") {
             attachWebSocket(state.active_build.build_id);
           }
         })
@@ -175,7 +223,7 @@ export function useBuildSystem({
     return () => {
       controller.abort();
     };
-  }, [attachWebSocket, isBackendConnected]);
+  }, [attachWebSocket, closeSocket, isBackendConnected, projectDir]);
 
   useEffect(() => {
     return () => {

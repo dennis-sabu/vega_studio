@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import stat as stat_mod
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -366,8 +367,15 @@ class ExplorerService:
 
         rel_path = f"{parent_rel}/{name}" if parent_rel else name
 
-        # Guard against external symlinks
-        if entry.is_symlink():
+        # Guard against external symlinks / Windows NTFS junctions
+        is_reparse = entry.is_symlink()
+        if not is_reparse and os.name == "nt":
+            try:
+                attrs = getattr(os.lstat(entry), "st_file_attributes", 0)
+                is_reparse = bool(attrs & getattr(stat_mod, "FILE_ATTRIBUTE_REPARSE_POINT", 0))
+            except OSError:
+                is_reparse = False
+        if is_reparse:
             try:
                 resolved = entry.resolve(strict=True)
                 if not resolved.is_relative_to(project_root):
@@ -809,7 +817,19 @@ class ExplorerService:
             )
 
         try:
-            if target.is_symlink() or target.is_file():
+            is_reparse = target.is_symlink()
+            if not is_reparse and os.name == "nt":
+                try:
+                    attrs = getattr(os.lstat(target), "st_file_attributes", 0)
+                    is_reparse = bool(attrs & getattr(stat_mod, "FILE_ATTRIBUTE_REPARSE_POINT", 0))
+                except OSError:
+                    is_reparse = False
+            if is_reparse:
+                try:
+                    target.unlink()
+                except IsADirectoryError:
+                    target.rmdir()
+            elif target.is_file():
                 target.unlink()
             elif target.is_dir():
                 has_items = any(target.iterdir())

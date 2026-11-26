@@ -27,12 +27,37 @@ export interface AtmosphereTweaks {
   trailFade: number;
   grid: number;
   detail: number;
-  // Glass tokens for Home chrome
+  // Species-specific motion / appearance controls
+  flutter: number;
+  glide: number;
+  flapRate: number;
+  burst: number;
+  pause: number;
+  hopSpeed: number;
+  scare: number;
+  meander: number;
+  flipperBeat: number;
+  foodRange: number;
+  pulseRate: number;
+  pulsePower: number;
+  pulseGlow: number;
+  armLength: number;
+  hoverTime: number;
+  cruising: number;
+  swoopSpeed: number;
+  wingbeat: number;
+  howOften: number;
+  leapLength: number;
+  leapHeight: number;
+  foldingFlap: boolean;
+  // Glass tokens for Home chrome & composer
   blur: number;
   refraction: number;
   ripple: number;
   tint: number;
   edge: number;
+  composerRadius: number;
+  composerWidth: number;
 }
 
 export interface SpeciesMeta {
@@ -66,11 +91,35 @@ const BASE_DEFAULTS: AtmosphereTweaks = {
   trailFade: 1.3,
   grid: 1.05,
   detail: 1.3,
+  flutter: 0,
+  glide: 2.75,
+  flapRate: 1,
+  burst: 1,
+  pause: 1,
+  hopSpeed: 1,
+  scare: 0.6,
+  meander: 0.4,
+  flipperBeat: 1,
+  foodRange: 200,
+  pulseRate: 1,
+  pulsePower: 1,
+  pulseGlow: 1,
+  armLength: 1,
+  hoverTime: 1.3,
+  cruising: 0.5,
+  swoopSpeed: 1.3,
+  wingbeat: 1,
+  howOften: 1,
+  leapLength: 0.6,
+  leapHeight: 1,
+  foldingFlap: false,
   blur: 3.5,
   refraction: 40,
   ripple: 0.007,
   tint: 0,
   edge: 0.55,
+  composerRadius: 24,
+  composerWidth: 720,
 };
 
 function makeDefaults(
@@ -101,6 +150,9 @@ export const SPECIES_LIST: SpeciesMeta[] = [
       separation: 700,
       trail: 1.55,
       trailFade: 0.15,
+      flutter: 0,
+      glide: 2.75,
+      flapRate: 1,
     }),
   },
   {
@@ -126,6 +178,10 @@ export const SPECIES_LIST: SpeciesMeta[] = [
       trailFade: 0.35,
       shimmer: 0.1,
       sparkle: 0.03,
+      burst: 1,
+      pause: 1,
+      hopSpeed: 1,
+      scare: 0.6,
     }),
   },
   {
@@ -151,6 +207,9 @@ export const SPECIES_LIST: SpeciesMeta[] = [
       trailFade: 0.4,
       shimmer: 0.35,
       sparkle: 0.08,
+      meander: 0.4,
+      flipperBeat: 1,
+      foodRange: 200,
     }),
   },
   {
@@ -172,6 +231,10 @@ export const SPECIES_LIST: SpeciesMeta[] = [
       trail: 0.8,
       trailFade: 0.6,
       sparkle: 0.1,
+      pulseRate: 1,
+      pulsePower: 1,
+      pulseGlow: 1,
+      armLength: 1,
     }),
   },
   {
@@ -195,6 +258,10 @@ export const SPECIES_LIST: SpeciesMeta[] = [
       trail: 0.6,
       trailFade: 1.2,
       sparkle: 0.08,
+      hoverTime: 1.3,
+      cruising: 0.5,
+      swoopSpeed: 1.3,
+      wingbeat: 1,
     }),
   },
   {
@@ -219,6 +286,9 @@ export const SPECIES_LIST: SpeciesMeta[] = [
       trailFade: 0.4,
       shimmer: 0.25,
       sparkle: 0.1,
+      howOften: 1,
+      leapLength: 0.6,
+      leapHeight: 1,
     }),
   },
   {
@@ -243,6 +313,9 @@ export const SPECIES_LIST: SpeciesMeta[] = [
       trail: 0,
       shimmer: 0.1,
       sparkle: 0.04,
+      wingbeat: 0.85,
+      glide: 1.6,
+      foldingFlap: false,
     }),
   },
 ];
@@ -477,6 +550,7 @@ export class GlyphAnimalsEngine {
   private simTime = 0;
   private fontFamily = '"Geist Mono", ui-monospace, Menlo, monospace';
   private reducedMotion = false;
+  private forcedCount: number | null = null;
 
   constructor(
     initialSpecies: SpeciesKey = "moths",
@@ -495,6 +569,14 @@ export class GlyphAnimalsEngine {
 
   public setReducedMotion(reduced: boolean): void {
     this.reducedMotion = reduced;
+  }
+
+  public setForcedCount(count: number | null): void {
+    this.forcedCount =
+      count !== null && Number.isFinite(count) && count >= 1
+        ? clamp(Math.round(count), 1, 200)
+        : null;
+    this.syncPopulation(false);
   }
 
   public getSpecies(): SpeciesKey {
@@ -599,15 +681,17 @@ export class GlyphAnimalsEngine {
         a.glide = 0;
         a.glideGoal = 0;
       } else if (this.species === "rabbits") {
-        const scare = 0.6;
-        const fleeAngle = awayAngle + (Math.random() - 0.5) * 0.7;
-        const cruise = this.getCruise(a);
-        const fleeSpeed = cruise * (2.5 + 3 * k) * scare;
-        a.vx = Math.cos(fleeAngle) * fleeSpeed;
-        a.vy = Math.sin(fleeAngle) * fleeSpeed;
-        a.resting = false;
-        a.startleTimer = (1 + 1.5 * k) * Math.sqrt(scare);
-        a.alarm = 1;
+        const scare = this.tweaks.scare;
+        if (scare > 0) {
+          const fleeAngle = awayAngle + (Math.random() - 0.5) * 0.7;
+          const cruise = this.getCruise(a);
+          const fleeSpeed = cruise * (2.5 + 3 * k) * scare;
+          a.vx = Math.cos(fleeAngle) * fleeSpeed;
+          a.vy = Math.sin(fleeAngle) * fleeSpeed;
+          a.resting = false;
+          a.startleTimer = (1 + 1.5 * k) * Math.sqrt(scare);
+          a.alarm = 1;
+        }
       } else if (this.species === "squid") {
         a.phase = 0;
         const kick = 260 * k * a.depth;
@@ -697,7 +781,7 @@ export class GlyphAnimalsEngine {
     const meta = SPECIES_MAP[this.species];
     const base = this.getBaseSize();
     const norm = base / meta.scale / 160;
-    const target = clamp(
+    const computed = clamp(
       Math.round(
         ((this.width * this.height) / (meta.area * Math.max(0.25, norm * norm))) *
           this.tweaks.density
@@ -705,6 +789,7 @@ export class GlyphAnimalsEngine {
       1,
       200
     );
+    const target = this.forcedCount ?? computed;
 
     while (this.animals.length > target) {
       const idx = Math.floor(Math.random() * this.animals.length);
@@ -797,7 +882,7 @@ export class GlyphAnimalsEngine {
   }
 
   private startFishLeap(a: Animal, dirAngle: number, power = 1): void {
-    const leapLength = 0.6;
+    const leapLength = Math.max(0.15, this.tweaks.leapLength);
     const dist =
       a.span * (2.4 + Math.random() * 1.2) * leapLength * this.tweaks.speed * power;
     let bestAngle = dirAngle;
@@ -935,7 +1020,7 @@ export class GlyphAnimalsEngine {
       if (this.species === "moths") {
         a.glideTimer -= dt;
         if (a.glideTimer <= 0) {
-          if (a.glideGoal === 0 && Math.random() < 0.35 * 2.75) {
+          if (a.glideGoal === 0 && Math.random() < 0.35 * this.tweaks.glide * dt) {
             a.glideGoal = 1;
             a.glideTimer = 0.5 + Math.random() * 0.9;
           } else {
@@ -953,17 +1038,28 @@ export class GlyphAnimalsEngine {
           2.6 *
           Math.PI *
           2 *
+          this.tweaks.flapRate *
           (0.8 + 0.6 * speedFrac) *
           (1 - 0.9 * a.glide);
 
         const downstroke = Math.max(0, -Math.sin(a.phase));
         const targetSpeed = cruise * (1 + 0.4 * downstroke);
+        const flutterImpulse =
+          this.tweaks.flutter > 0
+            ? Math.sqrt(dt) * 520 * 1.3 * this.tweaks.flutter * (1 - 0.7 * a.glide)
+            : 0;
         const ax =
           (Math.cos(aim) * targetSpeed - a.vx) * this.tweaks.grip + sepX;
         const ay =
           (Math.sin(aim) * targetSpeed - a.vy) * this.tweaks.grip + sepY;
-        a.vx += ax * dt;
-        a.vy += ay * dt;
+        a.vx +=
+          ax * dt +
+          (flutterImpulse ? (Math.random() - 0.5) * flutterImpulse : 0) -
+          (flutterImpulse ? 3 * a.vx * dt * 0.15 : 0);
+        a.vy +=
+          ay * dt +
+          (flutterImpulse ? (Math.random() - 0.5) * flutterImpulse : 0) -
+          (flutterImpulse ? 3 * a.vy * dt * 0.15 : 0);
 
         // Wingtip trail shedding
         const open =
@@ -980,10 +1076,10 @@ export class GlyphAnimalsEngine {
       } else if (this.species === "rabbits") {
         a.stateTimer -= dt;
         if (a.stateTimer <= 0 && a.startleTimer <= 0) {
-          a.resting = !a.resting;
+          a.resting = this.tweaks.pause > 0 ? !a.resting : false;
           a.stateTimer = a.resting
-            ? 0.3 + Math.random() * 1.1
-            : 0.5 + Math.random() * 1.1;
+            ? (0.3 + Math.random() * 1.1) * this.tweaks.pause
+            : (0.5 + Math.random() * 1.1) * Math.max(0.1, this.tweaks.burst);
         }
         const targetSpeed = a.resting && a.startleTimer <= 0 ? 0 : cruise;
         const ax =
@@ -994,8 +1090,13 @@ export class GlyphAnimalsEngine {
         a.vy += ay * dt;
         const spd = Math.hypot(a.vx, a.vy);
         if (spd > 12) {
+          const hop = Math.min(1, spd / 30);
           const prevCycle = Math.floor(a.phase / (Math.PI * 2));
-          a.phase += dt * Math.max(spd, 30) / Math.max(4, 0.32 * a.span) * Math.PI * 2;
+          a.phase +=
+            ((dt * Math.max(spd, 30 * hop) * this.tweaks.hopSpeed) /
+              Math.max(4, 0.32 * a.span)) *
+            Math.PI *
+            2;
           const nextCycle = Math.floor(a.phase / (Math.PI * 2));
           if (nextCycle > prevCycle) {
             this.stampTrail(a.x, a.y + 0.14 * a.span, 0, 0.5 * a.depth);
@@ -1004,7 +1105,7 @@ export class GlyphAnimalsEngine {
       } else if (this.species === "turtles") {
         let hungry = false;
         let nearest: FoodPellet | null = null;
-        let bestDist = 200;
+        let bestDist = Math.max(0, this.tweaks.foodRange);
         for (const p of this.pellets) {
           const d = Math.hypot(p.x - a.x, p.y - a.y);
           if (d < bestDist) {
@@ -1021,7 +1122,7 @@ export class GlyphAnimalsEngine {
             if (idx >= 0) this.pellets.splice(idx, 1);
           }
         } else {
-          aim += 0.4 * 0.6 * Math.sin(0.35 * t + 1.7 * a.id);
+          aim += this.tweaks.meander * 0.6 * Math.sin(0.35 * t + 1.7 * a.id);
         }
         const sepAng = sepX || sepY ? Math.atan2(sepY, sepX) : aim;
         const blendedAim =
@@ -1034,7 +1135,7 @@ export class GlyphAnimalsEngine {
         const spd = cruise * speedMult;
         a.vx = Math.cos(a.heading) * spd;
         a.vy = Math.sin(a.heading) * spd;
-        a.phase += dt * (1.4 + spd / 40);
+        a.phase += dt * (1.4 + spd / 40) * this.tweaks.flipperBeat;
         this.shedTrail(
           a.x - Math.cos(a.heading) * 0.28 * a.span,
           a.y - Math.sin(a.heading) * 0.28 * a.span,
@@ -1042,13 +1143,14 @@ export class GlyphAnimalsEngine {
         );
       } else if (this.species === "squid") {
         const prevHeading = a.heading;
-        a.phase = (a.phase + dt * 0.6 * (0.9 + 0.2 * a.roll)) % 1;
+        a.phase =
+          (a.phase + dt * 0.6 * this.tweaks.pulseRate * (0.9 + 0.2 * a.roll)) % 1;
         const squeeze =
           a.phase < 0.22
             ? Math.sin(((a.phase / 0.22) * Math.PI) / 2)
             : 1 - (a.phase - 0.22) / 0.78;
         if (a.phase < 0.22) {
-          const thrust = 6.2 * cruise;
+          const thrust = 6.2 * cruise * this.tweaks.pulsePower;
           a.vx += Math.cos(a.heading) * thrust * dt;
           a.vy += Math.sin(a.heading) * thrust * dt;
         }
@@ -1071,13 +1173,15 @@ export class GlyphAnimalsEngine {
             a.owlState = "swoop";
             a.stateTimer = 0.15 + Math.random() * 0.3;
           } else if (a.owlState === "swoop") {
-            if (Math.random() < 0.5) {
+            if (Math.random() < this.tweaks.cruising) {
               a.owlState = "cruise";
               a.stateTimer = 1.2 + Math.random() * 3.3;
               a.aimOffset = (Math.random() - 0.5) * 0.4;
             } else {
               a.owlState = "hover";
-              a.stateTimer = clamp(-Math.log(Math.random() || 0.5) * 0.7, 0.15, 3) * 1.3;
+              a.stateTimer =
+                clamp(-Math.log(Math.random() || 0.5) * 0.7, 0.15, 3) *
+                this.tweaks.hoverTime;
             }
           } else {
             if (Math.random() < 0.35) {
@@ -1085,14 +1189,22 @@ export class GlyphAnimalsEngine {
               a.stateTimer = 0.15 + Math.random() * 0.3;
             } else {
               a.owlState = "hover";
-              a.stateTimer = clamp(-Math.log(Math.random() || 0.5) * 0.7, 0.15, 3) * 1.3;
+              a.stateTimer =
+                clamp(-Math.log(Math.random() || 0.5) * 0.7, 0.15, 3) *
+                this.tweaks.hoverTime;
             }
           }
         }
         const tuckTarget = a.owlState === "swoop" ? 1 : 0;
         a.tuck += (tuckTarget - a.tuck) * Math.min(1, 10 * dt);
         const wingFreq = a.owlState === "hover" ? 3.4 : 2.2;
-        a.phase += dt * wingFreq * Math.PI * 2 * (1 - 0.85 * a.tuck);
+        a.phase +=
+          dt *
+          wingFreq *
+          Math.PI *
+          2 *
+          this.tweaks.wingbeat *
+          (1 - 0.85 * a.tuck);
 
         let targetSpeed = cruise;
         let gain = this.tweaks.grip;
@@ -1103,7 +1215,7 @@ export class GlyphAnimalsEngine {
           wobbleX = Math.sin(t * 2.1 + a.id) * 40;
           wobbleY = Math.cos(t * 4.2 + a.id) * 40;
         } else if (a.owlState === "swoop") {
-          targetSpeed = cruise * 4 * 1.3;
+          targetSpeed = cruise * 4 * this.tweaks.swoopSpeed;
           gain = 14;
           this.shedTrail(a.x, a.y, 0.12 * a.depth);
         } else {
@@ -1120,7 +1232,9 @@ export class GlyphAnimalsEngine {
             a.x = a.leapTargetX;
             a.y = a.leapTargetY;
             a.leaping = false;
-            a.stateTimer = (0.5 + Math.random() * 1.7) / Math.max(0.2, this.tweaks.speed);
+            a.stateTimer =
+              (0.5 + Math.random() * 1.7) /
+              Math.max(0.1, this.tweaks.howOften * this.tweaks.speed);
             a.aimOffset = (Math.random() - 0.5) * 0.7 * this.tweaks.spread;
             this.stampTrail(a.x, a.y, 2, 0.7 * a.depth);
           } else {
@@ -1144,7 +1258,7 @@ export class GlyphAnimalsEngine {
       } else if (this.species === "eagles") {
         a.glideTimer -= dt;
         if (a.glideTimer <= 0) {
-          if (a.glideGoal === 0 && Math.random() < 0.25 * 1.6) {
+          if (a.glideGoal === 0 && Math.random() < 0.25 * this.tweaks.glide * dt) {
             a.glideGoal = 1;
             a.glideTimer = 1 + Math.random() * 1.5;
           } else {
@@ -1154,7 +1268,13 @@ export class GlyphAnimalsEngine {
         }
         a.glide += (a.glideGoal - a.glide) * Math.min(1, 3 * dt);
         a.phase +=
-          dt * 1.25 * Math.PI * 2 * 0.85 * a.pace * (1 - 0.92 * a.glide);
+          dt *
+          1.25 *
+          Math.PI *
+          2 *
+          this.tweaks.wingbeat *
+          a.pace *
+          (1 - 0.92 * a.glide);
         const ax = (Math.cos(aim) * cruise - a.vx) * this.tweaks.grip + sepX;
         const ay = (Math.sin(aim) * cruise - a.vy) * this.tweaks.grip + sepY;
         a.vx += ax * dt;
@@ -1597,9 +1717,14 @@ export class GlyphAnimalsEngine {
           };
         }
         // Pulse glow halo
-        if (glow > 0.1 && Math.abs(v) <= hw + 0.05 * glow) {
+        const glowAmt = glow * this.tweaks.pulseGlow;
+        if (glowAmt > 0.1 && Math.abs(v) <= hw + 0.05 * glowAmt) {
           return {
-            color: [255 * glow, 160 * glow, 210 * glow],
+            color: [
+              clamp(255 * glowAmt, 0, 255),
+              clamp(160 * glowAmt, 0, 255),
+              clamp(210 * glowAmt, 0, 255),
+            ],
             kind: "Line",
             glyphs: ".",
           };
@@ -1725,8 +1850,22 @@ export class GlyphAnimalsEngine {
     }
 
     // Eagles (seen from below)
+    const cycleFrac = ((a.phase % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2) / (Math.PI * 2);
     const flap = Math.pow(0.5 + 0.5 * Math.cos(a.phase), 0.8);
-    const arm = Math.max(0.12, 0.25 + 0.75 * (flap * (1 - a.glide) + a.glide));
+    let arm = Math.max(0.12, 0.25 + 0.75 * (flap * (1 - a.glide) + a.glide));
+    let hand = arm;
+    let handSweep = 0;
+    if (this.tweaks.foldingFlap) {
+      const downAng =
+        cycleFrac < 0.6
+          ? 0.85 - (1.45 * cycleFrac) / 0.6
+          : -0.6 + (1.45 * (cycleFrac - 0.6)) / 0.4;
+      const upFold = cycleFrac >= 0.6 ? Math.sin(((cycleFrac - 0.6) / 0.4) * Math.PI) : 0;
+      const flatPose = 1 - a.glide;
+      arm = clamp(Math.cos(downAng * 0.65) * flatPose + a.glide, 0.28, 1);
+      hand = clamp((arm * (1 - 0.45 * upFold)) * flatPose + a.glide, 0.2, 1);
+      handSweep = upFold * 0.35 * flatPose;
+    }
     const light = 0.82 + 0.18 * arm;
 
     // Gold hooked beak
@@ -1755,20 +1894,22 @@ export class GlyphAnimalsEngine {
     }
     // Wings
     const av = Math.abs(v);
-    const wingMax = 0.05 + 0.49 * arm;
+    const wristV = 0.05 + 0.2 * arm;
+    const wingMax = wristV + 0.29 * hand;
     if (av >= 0.05 && av <= wingMax) {
-      const s = (av - 0.05) / (wingMax - 0.05);
+      const s = (av - 0.05) / Math.max(0.01, wingMax - 0.05);
+      const foldedU = av > wristV ? u + (av - wristV) * handSweep : u;
       const lead = 0.13 + 0.02 * s - 0.07 * s * s;
       const trail =
         -0.115 + 0.025 * s - (s < 0.74 ? 0.012 * Math.cos(s * Math.PI * 8) : 0);
-      if (u <= lead && u >= trail) {
-        if (s > 0.7 && Math.sin(u * 56) < -0.35) {
+      if (foldedU <= lead && foldedU >= trail) {
+        if (s > 0.7 && Math.sin(foldedU * 56) < -0.35) {
           return false; // finger primaries
         }
         if (s > 0.72) {
           return { color: [112 * light, 120 * light, 144 * light], kind: "Dark" };
         }
-        if (u < lead - 0.12) {
+        if (foldedU < lead - 0.12) {
           return { color: [150 * light, 158 * light, 180 * light], kind: "Dark", glyphs: "=#" };
         }
         return { color: [236 * light, 238 * light, 246 * light], kind: "Plain" };
@@ -1861,7 +2002,7 @@ export class GlyphAnimalsEngine {
         drawSpan *= 1 + 0.08 * air;
       } else if (this.species === "flyingfish") {
         const arc = a.leaping
-          ? 4 * a.leapProgress * (1 - a.leapProgress)
+          ? 4 * a.leapProgress * (1 - a.leapProgress) * this.tweaks.leapHeight
           : 0;
         drawSpan *= 1 + 0.35 * arc;
         if (!a.leaping) {
@@ -2109,7 +2250,8 @@ export class GlyphAnimalsEngine {
         for (let arm = 0; arm < 8; arm++) {
           const frac = (arm - 3.5) / 3.5;
           const baseV = frac * 0.06 * (1 - 0.55 * squeeze);
-          const armLen = 0.42 * (0.85 + 0.3 * hashInt(a.id * 31 + arm));
+          const armLen =
+            0.42 * this.tweaks.armLength * (0.85 + 0.3 * hashInt(a.id * 31 + arm));
           let prev = toScreen(-0.08, baseV);
           for (let seg = 1; seg <= 6; seg++) {
             const s = seg / 6;
@@ -2122,12 +2264,13 @@ export class GlyphAnimalsEngine {
             prev = next;
           }
         }
+        const tentacleLen = 0.78 * this.tweaks.armLength;
         for (const side of [-1, 1]) {
           let prev = toScreen(-0.08, side * 0.025);
           for (let seg = 1; seg <= 8; seg++) {
             const s = seg / 8;
             const next = toScreen(
-              -0.08 - 0.78 * s,
+              -0.08 - tentacleLen * s,
               side * (0.025 + 0.05 * s) +
                 0.04 * Math.sin(a.phase * Math.PI * 2 - 4 * s + side)
             );

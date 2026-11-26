@@ -91,26 +91,59 @@ export function useLearning({
   const [error, setError] = useState<string | null>(null);
 
   const onLogRef = useRef(onLog);
+  const selectedExampleIdRef = useRef<string | null>(selectedExampleId);
+  const selectedDocSlugRef = useRef<string | null>(selectedDocSlug);
+  const exampleAbortRef = useRef<AbortController | null>(null);
+  const fileAbortRef = useRef<AbortController | null>(null);
+  const docAbortRef = useRef<AbortController | null>(null);
+
   useEffect(() => {
     onLogRef.current = onLog;
+    selectedExampleIdRef.current = selectedExampleId;
+    selectedDocSlugRef.current = selectedDocSlug;
   });
+
+  useEffect(() => {
+    return () => {
+      exampleAbortRef.current?.abort();
+      fileAbortRef.current?.abort();
+      docAbortRef.current?.abort();
+    };
+  }, []);
 
   const previewExampleFile = useCallback(
     async (exampleId: string, relPath: string) => {
       if (!isBackendConnected) return;
+      fileAbortRef.current?.abort();
+      const ctrl = new AbortController();
+      fileAbortRef.current = ctrl;
+
       setSelectedFileRelPath(relPath);
       setLoadingFilePreview(true);
       setError(null);
       try {
-        const res = await fetchExampleFileContent(exampleId, relPath);
+        const res = await fetchExampleFileContent(
+          exampleId,
+          relPath,
+          ctrl.signal
+        );
+        if (ctrl.signal.aborted || fileAbortRef.current !== ctrl) return;
         setSelectedFileContent(res);
       } catch (err: unknown) {
+        if (
+          ctrl.signal.aborted ||
+          (err instanceof Error && err.name === "AbortError")
+        ) {
+          return;
+        }
         setSelectedFileContent(null);
         setError(
           err instanceof Error ? err.message : "Failed to load example file."
         );
       } finally {
-        setLoadingFilePreview(false);
+        if (fileAbortRef.current === ctrl) {
+          setLoadingFilePreview(false);
+        }
       }
     },
     [isBackendConnected]
@@ -119,11 +152,17 @@ export function useLearning({
   const selectExample = useCallback(
     async (exampleId: string, previewEntry = true) => {
       if (!isBackendConnected) return;
+      exampleAbortRef.current?.abort();
+      fileAbortRef.current?.abort();
+      const ctrl = new AbortController();
+      exampleAbortRef.current = ctrl;
+
       setSelectedExampleId(exampleId);
       setLoadingExampleDetail(true);
       setError(null);
       try {
-        const detail = await fetchExampleDetail(exampleId);
+        const detail = await fetchExampleDetail(exampleId, ctrl.signal);
+        if (ctrl.signal.aborted || exampleAbortRef.current !== ctrl) return;
         setSelectedExampleDetail(detail);
         const preferredFile =
           detail.example.entry_file ||
@@ -137,10 +176,18 @@ export function useLearning({
           try {
             const fileRes = await fetchExampleFileContent(
               exampleId,
-              preferredFile
+              preferredFile,
+              ctrl.signal
             );
+            if (ctrl.signal.aborted || exampleAbortRef.current !== ctrl) return;
             setSelectedFileContent(fileRes);
           } catch (fileErr: unknown) {
+            if (
+              ctrl.signal.aborted ||
+              (fileErr instanceof Error && fileErr.name === "AbortError")
+            ) {
+              return;
+            }
             setSelectedFileContent(null);
             setError(
               fileErr instanceof Error
@@ -148,13 +195,21 @@ export function useLearning({
                 : "Failed to preview entry file."
             );
           } finally {
-            setLoadingFilePreview(false);
+            if (exampleAbortRef.current === ctrl) {
+              setLoadingFilePreview(false);
+            }
           }
         } else {
           setSelectedFileRelPath(null);
           setSelectedFileContent(null);
         }
       } catch (err: unknown) {
+        if (
+          ctrl.signal.aborted ||
+          (err instanceof Error && err.name === "AbortError")
+        ) {
+          return;
+        }
         setSelectedExampleDetail(null);
         setError(
           err instanceof Error
@@ -162,7 +217,9 @@ export function useLearning({
             : "Failed to load example details."
         );
       } finally {
-        setLoadingExampleDetail(false);
+        if (exampleAbortRef.current === ctrl) {
+          setLoadingExampleDetail(false);
+        }
       }
     },
     [isBackendConnected]
@@ -171,6 +228,10 @@ export function useLearning({
   const selectDoc = useCallback(
     async (slug: string, switchToDocsTab = true) => {
       if (!isBackendConnected) return;
+      docAbortRef.current?.abort();
+      const ctrl = new AbortController();
+      docAbortRef.current = ctrl;
+
       if (switchToDocsTab) {
         setSubTab("docs");
       }
@@ -178,9 +239,16 @@ export function useLearning({
       setLoadingDocDetail(true);
       setError(null);
       try {
-        const detail = await fetchDocDetail(slug);
+        const detail = await fetchDocDetail(slug, ctrl.signal);
+        if (ctrl.signal.aborted || docAbortRef.current !== ctrl) return;
         setSelectedDocDetail(detail);
       } catch (err: unknown) {
+        if (
+          ctrl.signal.aborted ||
+          (err instanceof Error && err.name === "AbortError")
+        ) {
+          return;
+        }
         setSelectedDocDetail(null);
         setError(
           err instanceof Error
@@ -188,7 +256,9 @@ export function useLearning({
             : "Failed to load documentation page."
         );
       } finally {
-        setLoadingDocDetail(false);
+        if (docAbortRef.current === ctrl) {
+          setLoadingDocDetail(false);
+        }
       }
     },
     [isBackendConnected]
@@ -208,11 +278,11 @@ export function useLearning({
       setDocCatalog(docRes);
 
       const fallbackEx = exRes.examples[0]?.id ?? null;
-      if (!selectedExampleId && fallbackEx) {
+      if (!selectedExampleIdRef.current && fallbackEx) {
         await selectExample(fallbackEx, true);
       }
       const fallbackDoc = docRes.docs[0]?.slug ?? null;
-      if (!selectedDocSlug && fallbackDoc) {
+      if (!selectedDocSlugRef.current && fallbackDoc) {
         await selectDoc(fallbackDoc, false);
       }
     } catch (err: unknown) {
@@ -225,48 +295,51 @@ export function useLearning({
       setLoadingExamples(false);
       setLoadingDocs(false);
     }
-  }, [isBackendConnected, selectDoc, selectExample, selectedDocSlug, selectedExampleId]);
+  }, [isBackendConnected, selectDoc, selectExample]);
 
   useEffect(() => {
     if (!isBackendConnected) return;
-    let cancelled = false;
+    const ctrl = new AbortController();
     void (async () => {
+      setLoadingExamples(true);
+      setLoadingDocs(true);
       try {
         const [exRes, docRes] = await Promise.all([
-          fetchExampleCatalog(),
-          fetchDocCatalog(),
+          fetchExampleCatalog(undefined, ctrl.signal),
+          fetchDocCatalog(undefined, ctrl.signal),
         ]);
-        if (cancelled) return;
+        if (ctrl.signal.aborted) return;
         setExampleCatalog(exRes);
         setDocCatalog(docRes);
 
-        if (!selectedExampleId && exRes.examples[0]?.id) {
+        if (!selectedExampleIdRef.current && exRes.examples[0]?.id) {
           void selectExample(exRes.examples[0].id, true);
         }
-        if (!selectedDocSlug && docRes.docs[0]?.slug) {
+        if (!selectedDocSlugRef.current && docRes.docs[0]?.slug) {
           void selectDoc(docRes.docs[0].slug, false);
         }
       } catch (err: unknown) {
-        if (!cancelled) {
+        if (
+          !ctrl.signal.aborted &&
+          !(err instanceof Error && err.name === "AbortError")
+        ) {
           setError(
             err instanceof Error
               ? err.message
               : "Failed to load examples & docs catalog."
           );
         }
+      } finally {
+        if (!ctrl.signal.aborted) {
+          setLoadingExamples(false);
+          setLoadingDocs(false);
+        }
       }
     })();
     return () => {
-      cancelled = true;
+      ctrl.abort();
     };
-  }, [
-    isBackendConnected,
-    sdkConfigUpdatedAt,
-    selectDoc,
-    selectExample,
-    selectedDocSlug,
-    selectedExampleId,
-  ]);
+  }, [isBackendConnected, sdkConfigUpdatedAt, selectDoc, selectExample]);
 
   useEffect(() => {
     const query = docSearch.trim();
@@ -277,25 +350,41 @@ export function useLearning({
       });
       return;
     }
+    const ctrl = new AbortController();
     const timer = window.setTimeout(() => {
       void (async () => {
         setSearchingDocs(true);
         try {
           const res = await searchDocsCatalog(
             query,
-            docCategory || null
+            docCategory || null,
+            ctrl.signal
           );
-          setDocSearchResults(res);
+          if (!ctrl.signal.aborted) {
+            setDocSearchResults(res);
+          }
         } catch (err: unknown) {
-          setError(
-            err instanceof Error ? err.message : "Documentation search failed."
-          );
+          if (
+            !ctrl.signal.aborted &&
+            !(err instanceof Error && err.name === "AbortError")
+          ) {
+            setError(
+              err instanceof Error
+                ? err.message
+                : "Documentation search failed."
+            );
+          }
         } finally {
-          setSearchingDocs(false);
+          if (!ctrl.signal.aborted) {
+            setSearchingDocs(false);
+          }
         }
       })();
     }, 180);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      ctrl.abort();
+    };
   }, [docCategory, docSearch, isBackendConnected]);
 
   const filteredExamples = useMemo(() => {

@@ -142,6 +142,11 @@ class SerialService:
                         if desc and desc.lower() != "n/a"
                         else p.device
                     )
+                    port_accessible = (
+                        os.access(p.device, os.R_OK | os.W_OK)
+                        if (host_os != "windows" and str(p.device).startswith("/dev/"))
+                        else True
+                    )
                     devices.append(
                         SerialDeviceInfo(
                             port=p.device,
@@ -153,12 +158,11 @@ class SerialService:
                             vendor_id=f"{vid_val:04X}" if vid_val is not None else None,
                             product_id=f"{pid_val:04X}" if pid_val is not None else None,
                             transport="serial",
-                            accessible=True,
+                            accessible=port_accessible,
                         )
                     )
                 if host_os != "windows":
-                    uploader_helper = UploadService()
-                    devfs_devices, dev_warnings = uploader_helper._discover_linux_devfs_ports()
+                    devfs_devices, dev_warnings = UploadService._discover_linux_devfs_ports()
                     warnings.extend(dev_warnings)
                     by_real = {}
                     for d in devfs_devices:
@@ -294,6 +298,7 @@ class SerialService:
         except Exception as exc:
             with self._lock:
                 self._status = "error"
+                self._port = None
                 self._error_message = str(exc)
             self._append_log("error", f"Failed to open {req.port}: {exc}")
             self._emit_event(
@@ -301,7 +306,7 @@ class SerialService:
                     "type": "status",
                     "status": "error",
                     "error_message": str(exc),
-                    "port": req.port,
+                    "port": None,
                 }
             )
             raise SerialServiceError(str(exc), status_code=400) from exc
@@ -528,7 +533,9 @@ class SerialService:
     def shutdown(self) -> None:
         """Clean up on application shutdown."""
         try:
-            if self._status in ("connected", "error"):
+            with self._lock:
+                cur_status = self._status
+            if cur_status in ("connected", "connecting", "error"):
                 self.disconnect()
         except Exception:
             pass
@@ -599,56 +606,76 @@ class SerialService:
         partial: bytes = b""
         last_flush = time.monotonic()
 
-        while not self._stop_event.is_set():
-            conn = self._serial_conn
-            if conn is None:
-                break
-
-            try:
-                in_waiting = getattr(conn, "in_waiting", 0)
-                if isinstance(in_waiting, int) and in_waiting > 0:
-                    chunk = conn.read(min(in_waiting, 4096))
-                else:
-                    chunk = conn.read(1)
-            except Exception as exc:
-                if self._stop_event.is_set():
+        try:
+            while not self._stop_event.is_set():
+                conn = self._serial_conn
+                if conn is None:
                     break
-                with self._lock:
-                    if self._status == "connected":
-                        self._status = "error"
-                        self._error_message = str(exc)
-                    err_port = self._port
-                self._append_log("error", f"Serial read error: {exc}")
-                self._emit_event(
-                    {
-                        "type": "status",
-                        "status": "error",
-                        "error_message": str(exc),
-                        "port": err_port,
-                    }
-                )
-                break
 
-            if chunk:
-                with self._lock:
-                    self._rx_count += len(chunk)
+                try:
+                    in_waiting = getattr(conn, "in_waiting", 0)
+                    if isinstance(in_waiting, int) and in_waiting > 0:
+                        chunk = conn.read(min(in_waiting, 4096))
+                    else:
+                        chunk = conn.read(1)
+                except Exception as exc:
+                    if self._stop_event.is_set():
+                        break
+                    with self._lock:
+                        if self._status == "connected":
+                            self._status = "error"
+                            self._error_message = str(exc)
+                        err_port = self._port
+                    self._append_log("error", f"Serial read error: {exc}")
+                    self._emit_event(
+                        {
+                            "type": "status",
+                            "status": "error",
+                            "error_message": str(exc),
+                            "port": err_port,
+                        }
+                    )
+                    break
 
-                partial += chunk
-                while b"\n" in partial:
-                    line_bytes, partial = partial.split(b"\n", 1)
-                    text = line_bytes.decode("utf-8", errors="replace").rstrip("\r")
+                now = time.monotonic()
+                if chunk:
+                    with self._lock:
+                        self._rx_count += len(chunk)
+
+                    partial += chunk
+                    while b"\n" in partial:
+                        line_bytes, partial = partial.split(b"\n", 1)
+                        text = line_bytes.decode("utf-8", errors="replace").rstrip("\r")
+                        self._append_log("rx", text)
+                        last_flush = now
+                    if len(partial) >= 4096:
+                        text = partial.decode("utf-8", errors="replace").rstrip("\r")
+                        self._append_log("rx", text)
+                        partial = b""
+                        last_flush = now
+
+                if partial and (now - last_flush) >= _PARTIAL_FLUSH_INTERVAL_S:
+                    text = partial.decode("utf-8", errors="replace").rstrip("\r")
                     self._append_log("rx", text)
-                last_flush = time.monotonic()
+                    partial = b""
+                    last_flush = now
 
-            elif partial and (time.monotonic() - last_flush) >= _PARTIAL_FLUSH_INTERVAL_S:
+            if partial:
                 text = partial.decode("utf-8", errors="replace").rstrip("\r")
                 self._append_log("rx", text)
-                partial = b""
-                last_flush = time.monotonic()
-
-        if partial:
-            text = partial.decode("utf-8", errors="replace").rstrip("\r")
-            self._append_log("rx", text)
+        finally:
+            # Close underlying handle if loop exited unexpectedly on read error
+            with self._lock:
+                stale_conn = self._serial_conn
+                if not self._stop_event.is_set() and stale_conn is not None:
+                    self._serial_conn = None
+                else:
+                    stale_conn = None
+            if stale_conn is not None:
+                try:
+                    stale_conn.close()
+                except Exception:
+                    pass
 
 
 # ---------------------------------------------------------------------------

@@ -127,13 +127,17 @@ export function useGitHubIntegration({
         setStatus(null);
         setRemoteRepoDetail(null);
         setConfirmDialog(null);
+        setLoading(false);
+        setError(null);
       });
       return;
     }
 
     const ctrl = new AbortController();
     queueMicrotask(() => {
+      if (ctrl.signal.aborted) return;
       setRemoteRepoDetail(null);
+      setError(null);
       setLoading(true);
     });
     fetchGitHubStatus(projectDir ?? undefined, ctrl.signal)
@@ -142,19 +146,21 @@ export function useGitHubIntegration({
           setStatus(res);
         }
       })
-      .catch((err) => {
-        if (!ctrl.signal.aborted) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Failed to load GitHub status."
-          );
+      .catch((err: unknown) => {
+        if (
+          ctrl.signal.aborted ||
+          (err instanceof Error && err.name === "AbortError")
+        ) {
+          return;
         }
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load GitHub status."
+        );
       })
       .finally(() => {
-        if (!ctrl.signal.aborted) {
-          setLoading(false);
-        }
+        setLoading(false);
       });
 
     return () => ctrl.abort();
@@ -170,7 +176,16 @@ export function useGitHubIntegration({
     }
 
     const ctrl = new AbortController();
+    let inFlight = false;
     const timer = window.setInterval(() => {
+      if (
+        inFlight ||
+        ctrl.signal.aborted ||
+        (typeof document !== "undefined" && document.visibilityState === "hidden")
+      ) {
+        return;
+      }
+      inFlight = true;
       fetchGitHubOperationState(ctrl.signal)
         .then((opState) => {
           if (ctrl.signal.aborted) return;
@@ -210,16 +225,21 @@ export function useGitHubIntegration({
               onLogRef.current?.(`[GitHub Error] ${errMsg}`);
             }
 
-            void fetchGitHubStatus(projectDir ?? undefined).then((next) => {
-              if (!ctrl.signal.aborted) {
-                setStatus(next);
-              }
-            });
+            void fetchGitHubStatus(projectDir ?? undefined, ctrl.signal)
+              .then((next) => {
+                if (!ctrl.signal.aborted) {
+                  setStatus(next);
+                }
+              })
+              .catch(() => {});
             onRefreshGitRef.current?.();
           }
         })
         .catch(() => {
           // Transient polling error will retry cleanly on next interval
+        })
+        .finally(() => {
+          inFlight = false;
         });
     }, 350);
 

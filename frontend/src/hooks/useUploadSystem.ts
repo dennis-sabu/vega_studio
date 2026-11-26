@@ -60,6 +60,10 @@ export function useUploadSystem({
   const [error, setError] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const preflightSeqRef = useRef(0);
+  const deviceRefreshSeqRef = useRef(0);
+  const preflightDebounceTimerRef = useRef<number | null>(null);
+  const preflightActionAbortRef = useRef<AbortController | null>(null);
   const onLogRef = useRef(onLog);
   const projectDirRef = useRef(projectDir);
   const selectedPortRef = useRef(selectedPort);
@@ -104,6 +108,7 @@ export function useUploadSystem({
 
       const ws = new WebSocket(getUploadWsUrl(uploadId));
       wsRef.current = ws;
+      let completed = false;
 
       ws.onmessage = (event: MessageEvent<string>) => {
         if (wsRef.current !== ws) return;
@@ -136,6 +141,7 @@ export function useUploadSystem({
             setActiveUpload(msg.upload);
           }
         } else if (msg.type === "completed") {
+          completed = true;
           setLatestUpload(msg.upload);
           setActiveUpload(null);
           onLogRef.current?.(
@@ -151,7 +157,7 @@ export function useUploadSystem({
         }
       };
 
-      ws.onerror = () => {
+      const reconcileState = () => {
         void fetchUploadState()
           .then((state) => {
             setActiveUpload(state.active_upload);
@@ -159,6 +165,19 @@ export function useUploadSystem({
             setLogs(state.logs.slice(-MAX_CLIENT_UPLOAD_LOGS));
           })
           .catch(() => {});
+      };
+
+      ws.onerror = () => {
+        if (wsRef.current !== ws) return;
+        reconcileState();
+      };
+
+      ws.onclose = () => {
+        if (wsRef.current !== ws) return;
+        wsRef.current = null;
+        if (!completed) {
+          reconcileState();
+        }
       };
     },
     [closeSocket, refreshHistory]
@@ -190,6 +209,16 @@ export function useUploadSystem({
           ? overrides.mode
           : invocationModeRef.current;
 
+      const reqSeq = ++preflightSeqRef.current;
+      const controller = overrides?.signal
+        ? null
+        : new AbortController();
+      if (controller) {
+        preflightActionAbortRef.current?.abort();
+        preflightActionAbortRef.current = controller;
+      }
+      const effectiveSignal = overrides?.signal ?? controller?.signal;
+
       setRunningPreflight(true);
       try {
         const res = await runUploadPreflight(
@@ -199,9 +228,11 @@ export function useUploadSystem({
             artifact_path: targetArtifact.trim() || null,
             invocation_mode: targetMode,
           },
-          overrides?.signal
+          effectiveSignal
         );
-        if (overrides?.signal?.aborted) return null;
+        if (effectiveSignal?.aborted || reqSeq !== preflightSeqRef.current) {
+          return null;
+        }
         setPreflight(res);
         setDeviceInfo((prev) =>
           prev
@@ -233,14 +264,14 @@ export function useUploadSystem({
         return res;
       } catch (err: unknown) {
         if (
-          overrides?.signal?.aborted ||
+          effectiveSignal?.aborted ||
           (err instanceof Error && err.name === "AbortError")
         ) {
           return null;
         }
         return null;
       } finally {
-        if (!overrides?.signal?.aborted) {
+        if (reqSeq === preflightSeqRef.current) {
           setRunningPreflight(false);
         }
       }
@@ -251,10 +282,11 @@ export function useUploadSystem({
   const refreshDevicesAndPreflight = useCallback(
     async (signal?: AbortSignal) => {
       if (!isBackendConnected) return;
+      const reqSeq = ++deviceRefreshSeqRef.current;
       setRefreshingDevices(true);
       try {
         const dev = await fetchUploadDevices(signal);
-        if (signal?.aborted) return;
+        if (signal?.aborted || reqSeq !== deviceRefreshSeqRef.current) return;
         setDeviceInfo(dev);
         await runPreflightCheck({ signal });
       } catch (err: unknown) {
@@ -265,7 +297,7 @@ export function useUploadSystem({
           return;
         }
       } finally {
-        if (!signal?.aborted) {
+        if (reqSeq === deviceRefreshSeqRef.current) {
           setRefreshingDevices(false);
         }
       }
@@ -311,6 +343,9 @@ export function useUploadSystem({
       if (!projectDir) {
         setPreflight(null);
         setSelectedArtifactPath("");
+        setError(null);
+        setRunningPreflight(false);
+        setRefreshingDevices(false);
         return;
       }
       void refreshDevicesAndPreflight(controller.signal);
@@ -327,32 +362,57 @@ export function useUploadSystem({
 
   useEffect(() => {
     return () => {
+      if (preflightDebounceTimerRef.current !== null) {
+        window.clearTimeout(preflightDebounceTimerRef.current);
+      }
+      preflightActionAbortRef.current?.abort();
       closeSocket();
     };
   }, [closeSocket]);
+
+  const schedulePreflightCheck = useCallback(
+    (overrides: {
+      port?: string;
+      artifactPath?: string;
+      mode?: UploadInvocationMode;
+    }) => {
+      if (preflightDebounceTimerRef.current !== null) {
+        window.clearTimeout(preflightDebounceTimerRef.current);
+      }
+      preflightDebounceTimerRef.current = window.setTimeout(() => {
+        preflightDebounceTimerRef.current = null;
+        void runPreflightCheck(overrides);
+      }, 180);
+    },
+    [runPreflightCheck]
+  );
 
   const updatePort = useCallback(
     (nextPort: string) => {
       setSelectedPort(nextPort);
       setError(null);
-      void runPreflightCheck({ port: nextPort });
+      schedulePreflightCheck({ port: nextPort });
     },
-    [runPreflightCheck]
+    [schedulePreflightCheck]
   );
 
   const updateArtifactPath = useCallback(
     (nextPath: string) => {
       setSelectedArtifactPath(nextPath);
       setError(null);
-      void runPreflightCheck({ artifactPath: nextPath });
+      schedulePreflightCheck({ artifactPath: nextPath });
     },
-    [runPreflightCheck]
+    [schedulePreflightCheck]
   );
 
   const updateInvocationMode = useCallback(
     (nextMode: UploadInvocationMode) => {
       setInvocationMode(nextMode);
       setError(null);
+      if (preflightDebounceTimerRef.current !== null) {
+        window.clearTimeout(preflightDebounceTimerRef.current);
+        preflightDebounceTimerRef.current = null;
+      }
       void runPreflightCheck({ mode: nextMode });
     },
     [runPreflightCheck]

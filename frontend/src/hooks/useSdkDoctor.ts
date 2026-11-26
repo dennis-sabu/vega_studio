@@ -86,14 +86,15 @@ export function useSdkDoctor({
           : "Failed to load SDK configuration & diagnostics.";
       setError(message);
     } finally {
-      if (!signal?.aborted) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (!isBackendConnected) return;
+    if (!isBackendConnected) {
+      queueMicrotask(() => setLoading(false));
+      return;
+    }
     const controller = new AbortController();
     queueMicrotask(() => {
       if (!controller.signal.aborted) {

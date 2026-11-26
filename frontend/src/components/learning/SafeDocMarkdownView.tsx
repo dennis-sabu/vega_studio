@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import { Check, Copy, ExternalLink, Sparkles } from "lucide-react";
+import React, { useMemo, useState } from"react";
+import { Check, Copy, ExternalLink, Sparkles } from"lucide-react";
 
 interface SafeDocMarkdownViewProps {
   markdown: string;
@@ -24,7 +24,7 @@ function sanitizeExternalUrl(rawUrl: string): string | null {
   if (/^(https?:)\/\//i.test(cleaned)) {
     try {
       const parsed = new URL(cleaned);
-      if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+      if (parsed.protocol === "https: " || parsed.protocol === "http: ") {
         return parsed.toString();
       }
     } catch {
@@ -35,7 +35,7 @@ function sanitizeExternalUrl(rawUrl: string): string | null {
 }
 
 function parseMarkdownBlocks(markdown: string): BlockNode[] {
-  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  const lines = markdown.replace(/\r\n/g,"\n").split("\n");
   const blocks: BlockNode[] = [];
   let i = 0;
 
@@ -58,7 +58,7 @@ function parseMarkdownBlocks(markdown: string): BlockNode[] {
     // Fenced code block
     const fenceMatch = raw.match(/^\s*```([A-Za-z0-9_+-]*)\s*$/);
     if (fenceMatch) {
-      const lang = fenceMatch[1] || "text";
+      const lang = fenceMatch[1] ||"text";
       const codeLines: string[] = [];
       i += 1;
       while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) {
@@ -83,7 +83,7 @@ function parseMarkdownBlocks(markdown: string): BlockNode[] {
     if (raw.trimStart().startsWith(">")) {
       const quoteLines: string[] = [];
       while (i < lines.length && lines[i].trimStart().startsWith(">")) {
-        quoteLines.push(lines[i].replace(/^\s*>\s?/, ""));
+        quoteLines.push(lines[i].replace(/^\s*>\s?/,""));
         i += 1;
       }
       let alertType: string | null = null;
@@ -113,8 +113,8 @@ function parseMarkdownBlocks(markdown: string): BlockNode[] {
       const splitRow = (line: string): string[] =>
         line
           .trim()
-          .replace(/^\|/, "")
-          .replace(/\|$/, "")
+          .replace(/^\|/,"")
+          .replace(/\|$/,"")
           .split("|")
           .map((c) => c.trim());
 
@@ -169,7 +169,7 @@ function parseMarkdownBlocks(markdown: string): BlockNode[] {
       i += 1;
     }
     if (paraLines.length > 0) {
-      blocks.push({ type: "paragraph", text: paraLines.join(" ") });
+      blocks.push({ type: "paragraph", text: paraLines.join("") });
     } else {
       i += 1;
     }
@@ -201,20 +201,20 @@ function renderInlineSpans(
       parts.push(
         <code
           key={key}
-          className="rounded border border-white/10 bg-[#0b0e18] px-1.5 py-0.5 font-mono text-[12px] text-[#9ec0ff]"
+          className="rounded border border-[#2D2D30] bg-[#181818] px-1.5 py-0.5 font-mono text-[12px] text-[#9ec0ff]"
         >
           {token.slice(1, -1)}
         </code>
       );
     } else if (token.startsWith("**") && token.endsWith("**")) {
       parts.push(
-        <strong key={key} className="font-semibold text-[#f1f4ff]">
+      <strong key={key} className="font-semibold text-[#F4F4F5]">
           {token.slice(2, -2)}
         </strong>
       );
     } else if (token.startsWith("*") && token.endsWith("*")) {
       parts.push(
-        <em key={key} className="italic text-[#e8ebf7]/90">
+      <em key={key} className="italic text-[#F4F4F5]">
           {token.slice(1, -1)}
         </em>
       );
@@ -223,14 +223,14 @@ function renderInlineSpans(
       if (linkMatch) {
         const label = linkMatch[1];
         const rawHref = linkMatch[2].trim();
-        if (rawHref.startsWith("doc:") && onSelectDocSlug) {
+        if (rawHref.startsWith("doc: ") && onSelectDocSlug) {
           const slug = rawHref.slice(4).trim();
           parts.push(
             <button
               key={key}
               type="button"
               onClick={() => onSelectDocSlug(slug)}
-              className="font-medium text-[#7aa2ff] underline decoration-[#7aa2ff]/40 underline-offset-2 hover:text-[#a8c4ff]"
+              className="font-medium text-[#7AA2FF] underline decoration-[#7AA2FF]/40 underline-offset-2 hover:text-[#a8c4ff]"
             >
               {label}
             </button>
@@ -244,7 +244,7 @@ function renderInlineSpans(
                 href={safeUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 font-medium text-[#7aa2ff] underline decoration-[#7aa2ff]/40 underline-offset-2 hover:text-[#a8c4ff]"
+                className="inline-flex items-center gap-1 font-medium text-[#7AA2FF] underline decoration-[#7AA2FF]/40 underline-offset-2 hover:text-[#a8c4ff]"
               >
                 <span>{label}</span>
                 <ExternalLink className="h-3 w-3 shrink-0" />
@@ -292,44 +292,44 @@ function CodeBlock({
   };
 
   return (
-    <div className="my-3 overflow-hidden rounded-xl border border-white/10 bg-[#05060b]">
-      <div className="flex items-center justify-between border-b border-white/8 bg-[#0b0e18]/90 px-3 py-1.5">
-        <span className="font-mono text-[10px] tracking-[0.06em] text-[#e8ebf7]/50 uppercase">
-          {lang || "code"}
+  <div className="my-3 overflow-hidden rounded-xl border border-[#2D2D30] bg-[#181818]">
+    <div className="flex items-center justify-between border-b border-[#2D2D30] bg-[#181818] px-3 py-1.5">
+      <span className="font-mono text-[10px] tracking-[0.06em] text-[#B4B4BC] uppercase">
+          {lang ||"code"}
         </span>
         <div className="flex items-center gap-1.5">
           {onAskAiSnippet && (
             <button
               type="button"
               onClick={() =>
-                onAskAiSnippet(code, `Doc code snippet (${lang || "text"})`, lang)
+                onAskAiSnippet(code, `Doc code snippet (${lang ||"text"})`, lang)
               }
-              className="inline-flex items-center gap-1 rounded-md border border-[#7aa2ff]/25 bg-[#7aa2ff]/10 px-2 py-0.5 font-mono text-[10px] text-[#9ec0ff] transition-colors hover:bg-[#7aa2ff]/20"
+              className="inline-flex items-center gap-1 rounded-md border border-[#7AA2FF]/25 bg-[#7AA2FF]/10 px-2 py-0.5 font-mono text-[10px] text-[#9ec0ff] transition-colors hover:bg-[#7AA2FF]/20"
             >
-              <Sparkles className="h-3 w-3" />
+            <Sparkles className="h-3 w-3" />
               <span>Ask AI</span>
             </button>
           )}
           <button
             type="button"
             onClick={() => void handleCopy()}
-            className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 font-mono text-[10px] text-[#e8ebf7]/70 transition-colors hover:bg-white/[0.1] hover:text-[#e8ebf7]"
+            className="inline-flex items-center gap-1 rounded-md border border-[#2D2D30] bg-[#252527] px-2 py-0.5 font-mono text-[10px] text-[#F4F4F5] transition-colors hover:bg-[#2D2D31] hover:text-[#F4F4F5]"
           >
             {copied ? (
               <>
-                <Check className="h-3 w-3 text-emerald-400" />
-                <span className="text-emerald-300">Copied</span>
+              <Check className="h-3 w-3 text-emerald-400" />
+              <span className="text-emerald-300">Copied</span>
               </>
             ) : (
               <>
-                <Copy className="h-3 w-3" />
+              <Copy className="h-3 w-3" />
                 <span>Copy</span>
               </>
             )}
           </button>
         </div>
       </div>
-      <pre className="vega-scroll overflow-x-auto p-3 font-mono text-[12px] leading-[1.6] text-[#dde4fb]">
+      <pre className="vega-scroll overflow-x-auto p-3 font-mono text-[12px] leading-[1.6] text-[#E4E4E7]">
         <code>{code}</code>
       </pre>
     </div>
@@ -337,7 +337,7 @@ function CodeBlock({
 }
 
 const ALERT_STYLES: Record<string, string> = {
-  NOTE: "border-[#7aa2ff]/35 bg-[#7aa2ff]/[0.06] text-[#d6e4ff]",
+  NOTE: "border-[#7AA2FF]/35 bg-[#7AA2FF]/[0.06] text-[#d6e4ff]",
   TIP: "border-emerald-500/35 bg-emerald-500/[0.06] text-emerald-100",
   IMPORTANT: "border-indigo-400/35 bg-indigo-500/[0.07] text-indigo-100",
   WARNING: "border-amber-400/35 bg-amber-500/[0.07] text-amber-100",
@@ -352,10 +352,10 @@ export function SafeDocMarkdownView({
   const blocks = useMemo(() => parseMarkdownBlocks(markdown), [markdown]);
 
   return (
-    <div className="space-y-3 text-[13.5px] leading-[1.68] text-[#e8ebf7]/82">
+  <div className="space-y-3 text-[13.5px] leading-[1.68] text-[#F4F4F5]">
       {blocks.map((block, index) => {
         if (block.type === "hr") {
-          return <hr key={index} className="my-4 border-white/10" />;
+        return <hr key={index} className="my-4 border-[#2D2D30]" />;
         }
 
         if (block.type === "heading") {
@@ -363,7 +363,7 @@ export function SafeDocMarkdownView({
             return (
               <h1
                 key={index}
-                className="border-b border-white/8 pb-2 text-xl font-semibold tracking-tight text-[#f4f6ff]"
+                className="border-b border-[#2D2D30] pb-2 text-xl font-semibold tracking-tight text-[#F4F4F5]"
               >
                 {renderInlineSpans(block.text, onSelectDocSlug)}
               </h1>
@@ -373,7 +373,7 @@ export function SafeDocMarkdownView({
             return (
               <h2
                 key={index}
-                className="mt-5 text-[16px] font-semibold tracking-tight text-[#edf1ff]"
+                className="mt-5 text-[16px] font-semibold tracking-tight text-[#F4F4F5]"
               >
                 {renderInlineSpans(block.text, onSelectDocSlug)}
               </h2>
@@ -391,7 +391,7 @@ export function SafeDocMarkdownView({
 
         if (block.type === "paragraph") {
           return (
-            <p key={index} className="text-[#e8ebf7]/80">
+          <p key={index} className="text-[#F4F4F5]">
               {renderInlineSpans(block.text, onSelectDocSlug)}
             </p>
           );
@@ -411,15 +411,15 @@ export function SafeDocMarkdownView({
         if (block.type === "blockquote") {
           const styleClass = block.alertType
             ? ALERT_STYLES[block.alertType] ??
-              "border-white/15 bg-white/[0.03] text-[#e8ebf7]/85"
-            : "border-[#7aa2ff]/40 bg-white/[0.02] text-[#e8ebf7]/78";
+              "border-[#2D2D30] bg-[#252527] text-[#F4F4F5]"
+            : "border-[#7AA2FF]/40 bg-[#252527] text-[#F4F4F5]";
           return (
             <div
               key={index}
               className={`rounded-r-xl border-l-2 px-3.5 py-2.5 text-[13px] ${styleClass}`}
             >
               {block.alertType && (
-                <div className="mb-1 font-mono text-[10px] font-semibold tracking-[0.08em] uppercase opacity-80">
+              <div className="mb-1 font-mono text-[10px] font-semibold tracking-[0.08em] uppercase opacity-80">
                   {block.alertType}
                 </div>
               )}
@@ -441,10 +441,10 @@ export function SafeDocMarkdownView({
               key={index}
               className={`space-y-1.5 pl-5 ${
                 block.ordered ? "list-decimal" : "list-disc"
-              } text-[#e8ebf7]/80 marker:text-[#7aa2ff]/70`}
+              } text-[#F4F4F5] marker:text-[#7AA2FF]`}
             >
               {block.items.map((item, li) => (
-                <li key={li} className="pl-1">
+              <li key={li} className="pl-1">
                   {renderInlineSpans(item, onSelectDocSlug)}
                 </li>
               ))}
@@ -456,11 +456,11 @@ export function SafeDocMarkdownView({
           return (
             <div
               key={index}
-              className="vega-scroll my-3 overflow-x-auto rounded-xl border border-white/10 bg-[#080b13]/70"
+              className="vega-scroll my-3 overflow-x-auto rounded-xl border border-[#2D2D30] bg-[#181818]"
             >
-              <table className="w-full border-collapse text-left text-xs">
+            <table className="w-full border-collapse text-left text-xs">
                 <thead>
-                  <tr className="border-b border-white/10 bg-white/[0.03]">
+                  <tr className="border-b border-[#2D2D30] bg-[#252527]">
                     {block.headers.map((h, hi) => (
                       <th
                         key={hi}
@@ -475,12 +475,12 @@ export function SafeDocMarkdownView({
                   {block.rows.map((row, ri) => (
                     <tr
                       key={ri}
-                      className="border-b border-white/6 last:border-b-0"
+                      className="border-b border-[#2D2D30]/60 last:border-b-0"
                     >
                       {row.map((cell, ci) => (
                         <td
                           key={ci}
-                          className="px-3 py-2 align-top text-[#e8ebf7]/75"
+                          className="px-3 py-2 align-top text-[#F4F4F5]"
                         >
                           {renderInlineSpans(cell, onSelectDocSlug)}
                         </td>

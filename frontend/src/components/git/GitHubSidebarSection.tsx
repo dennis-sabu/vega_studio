@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState } from"react";
 import {
   AlertCircle,
   ArrowDownToLine,
@@ -20,11 +20,11 @@ import {
   Square,
   Trash2,
   X,
-} from "lucide-react";
+} from"lucide-react";
 import type {
   GitHubRemoteRepoDetail,
   GitHubStatusResponse,
-} from "@/types/github";
+} from"@/types/github";
 
 export interface GitHubSidebarProps {
   status: GitHubStatusResponse | null;
@@ -36,7 +36,7 @@ export interface GitHubSidebarProps {
   loadingRemoteRepoDetail: boolean;
   onClearFeedback: () => void;
   onRefreshStatus: () => void;
-  onSignInWithGitHub: (protocol: "https" | "ssh") => void;
+  onSignInWithGitHub: (protocol: "https" |"ssh") => void;
   onCancelOperation: () => void;
   onAddRemote: (name: string, url: string) => Promise<boolean>;
   onRequestUpdateRemote: (name: string, url: string) => void;
@@ -71,7 +71,7 @@ export function GitHubSidebarSection({
   onRequestPush,
   onInspectRemoteInfo,
 }: GitHubSidebarProps) {
-  const [protocol, setProtocol] = useState<"https" | "ssh">("https");
+  const [protocol, setProtocol] = useState<"https" |"ssh">("https");
   const [selectedRemote, setSelectedRemote] = useState<string>("");
   const [showAddRemote, setShowAddRemote] = useState(false);
   const [remoteName, setRemoteName] = useState("origin");
@@ -107,39 +107,39 @@ export function GitHubSidebarSection({
     >
       {/* Feedback Banners */}
       {error && (
-        <div className="flex items-start gap-2 rounded-lg border border-red-400/30 bg-red-500/12 px-2.5 py-2 text-[11px] text-red-200">
-          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-300" />
-          <p className="min-w-0 flex-1 break-words">{error}</p>
+      <div className="flex items-start gap-2 rounded-lg border border-red-400/30 bg-red-500/12 px-2.5 py-2 text-[11px] text-red-200">
+        <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-300" />
+        <p className="min-w-0 flex-1 break-words">{error}</p>
           <button
             type="button"
             onClick={onClearFeedback}
-            className="text-red-300/70 hover:text-red-100"
+            className="text-red-200 hover:text-red-100"
             aria-label="Dismiss GitHub error"
           >
-            <X className="h-3 w-3" />
+          <X className="h-3 w-3" />
           </button>
         </div>
       )}
 
       {notice && (
-        <div className="flex items-start gap-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-2 text-[11px] text-emerald-200">
-          <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-300" />
-          <p className="min-w-0 flex-1 break-words">{notice}</p>
+      <div className="flex items-start gap-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-2 text-[11px] text-emerald-200">
+        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-300" />
+        <p className="min-w-0 flex-1 break-words">{notice}</p>
           <button
             type="button"
             onClick={onClearFeedback}
-            className="text-emerald-300/70 hover:text-emerald-100"
+            className="text-emerald-200 hover:text-emerald-100"
             aria-label="Dismiss GitHub notice"
           >
-            <X className="h-3 w-3" />
+          <X className="h-3 w-3" />
           </button>
         </div>
       )}
 
       {/* 1. GitHub CLI & Auth Card */}
-      <div className="rounded-xl border border-white/[0.08] bg-[#06070c]/75 p-2.5 space-y-2">
+      <div className="rounded-xl border border-[#2D2D30] bg-[#1F1F1F] p-2.5 space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="font-mono text-[10px] font-semibold tracking-wider text-[#e8ebf7]/60 uppercase">
+          <span className="font-mono text-[10px] font-semibold tracking-wider text-[#E4E4E7] uppercase">
             GitHub CLI &amp; Auth
           </span>
           <button
@@ -147,18 +147,24 @@ export function GitHubSidebarSection({
             disabled={loading || isBusy}
             onClick={onRefreshStatus}
             title="Recheck gh CLI & authentication status"
-            className="inline-flex h-5 items-center gap-1 rounded px-1.5 font-mono text-[10px] text-[#e8ebf7]/60 hover:bg-white/[0.07] hover:text-[#e8ebf7] disabled:opacity-40"
+            className="inline-flex h-5 items-center gap-1 rounded px-1.5 font-mono text-[10px] text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5] disabled:opacity-40"
           >
-            <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
+          <RefreshCw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
             <span>Check</span>
           </button>
         </div>
 
         {!cli ? (
-          <p className="text-[11px] text-[#e8ebf7]/50">Checking GitHub CLI status…</p>
+        <p className="text-[11px] text-[#B4B4BC]">
+            {loading
+              ? "Checking GitHub CLI status…"
+              : error
+              ? "Unable to load GitHub CLI status."
+              : "GitHub status unavailable."}
+          </p>
         ) : !cli.gh_available ? (
-          <div className="space-y-2">
-            <p className="text-[11px] leading-relaxed text-amber-200/90">
+        <div className="space-y-2">
+          <p className="text-[11px] leading-relaxed text-amber-200">
               {cli.unavailable_reason ||
                 "GitHub CLI (`gh`) is not installed. Remotes and Git push/pull remain available with existing credentials."}
             </p>
@@ -166,32 +172,32 @@ export function GitHubSidebarSection({
               href={cli.install_guide_url}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.05] px-2.5 font-mono text-[10.5px] text-[#e8ebf7] hover:bg-white/[0.1]"
+              className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-[#2D2D30] bg-[#252527] px-2.5 font-mono text-[10.5px] text-[#F4F4F5] hover:bg-[#2D2D31]"
             >
               <span>Install GitHub CLI</span>
               <ExternalLink className="h-3 w-3" />
             </a>
           </div>
         ) : cli.authenticated ? (
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-200">
-              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-              <span className="truncate">
-                Signed in as{" "}
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-200">
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+            <span className="truncate">
+                Signed in as{""}
                 <span className="font-mono text-white">
-                  {cli.username || "GitHub user"}
+                  {cli.username ||"GitHub user"}
                 </span>
               </span>
             </div>
-            <p className="font-mono text-[10px] text-[#e8ebf7]/45">
-              gh v{cli.gh_version || "?"}
+            <p className="font-mono text-[10px] text-[#B4B4BC]">
+              gh v{cli.gh_version ||"? "}
               {cli.git_protocol ? ` · protocol: ${cli.git_protocol}` : ""}
             </p>
           </div>
         ) : (
-          <div className="space-y-2">
-            <p className="text-[11px] text-[#e8ebf7]/65">
-              {cli.auth_message || "gh CLI detected, but not signed in."}
+        <div className="space-y-2">
+          <p className="text-[11px] text-[#E4E4E7]">
+              {cli.auth_message ||"gh CLI detected, but not signed in."}
             </p>
             <div className="flex items-center gap-1.5">
               <select
@@ -201,7 +207,7 @@ export function GitHubSidebarSection({
                 onChange={(e) =>
                   setProtocol(e.target.value === "ssh" ? "ssh" : "https")
                 }
-                className="h-7 rounded-lg border border-white/15 bg-[#0b0e17] px-2 font-mono text-[10.5px] text-[#e8ebf7]"
+                className="h-7 rounded-lg border border-[#2D2D30] bg-[#1F1F1F] px-2 font-mono text-[10.5px] text-[#F4F4F5]"
               >
                 <option value="https">HTTPS</option>
                 <option value="ssh">SSH</option>
@@ -210,9 +216,9 @@ export function GitHubSidebarSection({
                 type="button"
                 disabled={isBusy}
                 onClick={() => onSignInWithGitHub(protocol)}
-                className="inline-flex h-7 flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#7aa2ff]/40 bg-[#7aa2ff]/18 px-2.5 text-[11px] font-semibold text-[#e8ebf7] hover:bg-[#7aa2ff]/28 disabled:opacity-45"
+                className="inline-flex h-7 flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#7AA2FF]/40 bg-[#7AA2FF]/18 px-2.5 text-[11px] font-semibold text-[#F4F4F5] hover:bg-[#7AA2FF]/28 disabled:opacity-45"
               >
-                <LogIn className="h-3 w-3 text-[#7aa2ff]" />
+              <LogIn className="h-3 w-3 text-[#7AA2FF]" />
                 <span>Sign in with GitHub</span>
               </button>
             </div>
@@ -223,10 +229,10 @@ export function GitHubSidebarSection({
         {activeOp?.kind === "auth_login" &&
           activeOp.status === "running" &&
           (activeOp.device_code || activeOp.verification_url) && (
-            <div className="rounded-lg border border-[#7aa2ff]/35 bg-[#7aa2ff]/10 p-2 space-y-1.5 text-[11px]">
+          <div className="rounded-lg border border-[#7AA2FF]/35 bg-[#7AA2FF]/10 p-2 space-y-1.5 text-[11px]">
               {activeOp.device_code && (
                 <div>
-                  <span className="text-[#e8ebf7]/65">One-time code: </span>
+                  <span className="text-[#E4E4E7]">One-time code: </span>
                   <span className="select-all font-mono font-bold text-white">
                     {activeOp.device_code}
                   </span>
@@ -248,8 +254,8 @@ export function GitHubSidebarSection({
       </div>
 
       {/* 2. Guided Publish & Repo Create */}
-      <div className="rounded-xl border border-white/[0.08] bg-[#06070c]/75 p-2.5 space-y-2">
-        <span className="block font-mono text-[10px] font-semibold tracking-wider text-[#e8ebf7]/60 uppercase">
+      <div className="rounded-xl border border-[#2D2D30] bg-[#1F1F1F] p-2.5 space-y-2">
+        <span className="block font-mono text-[10px] font-semibold tracking-wider text-[#E4E4E7] uppercase">
           GitHub Repository
         </span>
         <div className="grid grid-cols-1 gap-1.5">
@@ -257,46 +263,46 @@ export function GitHubSidebarSection({
             type="button"
             disabled={isBusy || !cli?.gh_available || !cli?.authenticated}
             onClick={onRequestPublish}
-            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[#7aa2ff]/40 bg-[#7aa2ff]/18 px-3 text-xs font-semibold text-[#e8ebf7] hover:bg-[#7aa2ff]/28 disabled:opacity-40"
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[#7AA2FF]/40 bg-[#7AA2FF]/18 px-3 text-xs font-semibold text-[#F4F4F5] hover:bg-[#7AA2FF]/28 disabled:opacity-40"
           >
-            <CloudUpload className="h-3.5 w-3.5 text-[#7aa2ff]" />
+          <CloudUpload className="h-3.5 w-3.5 text-[#7AA2FF]" />
             <span>Publish Project to GitHub…</span>
           </button>
           <button
             type="button"
             disabled={isBusy || !cli?.gh_available || !cli?.authenticated}
             onClick={onRequestCreateRepo}
-            className="inline-flex h-7 items-center justify-center gap-1.5 rounded-lg border border-white/12 bg-white/[0.04] px-2.5 font-mono text-[10.5px] text-[#e8ebf7]/85 hover:bg-white/[0.08] disabled:opacity-40"
+            className="inline-flex h-7 items-center justify-center gap-1.5 rounded-lg border border-[#2D2D30] bg-[#252527] px-2.5 font-mono text-[10.5px] text-[#F4F4F5] hover:bg-[#252527] disabled:opacity-40"
           >
-            <FolderPlus className="h-3 w-3 text-[#7aa2ff]" />
+          <FolderPlus className="h-3 w-3 text-[#7AA2FF]" />
             <span>Create Empty GitHub Repo…</span>
           </button>
         </div>
       </div>
 
       {/* 3. Sync Actions: Fetch / Pull / Push */}
-      <div className="rounded-xl border border-white/[0.08] bg-[#06070c]/75 p-2.5 space-y-2">
+      <div className="rounded-xl border border-[#2D2D30] bg-[#1F1F1F] p-2.5 space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="font-mono text-[10px] font-semibold tracking-wider text-[#e8ebf7]/60 uppercase">
+          <span className="font-mono text-[10px] font-semibold tracking-wider text-[#E4E4E7] uppercase">
             Remote Sync
           </span>
           {status?.upstream && (
-            <span className="font-mono text-[10px] text-[#7aa2ff]">
+          <span className="font-mono text-[10px] text-[#7AA2FF]">
               ↑{status.ahead} ↓{status.behind}
             </span>
           )}
         </div>
 
         {remotes.length === 0 ? (
-          <p className="text-[11px] text-[#e8ebf7]/45">
+        <p className="text-[11px] text-[#B4B4BC]">
             No Git remotes configured yet. Publish or add a remote below to fetch, pull, or push.
           </p>
         ) : (
           <>
-            <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5">
               <label
                 htmlFor="gh-sync-remote"
-                className="font-mono text-[10px] text-[#e8ebf7]/55"
+                className="font-mono text-[10px] text-[#E4E4E7]"
               >
                 Remote
               </label>
@@ -305,7 +311,7 @@ export function GitHubSidebarSection({
                 value={effectiveRemote}
                 disabled={isBusy}
                 onChange={(e) => setSelectedRemote(e.target.value)}
-                className="h-6 min-w-0 flex-1 rounded border border-white/15 bg-[#0b0e17] px-2 font-mono text-[10.5px] text-[#e8ebf7]"
+                className="h-6 min-w-0 flex-1 rounded border border-[#2D2D30] bg-[#1F1F1F] px-2 font-mono text-[10.5px] text-[#F4F4F5]"
               >
                 {remotes.map((r) => (
                   <option key={r.name} value={r.name}>
@@ -321,27 +327,27 @@ export function GitHubSidebarSection({
                 type="button"
                 disabled={isBusy || !effectiveRemote}
                 onClick={() => onFetchRemote(effectiveRemote)}
-                className="inline-flex h-7 items-center justify-center gap-1 rounded-lg border border-white/12 bg-white/[0.05] px-2 font-mono text-[10.5px] text-[#e8ebf7]/85 hover:bg-white/[0.1] disabled:opacity-40"
+                className="inline-flex h-7 items-center justify-center gap-1 rounded-lg border border-[#2D2D30] bg-[#252527] px-2 font-mono text-[10.5px] text-[#F4F4F5] hover:bg-[#2D2D31] disabled:opacity-40"
               >
-                <RefreshCw className="h-3 w-3 text-[#7aa2ff]" />
+              <RefreshCw className="h-3 w-3 text-[#7AA2FF]" />
                 <span>Fetch</span>
               </button>
               <button
                 type="button"
                 disabled={isBusy || !effectiveRemote}
                 onClick={() => onRequestPull(effectiveRemote)}
-                className="inline-flex h-7 items-center justify-center gap-1 rounded-lg border border-white/12 bg-white/[0.05] px-2 font-mono text-[10.5px] text-[#e8ebf7]/85 hover:bg-white/[0.1] disabled:opacity-40"
+                className="inline-flex h-7 items-center justify-center gap-1 rounded-lg border border-[#2D2D30] bg-[#252527] px-2 font-mono text-[10.5px] text-[#F4F4F5] hover:bg-[#2D2D31] disabled:opacity-40"
               >
-                <ArrowDownToLine className="h-3 w-3 text-[#7aa2ff]" />
+              <ArrowDownToLine className="h-3 w-3 text-[#7AA2FF]" />
                 <span>Pull</span>
               </button>
               <button
                 type="button"
                 disabled={isBusy || !effectiveRemote}
                 onClick={() => onRequestPush(effectiveRemote)}
-                className="inline-flex h-7 items-center justify-center gap-1 rounded-lg border border-[#7aa2ff]/35 bg-[#7aa2ff]/16 px-2 font-mono text-[10.5px] text-[#e8ebf7] hover:bg-[#7aa2ff]/26 disabled:opacity-40"
+                className="inline-flex h-7 items-center justify-center gap-1 rounded-lg border border-[#7AA2FF]/35 bg-[#7AA2FF]/16 px-2 font-mono text-[10.5px] text-[#F4F4F5] hover:bg-[#7AA2FF]/26 disabled:opacity-40"
               >
-                <ArrowUpFromLine className="h-3 w-3 text-[#7aa2ff]" />
+              <ArrowUpFromLine className="h-3 w-3 text-[#7AA2FF]" />
                 <span>Push</span>
               </button>
             </div>
@@ -350,24 +356,24 @@ export function GitHubSidebarSection({
       </div>
 
       {/* 4. Configured Remotes */}
-      <div className="rounded-xl border border-white/[0.08] bg-[#06070c]/75 p-2.5 space-y-2">
+      <div className="rounded-xl border border-[#2D2D30] bg-[#1F1F1F] p-2.5 space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="font-mono text-[10px] font-semibold tracking-wider text-[#e8ebf7]/60 uppercase">
+          <span className="font-mono text-[10px] font-semibold tracking-wider text-[#E4E4E7] uppercase">
             Remotes ({remotes.length})
           </span>
           <button
             type="button"
             disabled={isBusy}
             onClick={() => setShowAddRemote((v) => !v)}
-            className="inline-flex h-5 items-center gap-1 rounded px-1.5 font-mono text-[10px] text-[#7aa2ff] hover:bg-white/[0.07]"
+            className="inline-flex h-5 items-center gap-1 rounded px-1.5 font-mono text-[10px] text-[#7AA2FF] hover:bg-[#252527]"
           >
-            <Plus className="h-3 w-3" />
+          <Plus className="h-3 w-3" />
             <span>Add</span>
           </button>
         </div>
 
         {showAddRemote && (
-          <form onSubmit={handleAddRemoteSubmit} className="space-y-1.5 rounded-lg border border-white/10 bg-[#0b0e17] p-2">
+        <form onSubmit={handleAddRemoteSubmit} className="space-y-1.5 rounded-lg border border-[#2D2D30] bg-[#1F1F1F] p-2">
             <input
               type="text"
               value={remoteName}
@@ -375,7 +381,7 @@ export function GitHubSidebarSection({
               onChange={(e) => setRemoteName(e.target.value)}
               placeholder="origin"
               aria-label="New remote name"
-              className="w-full rounded border border-white/12 bg-[#06070c] px-2 py-1 font-mono text-[11px] text-[#e8ebf7]"
+              className="w-full rounded border border-[#2D2D30] bg-[#181818] px-2 py-1 font-mono text-[11px] text-[#F4F4F5]"
             />
             <input
               type="text"
@@ -384,20 +390,20 @@ export function GitHubSidebarSection({
               onChange={(e) => setRemoteUrl(e.target.value)}
               placeholder="https://github.com/owner/repo.git"
               aria-label="New remote URL"
-              className="w-full rounded border border-white/12 bg-[#06070c] px-2 py-1 font-mono text-[11px] text-[#e8ebf7]"
+              className="w-full rounded border border-[#2D2D30] bg-[#181818] px-2 py-1 font-mono text-[11px] text-[#F4F4F5]"
             />
             <div className="flex justify-end gap-1.5">
               <button
                 type="button"
                 onClick={() => setShowAddRemote(false)}
-                className="h-6 rounded px-2 font-mono text-[10px] text-[#e8ebf7]/60 hover:bg-white/[0.06]"
+                className="h-6 rounded px-2 font-mono text-[10px] text-[#E4E4E7] hover:bg-[#252527]"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isBusy || !remoteName.trim() || !remoteUrl.trim()}
-                className="h-6 rounded border border-[#7aa2ff]/40 bg-[#7aa2ff]/20 px-2 font-mono text-[10px] text-[#e8ebf7] disabled:opacity-40"
+                className="h-6 rounded border border-[#7AA2FF]/40 bg-[#7AA2FF]/20 px-2 font-mono text-[10px] text-[#F4F4F5] disabled:opacity-40"
               >
                 Save Remote
               </button>
@@ -406,39 +412,41 @@ export function GitHubSidebarSection({
         )}
 
         {remotes.length > 0 && (
-          <ul className="space-y-1.5">
+        <ul className="space-y-1.5">
             {remotes.map((r) => (
               <li
                 key={r.name}
-                className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-2 space-y-1"
+                className="rounded-lg border border-[#2D2D30] bg-[#252527] p-2 space-y-1"
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="flex min-w-0 items-center gap-1.5 font-mono text-[11px] font-semibold text-[#e8ebf7]">
-                    <Link2 className="h-3 w-3 shrink-0 text-[#7aa2ff]" />
-                    <span className="truncate">{r.name}</span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-1.5 font-mono text-[11px] font-semibold text-[#F4F4F5]">
+                  <Link2 className="h-3 w-3 shrink-0 text-[#7AA2FF]" />
+                  <span className="truncate">{r.name}</span>
                   </span>
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
                       disabled={isBusy}
                       title={`Edit remote ${r.name}`}
+                      aria-label={`Edit remote ${r.name}`}
                       onClick={() => onRequestUpdateRemote(r.name, r.fetch_url)}
-                      className="rounded p-1 text-[#e8ebf7]/55 hover:bg-white/[0.08] hover:text-[#e8ebf7]"
+                      className="rounded p-1 text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
                     >
-                      <Pencil className="h-3 w-3" />
+                    <Pencil className="h-3 w-3" />
                     </button>
                     <button
                       type="button"
                       disabled={isBusy}
                       title={`Remove remote ${r.name}`}
+                      aria-label={`Remove remote ${r.name}`}
                       onClick={() => onRequestRemoveRemote(r.name)}
-                      className="rounded p-1 text-red-300/70 hover:bg-red-500/15 hover:text-red-200"
+                      className="rounded p-1 text-red-200 hover:bg-red-500/15 hover:text-red-200"
                     >
-                      <Trash2 className="h-3 w-3" />
+                    <Trash2 className="h-3 w-3" />
                     </button>
                   </div>
                 </div>
-                <p className="truncate font-mono text-[10px] text-[#e8ebf7]/50" title={r.fetch_url}>
+                <p className="truncate font-mono text-[10px] text-[#B4B4BC]" title={r.fetch_url}>
                   {r.fetch_url}
                 </p>
               </li>
@@ -449,64 +457,64 @@ export function GitHubSidebarSection({
 
       {/* 5. Explicit Remote Repository Info */}
       {remotes.length > 0 && (
-        <div className="rounded-xl border border-white/[0.08] bg-[#06070c]/75 p-2.5 space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-mono text-[10px] font-semibold tracking-wider text-[#e8ebf7]/60 uppercase">
+      <div className="rounded-xl border border-[#2D2D30] bg-[#1F1F1F] p-2.5 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-mono text-[10px] font-semibold tracking-wider text-[#E4E4E7] uppercase">
               Remote Details
             </span>
             <button
               type="button"
               disabled={loadingRemoteRepoDetail || isBusy || !effectiveRemote}
               onClick={() => onInspectRemoteInfo(effectiveRemote)}
-              className="inline-flex h-5 items-center gap-1 rounded px-1.5 font-mono text-[10px] text-[#7aa2ff] hover:bg-white/[0.07] disabled:opacity-40"
+              className="inline-flex h-5 items-center gap-1 rounded px-1.5 font-mono text-[10px] text-[#7AA2FF] hover:bg-[#252527] disabled:opacity-40"
             >
               {loadingRemoteRepoDetail ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
+              <Loader2 className="h-3 w-3 animate-spin" />
               ) : (
-                <RefreshCw className="h-3 w-3" />
+              <RefreshCw className="h-3 w-3" />
               )}
               <span>Inspect Remote</span>
             </button>
           </div>
 
           {!remoteRepoDetail ? (
-            <p className="text-[11px] text-[#e8ebf7]/45">
+          <p className="text-[11px] text-[#B4B4BC]">
               Click Inspect Remote to query remote metadata and branches on demand.
             </p>
           ) : (
-            <div className="space-y-1.5 text-[11px]">
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate font-mono font-semibold text-[#e8ebf7]">
+          <div className="space-y-1.5 text-[11px]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate font-mono font-semibold text-[#F4F4F5]">
                   {remoteRepoDetail.owner_repo}
                 </span>
                 {remoteRepoDetail.visibility && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/[0.05] px-1.5 py-0.5 font-mono text-[9.5px] text-[#e8ebf7]/80 uppercase">
+                <span className="inline-flex items-center gap-1 rounded-full border border-[#2D2D30] bg-[#252527] px-1.5 py-0.5 font-mono text-[9.5px] text-[#F4F4F5] uppercase">
                     {remoteRepoDetail.visibility === "private" ? (
-                      <Lock className="h-2.5 w-2.5" />
+                    <Lock className="h-2.5 w-2.5" />
                     ) : (
-                      <Globe className="h-2.5 w-2.5" />
+                    <Globe className="h-2.5 w-2.5" />
                     )}
                     <span>{remoteRepoDetail.visibility}</span>
                   </span>
                 )}
               </div>
               {remoteRepoDetail.description && (
-                <p className="text-[#e8ebf7]/65">{remoteRepoDetail.description}</p>
+              <p className="text-[#E4E4E7]">{remoteRepoDetail.description}</p>
               )}
               {remoteRepoDetail.default_branch && (
-                <p className="font-mono text-[10px] text-[#e8ebf7]/50">
+              <p className="font-mono text-[10px] text-[#B4B4BC]">
                   Default branch: {remoteRepoDetail.default_branch}
                 </p>
               )}
               <div>
-                <p className="font-mono text-[10px] text-[#e8ebf7]/50">
+                <p className="font-mono text-[10px] text-[#B4B4BC]">
                   Remote branches ({remoteRepoDetail.remote_branches.length}):
                 </p>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {remoteRepoDetail.remote_branches.map((br) => (
                     <span
                       key={br}
-                      className="rounded border border-white/10 bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10px] text-[#e8ebf7]/80"
+                      className="rounded border border-[#2D2D30] bg-[#252527] px-1.5 py-0.5 font-mono text-[10px] text-[#F4F4F5]"
                     >
                       {br}
                     </span>
@@ -520,14 +528,14 @@ export function GitHubSidebarSection({
 
       {/* 6. Active / Latest Operation Output & Cancel */}
       {displayedOp && (
-        <div className="rounded-xl border border-white/[0.08] bg-[#06070c]/85 p-2.5 space-y-1.5">
-          <div className="flex items-center justify-between gap-2">
-            <span className="inline-flex items-center gap-1.5 font-mono text-[10px] font-semibold uppercase text-[#e8ebf7]/75">
+      <div className="rounded-xl border border-[#2D2D30] bg-[#1F1F1F] p-2.5 space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 font-mono text-[10px] font-semibold uppercase text-[#F4F4F5]">
               {displayedOp.status === "running" && (
-                <Loader2 className="h-3 w-3 animate-spin text-[#7aa2ff]" />
+              <Loader2 className="h-3 w-3 animate-spin text-[#7AA2FF]" />
               )}
               <span>
-                {displayedOp.kind.replace("_", " ")} · {displayedOp.status}
+                {displayedOp.kind.replace("_","")} · {displayedOp.status}
               </span>
             </span>
             {displayedOp.status === "running" && displayedOp.cancellable && (
@@ -536,13 +544,13 @@ export function GitHubSidebarSection({
                 onClick={onCancelOperation}
                 className="inline-flex h-5 items-center gap-1 rounded border border-red-400/35 bg-red-500/15 px-1.5 font-mono text-[10px] text-red-200 hover:bg-red-500/25"
               >
-                <Square className="h-2.5 w-2.5 fill-current" />
+              <Square className="h-2.5 w-2.5 fill-current" />
                 <span>Cancel</span>
               </button>
             )}
           </div>
           {displayedOp.output_lines.length > 0 && (
-            <pre className="vega-scroll max-h-28 overflow-y-auto whitespace-pre-wrap break-all rounded-lg border border-white/[0.06] bg-[#030407] p-2 font-mono text-[10px] leading-relaxed text-[#e8ebf7]/70">
+          <pre className="vega-scroll max-h-28 overflow-y-auto whitespace-pre-wrap break-all rounded-lg border border-[#2D2D30] bg-[#181818] p-2 font-mono text-[10px] leading-relaxed text-[#F4F4F5]">
               {displayedOp.output_lines.join("\n")}
             </pre>
           )}

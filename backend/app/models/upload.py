@@ -24,7 +24,7 @@ UploadInvocationMode = Literal[
 ]
 
 _UPLOAD_ID_RE = re.compile(r"^[a-f0-9]{8,32}$")
-_SAFE_PORT_RE = re.compile(r"^[A-Za-z0-9_./:\\-]+$")
+_SAFE_PORT_RE = re.compile(r"^[A-Za-z0-9_./:\\+][A-Za-z0-9_./:\\+-]*$")
 
 
 def validate_upload_id(raw_id: str) -> str:

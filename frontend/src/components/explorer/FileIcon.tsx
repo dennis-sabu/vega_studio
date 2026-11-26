@@ -31,14 +31,14 @@ export function FileIcon({
   className = "h-3.5 w-3.5",
 }: FileIconProps) {
   if (!accessible) {
-    return <Lock className={`${className} shrink-0 text-amber-300/75`} />;
+    return <Lock className={`${className} shrink-0 text-amber-300`} />;
   }
 
   if (kind === "dir") {
     return expanded ? (
-      <FolderOpen className={`${className} shrink-0 text-[#7aa2ff]`} />
+      <FolderOpen className={`${className} shrink-0 text-[#7AA2FF]`} />
     ) : (
-      <Folder className={`${className} shrink-0 text-[#7aa2ff]/80`} />
+      <Folder className={`${className} shrink-0 text-[#7AA2FF]`} />
     );
   }
 
@@ -46,23 +46,23 @@ export function FileIcon({
   const ext = extension.toLowerCase();
 
   if (lowerName === "makefile" || lowerName.startsWith("makefile.") || ext === ".mk") {
-    return <Hammer className={`${className} shrink-0 text-amber-300/80`} />;
+    return <Hammer className={`${className} shrink-0 text-amber-300`} />;
   }
   if (ext === ".c" || ext === ".cpp" || ext === ".cc" || ext === ".cxx") {
-    return <FileCode className={`${className} shrink-0 text-sky-300/85`} />;
+    return <FileCode className={`${className} shrink-0 text-sky-300`} />;
   }
   if (ext === ".h" || ext === ".hpp") {
-    return <FileCode2 className={`${className} shrink-0 text-violet-300/85`} />;
+    return <FileCode2 className={`${className} shrink-0 text-violet-300`} />;
   }
   if (ext === ".s" || ext === ".asm") {
-    return <Cpu className={`${className} shrink-0 text-emerald-300/85`} />;
+    return <Cpu className={`${className} shrink-0 text-emerald-300`} />;
   }
   if (ext === ".json" || ext === ".yaml" || ext === ".yml") {
-    return <Braces className={`${className} shrink-0 text-yellow-200/80`} />;
+    return <Braces className={`${className} shrink-0 text-yellow-200`} />;
   }
   if (ext === ".md" || ext === ".txt") {
-    return <FileText className={`${className} shrink-0 text-[#e8ebf7]/65`} />;
+    return <FileText className={`${className} shrink-0 text-[#F4F4F5]`} />;
   }
 
-  return <File className={`${className} shrink-0 text-[#e8ebf7]/50`} />;
+  return <File className={`${className} shrink-0 text-[#B4B4BC]`} />;
 }

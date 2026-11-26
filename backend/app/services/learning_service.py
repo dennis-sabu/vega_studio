@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
-from app.config import Settings, settings
+from app.config import Settings, get_backend_package_root, settings
 from app.models.learning import (
     CreateProjectFromExampleRequest,
     DocCatalogResponse,
@@ -48,7 +48,7 @@ from app.services.project_service import (
 )
 from app.services.sdk_service import SdkService, _resolve_existing_path
 
-_CONTENT_DIR = Path(__file__).resolve().parent.parent / "content"
+_CONTENT_DIR = get_backend_package_root() / "content"
 _BUILTIN_EXAMPLES_DIR = _CONTENT_DIR / "examples"
 _BUILTIN_DOCS_DIR = _CONTENT_DIR / "docs"
 

@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
-} from "react";
+} from"react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -24,17 +24,18 @@ import {
   MoreHorizontal,
   RefreshCw,
   X,
-} from "lucide-react";
-import { DeleteConfirmDialog } from "@/components/explorer/DeleteConfirmDialog";
+} from"lucide-react";
+import { DeleteConfirmDialog } from"@/components/explorer/DeleteConfirmDialog";
 import {
   ExplorerContextMenu,
   type ContextMenuState,
-} from "@/components/explorer/ExplorerContextMenu";
-import { FileIcon } from "@/components/explorer/FileIcon";
-import { Tooltip } from "@/components/ui/Tooltip";
-import type { ExplorerFeedback } from "@/hooks/useFileExplorer";
-import type { EntryKind, FileNode } from "@/types/explorer";
-import type { WorkspaceSummary } from "@/types/project";
+} from"@/components/explorer/ExplorerContextMenu";
+import { FileIcon } from"@/components/explorer/FileIcon";
+import { Tooltip } from"@/components/ui/Tooltip";
+import type { ExplorerFeedback } from"@/hooks/useFileExplorer";
+import type { EntryKind, FileNode } from"@/types/explorer";
+import type { WorkspaceSummary } from"@/types/project";
+import { formatBoardDisplayLabel } from"@/types/board";
 
 interface FileExplorerProps {
   project: WorkspaceSummary;
@@ -69,7 +70,7 @@ interface FileExplorerProps {
 }
 
 interface InlineDraft {
-  mode: "create" | "rename";
+  mode: "create" |"rename";
   parentPath: string;
   kind: EntryKind;
   targetNode?: FileNode;
@@ -77,7 +78,7 @@ interface InlineDraft {
   error: string | null;
 }
 
-const INVALID_CHARS = /[<>:"/\\|?*\x00-\x1f]/;
+const INVALID_CHARS = /[<>: "/\\|?*\x00-\x1f]/;
 const RESERVED_NAMES = new Set([
   "CON",
   "PRN",
@@ -105,20 +106,20 @@ const RESERVED_NAMES = new Set([
 
 function validateNameClient(raw: string): string | null {
   const name = raw.trim();
-  if (!name) return "Name cannot be empty.";
-  if (name.length > 128) return "Name must be 128 characters or fewer.";
+  if (!name) return"Name cannot be empty.";
+  if (name.length > 128) return"Name must be 128 characters or fewer.";
   if (name === "." || name === ".." || name.includes("..")) {
-    return "Name cannot contain '..' or '.' segments.";
+    return"Name cannot contain '..' or '.' segments.";
   }
-  if (INVALID_CHARS.test(name)) return "Invalid filesystem characters.";
-  if (name.endsWith(".") || name.endsWith(" ")) {
-    return "Name cannot end with a period or space.";
+  if (INVALID_CHARS.test(name)) return"Invalid filesystem characters.";
+  if (name.endsWith(".") || name.endsWith("")) {
+    return"Name cannot end with a period or space.";
   }
   if (RESERVED_NAMES.has(name.split(".")[0].toUpperCase())) {
     return `'${name}' is a reserved system name.`;
   }
   if (name === ".vega-studio") {
-    return "Reserved for internal IDE metadata.";
+    return"Reserved for internal IDE metadata.";
   }
   return null;
 }
@@ -197,9 +198,9 @@ export function FileExplorer({
   }, [childrenByPath]);
 
   const resolveCreationParent = useCallback((): string => {
-    if (!selectedPath) return "";
+    if (!selectedPath) return"";
     const selectedNode = nodeByPath.get(selectedPath);
-    if (!selectedNode) return "";
+    if (!selectedNode) return"";
     if (selectedNode.kind === "dir") return selectedNode.path;
     const slash = selectedNode.path.lastIndexOf("/");
     return slash === -1 ? "" : selectedNode.path.slice(0, slash);
@@ -346,7 +347,7 @@ export function FileExplorer({
         style={{ paddingLeft: `${depth * 14 + 10}px` }}
         className="my-0.5 pr-2"
       >
-        <div className="flex items-center gap-1.5 rounded-md border border-[#7aa2ff]/45 bg-[#06070c]/90 px-2 py-1">
+      <div className="flex items-center gap-1.5 rounded-md border border-[#7AA2FF]/45 bg-[#1F1F1F] px-2 py-1">
           <FileIcon
             name={draft.value || (draft.kind === "dir" ? "folder" : "file")}
             kind={draft.kind}
@@ -384,11 +385,11 @@ export function FileExplorer({
             aria-label={
               draft.kind === "dir" ? "New folder name" : "New file name"
             }
-            className="min-w-0 flex-1 bg-transparent font-mono text-[11px] text-[#e8ebf7] placeholder:text-[#e8ebf7]/35 focus:outline-none"
+            className="min-w-0 flex-1 bg-transparent font-mono text-[11px] text-[#F4F4F5] placeholder:text-[#8E8E98] focus:outline-none"
           />
         </div>
         {draft.error && (
-          <p className="mt-1 px-1 text-[10px] text-red-300">{draft.error}</p>
+        <p className="mt-1 px-1 text-[10px] text-red-300">{draft.error}</p>
         )}
       </div>
     );
@@ -408,19 +409,35 @@ export function FileExplorer({
 
         {err && (
           <div
-            style={{ paddingLeft: `${depth * 14 + 12}px` }}
-            className="py-1 pr-2 text-[11px] text-red-300"
+            style={dirPath === "" ? undefined : { paddingLeft: `${depth * 14 + 12}px` }}
+            className={
+              dirPath === ""
+                ? "mx-2 my-2 rounded-[6px] border border-red-400/25 bg-red-500/[0.08] p-2.5 text-[11px] text-red-200/90"
+                : "flex items-center justify-between gap-2 py-1 pr-2 text-[11px] text-red-300"
+            }
           >
-            {err}
+          <span className="block leading-snug">{err}</span>
+            <button
+              type="button"
+              onClick={() =>
+                dirPath === ""
+                  ? void onRefreshAll()
+                  : void onRefreshDirectory(dirPath)
+              }
+              className="mt-1.5 inline-flex h-6 items-center gap-1 rounded-[5px] border border-[#2D2D30] bg-[#252527] px-2 text-[10.5px] font-medium text-[#F4F4F5] hover:bg-[#2D2D31]"
+            >
+            <RefreshCw className="h-2.5 w-2.5 text-[#7AA2FF]" />
+              <span>Retry</span>
+            </button>
           </div>
         )}
 
         {isLoading && !entries && (
           <div
             style={{ paddingLeft: `${depth * 14 + 14}px` }}
-            className="flex items-center gap-1.5 py-1.5 font-mono text-[11px] text-[#e8ebf7]/45"
+            className="flex items-center gap-1.5 py-1.5 font-mono text-[11px] text-[#B4B4BC]"
           >
-            <Loader2 className="h-3 w-3 animate-spin" />
+          <Loader2 className="h-3 w-3 animate-spin" />
             <span>Loading...</span>
           </div>
         )}
@@ -428,7 +445,7 @@ export function FileExplorer({
         {entries && entries.length === 0 && !isLoading && !err && (
           <div
             style={{ paddingLeft: `${depth * 14 + 22}px` }}
-            className="py-1 font-mono text-[10px] text-[#e8ebf7]/35 italic"
+            className="py-1 font-mono text-[10px] text-[#A1A1AA] italic"
           >
             Empty directory
           </div>
@@ -448,7 +465,7 @@ export function FileExplorer({
                   style={{ paddingLeft: `${depth * 14 + 10}px` }}
                   className="my-0.5 pr-2"
                 >
-                  <div className="flex items-center gap-1.5 rounded-md border border-[#7aa2ff]/45 bg-[#06070c]/90 px-2 py-1">
+                <div className="flex items-center gap-1.5 rounded-md border border-[#7AA2FF]/45 bg-[#1F1F1F] px-2 py-1">
                     <FileIcon
                       name={draft.value || node.name}
                       kind={node.kind}
@@ -477,11 +494,11 @@ export function FileExplorer({
                       }}
                       onBlur={() => setDraft(null)}
                       aria-label={`Rename ${node.name}`}
-                      className="min-w-0 flex-1 bg-transparent font-mono text-[11px] text-[#e8ebf7] focus:outline-none"
+                      className="min-w-0 flex-1 bg-transparent font-mono text-[11px] text-[#F4F4F5] focus:outline-none"
                     />
                   </div>
                   {draft.error && (
-                    <p className="mt-1 px-1 text-[10px] text-red-300">
+                  <p className="mt-1 px-1 text-[10px] text-red-300">
                       {draft.error}
                     </p>
                   )}
@@ -508,11 +525,11 @@ export function FileExplorer({
                     setContextMenu({ x: e.clientX, y: e.clientY, node });
                   }}
                   title={node.error ?? node.path}
-                  className={`group relative flex h-7 cursor-pointer items-center justify-between gap-1 rounded-md pr-1.5 text-[12px] transition-colors ${
+                  className={`group relative flex h-[26px] cursor-pointer items-center justify-between gap-1 rounded-[4px] pr-1.5 text-[12px] transition-colors ${
                     isSelected
-                      ? "bg-[#7aa2ff]/14 text-[#e8ebf7]"
-                      : "text-[#e8ebf7]/72 hover:bg-white/[0.05] hover:text-[#e8ebf7]"
-                  } ${!node.accessible ? "opacity-55" : ""}`}
+                      ? "bg-[#2C2C30] text-[#F4F4F5] shadow-[inset_2px_0_0_#7AA2FF]"
+                      : "text-[#F4F4F5] hover:bg-[#2D2D31]/55 hover:text-[#F4F4F5]"
+                  } ${!node.accessible ? "opacity-60" : ""}`}
                 >
                   {/* Subtle indentation guide lines */}
                   {depth > 0 &&
@@ -521,23 +538,23 @@ export function FileExplorer({
                         key={i}
                         aria-hidden="true"
                         style={{ left: `${i * 14 + 14}px` }}
-                        className="pointer-events-none absolute inset-y-0 w-px bg-white/[0.06]"
+                        className="pointer-events-none absolute inset-y-0 w-px bg-[#2C2C30]/80"
                       />
                     ))}
 
-                  <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <div className="flex min-w-0 flex-1 items-center gap-1.5">
                     {isDir ? (
-                      <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-[#e8ebf7]/45">
+                    <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-[#B4B4BC]">
                         {loadingPaths.has(node.path) ? (
-                          <Loader2 className="h-3 w-3 animate-spin text-[#7aa2ff]" />
+                        <Loader2 className="h-3 w-3 animate-spin text-[#7AA2FF]" />
                         ) : isExpanded ? (
-                          <ChevronDown className="h-3.5 w-3.5" />
+                        <ChevronDown className="h-3.5 w-3.5" />
                         ) : (
-                          <ChevronRight className="h-3.5 w-3.5" />
+                        <ChevronRight className="h-3.5 w-3.5" />
                         )}
                       </span>
                     ) : (
-                      <span className="w-4 shrink-0" />
+                    <span className="w-4 shrink-0" />
                     )}
 
                     <FileIcon
@@ -579,9 +596,9 @@ export function FileExplorer({
                         node,
                       });
                     }}
-                    className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[#e8ebf7]/45 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white/10 hover:text-[#e8ebf7] focus-visible:opacity-100"
+                    className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-[#B4B4BC] opacity-0 transition-opacity group-hover:opacity-100 hover:bg-[#2D2D31] hover:text-[#F4F4F5] focus-visible:opacity-100"
                   >
-                    <MoreHorizontal className="h-3.5 w-3.5" />
+                  <MoreHorizontal className="h-3.5 w-3.5" />
                   </button>
                 </div>
               )}
@@ -604,21 +621,23 @@ export function FileExplorer({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+  <div className="flex min-h-0 flex-1 flex-col">
       {/* Active Project Root Bar + Explorer Action Buttons */}
-      <div className="shrink-0 border-b border-white/[0.08] bg-[#06070c]/55 px-2.5 py-2">
+      <div className="shrink-0 border-b border-[#2D2D30] bg-[#1F1F1F] px-2.5 py-2">
         <div className="flex items-center justify-between gap-1.5">
           <button
             type="button"
             onClick={() => onSelectPath(null)}
             title={project.project_dir}
-            className="flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 text-left hover:bg-white/[0.05]"
+            className="flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 text-left hover:bg-[#252527]"
           >
-            <span className="truncate font-mono text-[11px] font-semibold text-[#e8ebf7]">
+          <span className="truncate font-mono text-[11px] font-semibold text-[#F4F4F5]">
               {project.project.name}
             </span>
-            <span className="shrink-0 rounded border border-white/10 bg-white/[0.04] px-1 py-0.5 font-mono text-[9px] text-[#7aa2ff]">
-              ARIES V3
+            <span className="shrink-0 rounded-[4px] border border-[#2D2D30] bg-[#252527] px-1.5 py-0.5 font-mono text-[9.5px] text-[#7AA2FF]">
+              {formatBoardDisplayLabel(null, project.project.target.board, {
+                short: true,
+              })}
             </span>
           </button>
 
@@ -629,9 +648,9 @@ export function FileExplorer({
                 aria-label="New File"
                 disabled={actionPending}
                 onClick={() => void beginCreate("file")}
-                className="inline-flex h-6 w-6 items-center justify-center rounded text-[#e8ebf7]/60 hover:bg-white/[0.08] hover:text-[#e8ebf7] disabled:opacity-40"
+                className="inline-flex h-6 w-6 items-center justify-center rounded text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5] disabled:opacity-40"
               >
-                <FilePlus className="h-3.5 w-3.5" />
+              <FilePlus className="h-3.5 w-3.5" />
               </button>
             </Tooltip>
 
@@ -641,9 +660,9 @@ export function FileExplorer({
                 aria-label="New Folder"
                 disabled={actionPending}
                 onClick={() => void beginCreate("dir")}
-                className="inline-flex h-6 w-6 items-center justify-center rounded text-[#e8ebf7]/60 hover:bg-white/[0.08] hover:text-[#e8ebf7] disabled:opacity-40"
+                className="inline-flex h-6 w-6 items-center justify-center rounded text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5] disabled:opacity-40"
               >
-                <FolderPlus className="h-3.5 w-3.5" />
+              <FolderPlus className="h-3.5 w-3.5" />
               </button>
             </Tooltip>
 
@@ -656,12 +675,12 @@ export function FileExplorer({
                 aria-label={showHidden ? "Hide Dotfiles" : "Show Dotfiles"}
                 aria-pressed={showHidden}
                 onClick={onToggleHidden}
-                className="inline-flex h-6 w-6 items-center justify-center rounded text-[#e8ebf7]/55 hover:bg-white/[0.08] hover:text-[#e8ebf7]"
+                className="inline-flex h-6 w-6 items-center justify-center rounded text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
               >
                 {showHidden ? (
-                  <Eye className="h-3.5 w-3.5" />
+                <Eye className="h-3.5 w-3.5" />
                 ) : (
-                  <EyeOff className="h-3.5 w-3.5" />
+                <EyeOff className="h-3.5 w-3.5" />
                 )}
               </button>
             </Tooltip>
@@ -671,10 +690,10 @@ export function FileExplorer({
                 type="button"
                 aria-label="Refresh Explorer"
                 onClick={() => void onRefreshAll()}
-                className="inline-flex h-6 w-6 items-center justify-center rounded text-[#e8ebf7]/55 hover:bg-white/[0.08] hover:text-[#e8ebf7]"
+                className="inline-flex h-6 w-6 items-center justify-center rounded text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
               >
                 <RefreshCw
-                  className={`h-3.5 w-3.5 ${loadingPaths.size > 0 ? "animate-spin text-[#7aa2ff]" : ""}`}
+                  className={`h-3.5 w-3.5 ${loadingPaths.size > 0 ? "animate-spin text-[#7AA2FF]" : ""}`}
                 />
               </button>
             </Tooltip>
@@ -691,11 +710,11 @@ export function FileExplorer({
               : "border-emerald-400/25 bg-emerald-500/10 text-emerald-200"
           }`}
         >
-          <span className="flex items-start gap-1.5">
+        <span className="flex items-start gap-1.5">
             {feedback.kind === "error" ? (
-              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             ) : (
-              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             )}
             <span className="leading-snug">{feedback.message}</span>
           </span>
@@ -703,9 +722,9 @@ export function FileExplorer({
             type="button"
             aria-label="Dismiss explorer feedback"
             onClick={onClearFeedback}
-            className="shrink-0 rounded p-0.5 hover:bg-white/10"
+            className="shrink-0 rounded p-0.5 hover:bg-[#2D2D31]"
           >
-            <X className="h-3 w-3" />
+          <X className="h-3 w-3" />
           </button>
         </div>
       )}
@@ -730,19 +749,19 @@ export function FileExplorer({
       </div>
 
       {/* Compact Footer Controls for Project Switching / Closing */}
-      <div className="flex shrink-0 items-center justify-between gap-1.5 border-t border-white/[0.08] bg-[#070910]/65 px-2.5 py-2">
+      <div className="flex shrink-0 items-center justify-between gap-1.5 border-t border-[#2D2D30] bg-[#181818] px-2.5 py-2">
         <button
           type="button"
           onClick={onSwitchProject}
-          className="inline-flex h-6 flex-1 items-center justify-center gap-1 rounded border border-white/10 bg-white/[0.03] px-2 text-[11px] text-[#e8ebf7]/70 hover:bg-white/[0.08] hover:text-[#e8ebf7]"
+          className="inline-flex h-6 flex-1 items-center justify-center gap-1 rounded border border-[#2D2D30] bg-[#252527] px-2 text-[11px] text-[#F4F4F5] hover:bg-[#252527] hover:text-[#F4F4F5]"
         >
-          <FolderOpen className="h-3 w-3 text-[#7aa2ff]" />
+        <FolderOpen className="h-3 w-3 text-[#7AA2FF]" />
           <span>Switch</span>
         </button>
         <button
           type="button"
           onClick={onCloseProject}
-          className="inline-flex h-6 items-center justify-center rounded border border-white/8 bg-transparent px-2.5 text-[11px] text-[#e8ebf7]/55 hover:bg-white/[0.07] hover:text-[#e8ebf7]"
+          className="inline-flex h-6 items-center justify-center rounded border border-[#2D2D30] bg-transparent px-2.5 text-[11px] text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
         >
           Close
         </button>

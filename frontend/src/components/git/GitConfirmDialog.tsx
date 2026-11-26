@@ -1,7 +1,8 @@
 "use client";
 
-import { AlertTriangle, GitBranch, Loader2, Trash2, Undo2 } from "lucide-react";
-import type { GitConfirmDialogState } from "@/types/git";
+import { useEffect } from"react";
+import { AlertTriangle, GitBranch, Loader2, Trash2, Undo2 } from"lucide-react";
+import type { GitConfirmDialogState } from"@/types/git";
 
 interface GitConfirmDialogProps {
   dialog: GitConfirmDialogState | null;
@@ -16,6 +17,34 @@ export function GitConfirmDialog({
   onCancel,
   onConfirm,
 }: GitConfirmDialogProps) {
+  const isOpen = Boolean(dialog);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    return () => {
+      queueMicrotask(() => {
+        if (prev && prev.isConnected) prev.focus();
+      });
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !pending) {
+        event.preventDefault();
+        event.stopPropagation();
+        onCancel();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, pending, onCancel]);
+
   if (!dialog) return null;
 
   const isDiscard = dialog.kind === "discard";
@@ -33,16 +62,16 @@ export function GitConfirmDialog({
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="git-confirm-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-md"
       onClick={() => {
         if (!pending) onCancel();
       }}
     >
       <div
-        className="vega-glass w-full max-w-md rounded-2xl border border-white/15 bg-[#090b13]/95 p-5 shadow-2xl"
+        className="vega-glass w-full max-w-md rounded-2xl border border-[#2D2D30] p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start gap-3">
+      <div className="flex items-start gap-3">
           <div
             className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${
               isDeleteUntracked || isDiscard
@@ -51,27 +80,27 @@ export function GitConfirmDialog({
             }`}
           >
             {isDeleteUntracked ? (
-              <Trash2 className="h-4 w-4" />
+            <Trash2 className="h-4 w-4" />
             ) : isDiscard ? (
-              <Undo2 className="h-4 w-4" />
+            <Undo2 className="h-4 w-4" />
             ) : (
-              <GitBranch className="h-4 w-4" />
+            <GitBranch className="h-4 w-4" />
             )}
           </div>
 
           <div className="min-w-0 flex-1 space-y-2">
             <h2
               id="git-confirm-title"
-              className="text-sm font-semibold text-[#e8ebf7]"
+              className="text-sm font-semibold text-[#F4F4F5]"
             >
               {isDiscard
-                ? "Discard Unstaged Changes?"
+                ? "Discard Unstaged Changes? "
                 : isDeleteUntracked
-                ? "Delete Untracked Files?"
+                ? "Delete Untracked Files? "
                 : `Switch to '${dialog.branchName}' with Uncommitted Changes?`}
             </h2>
 
-            <p className="text-xs leading-relaxed text-[#e8ebf7]/65">
+            <p className="text-xs leading-relaxed text-[#E4E4E7]">
               {isDiscard
                 ? "Unstaged working-tree modifications in the following file(s) will be permanently reverted to the last staged/committed copy. Staged changes remain preserved."
                 : isDeleteUntracked
@@ -81,11 +110,11 @@ export function GitConfirmDialog({
             </p>
 
             {affectedFiles.length > 0 && (
-              <div className="vega-scroll max-h-36 overflow-y-auto rounded-lg border border-white/10 bg-black/40 p-2 font-mono text-[11px] text-[#e8ebf7]/85">
+            <div className="vega-scroll max-h-36 overflow-y-auto rounded-lg border border-[#2D2D30] bg-[#141414] p-2 font-mono text-[11px] text-[#F4F4F5]">
                 {affectedFiles.map((path) => (
-                  <div key={path} className="flex items-center gap-1.5 py-0.5">
-                    <AlertTriangle className="h-3 w-3 shrink-0 text-amber-300" />
-                    <span className="truncate">{path}</span>
+                <div key={path} className="flex items-center gap-1.5 py-0.5">
+                  <AlertTriangle className="h-3 w-3 shrink-0 text-amber-300" />
+                  <span className="truncate">{path}</span>
                   </div>
                 ))}
               </div>
@@ -96,7 +125,7 @@ export function GitConfirmDialog({
                 type="button"
                 disabled={pending}
                 onClick={onCancel}
-                className="inline-flex h-8 items-center rounded-lg border border-white/12 bg-white/[0.04] px-3 text-xs font-medium text-[#e8ebf7]/80 hover:bg-white/[0.09] disabled:opacity-45"
+                className="inline-flex h-8 items-center rounded-lg border border-[#2D2D30] bg-[#252527] px-3 text-xs font-medium text-[#F4F4F5] hover:bg-[#252527] disabled:opacity-45"
               >
                 Cancel
               </button>
@@ -107,10 +136,10 @@ export function GitConfirmDialog({
                 className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium disabled:opacity-45 ${
                   isDiscard || isDeleteUntracked
                     ? "border-red-400/45 bg-red-500/25 text-red-100 hover:bg-red-500/35"
-                    : "border-[#7aa2ff]/45 bg-[#7aa2ff]/22 text-[#e8ebf7] hover:bg-[#7aa2ff]/32"
+                    : "border-[#7AA2FF]/45 bg-[#7AA2FF]/22 text-[#F4F4F5] hover:bg-[#7AA2FF]/32"
                 }`}
               >
-                {pending && <Loader2 className="h-3 w-3 animate-spin" />}
+              {pending && <Loader2 className="h-3 w-3 animate-spin" />}
                 <span>
                   {isDiscard
                     ? "Discard Changes"

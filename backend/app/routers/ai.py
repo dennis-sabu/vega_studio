@@ -16,6 +16,7 @@ from fastapi import (
 )
 from pydantic import ValidationError
 
+from app.config import is_allowed_ws_origin
 from app.models.ai import (
     AICodeApplyValidateRequest,
     AICodeApplyValidateResponse,
@@ -240,6 +241,9 @@ async def ai_conversation_websocket(
     conversation_id: str,
     service: AIService = Depends(get_ai_service),
 ) -> None:
+    if not is_allowed_ws_origin(websocket.headers.get("origin")):
+        await websocket.close(code=1008)
+        return
     try:
         detail, q = service.subscribe(conversation_id)
     except AIServiceError as exc:
@@ -256,13 +260,16 @@ async def ai_conversation_websocket(
                 evt = await asyncio.wait_for(q.get(), timeout=20.0)
                 encoded = json.dumps(evt)
                 if len(encoded) > _MAX_WS_FRAME_CHARS:
-                    encoded = json.dumps(
-                        {
-                            "type": evt.get("type", "info"),
-                            "conversation_id": conversation_id,
-                            "truncated": True,
-                        }
-                    )
+                    compact_evt = {
+                        "type": evt.get("type", "info"),
+                        "conversation_id": conversation_id,
+                        "truncated": True,
+                    }
+                    if "error" in evt:
+                        compact_evt["error"] = str(evt["error"])[:1000]
+                    if "error_code" in evt:
+                        compact_evt["error_code"] = evt["error_code"]
+                    encoded = json.dumps(compact_evt)
                 await websocket.send_text(encoded)
             except asyncio.TimeoutError:
                 await websocket.send_text(json.dumps({"type": "ping"}))

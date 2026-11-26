@@ -49,6 +49,7 @@ export function useTerminalManager({
 
   const [pendingAction, setPendingAction] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
+  const [initialLoaded, setInitialLoaded] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const onLogRef = useRef(onLog);
@@ -99,6 +100,7 @@ export function useTerminalManager({
         ) {
           setActiveSessionId(listRes.sessions[0].session_id);
         }
+        setInitialLoaded(true);
       } catch (err: unknown) {
         if (
           signal?.aborted ||
@@ -107,9 +109,7 @@ export function useTerminalManager({
           return;
         }
       } finally {
-        if (!signal?.aborted) {
-          setLoading(false);
-        }
+        setLoading(false);
       }
     },
     [isBackendConnected]
@@ -117,7 +117,13 @@ export function useTerminalManager({
 
   // Discover shells and reconnect any existing live backend sessions on backend startup
   useEffect(() => {
-    if (!isBackendConnected) return;
+    if (!isBackendConnected) {
+      queueMicrotask(() => {
+        setLoading(false);
+        setInitialLoaded(false);
+      });
+      return;
+    }
     const controller = new AbortController();
     queueMicrotask(() => {
       if (!controller.signal.aborted) {
@@ -308,6 +314,7 @@ export function useTerminalManager({
     hasElectronBrowse,
     pendingAction,
     loading,
+    initialLoaded,
     error,
     setSelectedShellId,
     setActiveSessionId,

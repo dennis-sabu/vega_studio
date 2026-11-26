@@ -110,3 +110,25 @@ export type TerminalWsServerEvent =
   | {
       type: "pong";
     };
+
+export type TerminalFontFamily = "jetbrains-mono" | "geist-mono" | "system";
+
+export type TerminalCursorStyle = "block" | "underline" | "bar";
+
+export interface TerminalSettings {
+  fontFamily: TerminalFontFamily;
+  fontSize: number;
+  lineHeight: number;
+  cursorStyle: TerminalCursorStyle;
+  cursorBlink: boolean;
+  autoLaunch: boolean;
+}
+
+export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
+  fontFamily: "jetbrains-mono",
+  fontSize: 13,
+  lineHeight: 1.4,
+  cursorStyle: "block",
+  cursorBlink: true,
+  autoLaunch: true,
+};

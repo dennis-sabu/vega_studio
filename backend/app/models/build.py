@@ -29,6 +29,7 @@ _FORBIDDEN_ENV_KEYS = frozenset(
         "SHELL",
         "MAKE",
         "MAKEFLAGS",
+        "GNUMAKEFLAGS",
         "MFLAGS",
         "IFS",
         "LD_PRELOAD",
@@ -37,8 +38,16 @@ _FORBIDDEN_ENV_KEYS = frozenset(
         "DYLD_LIBRARY_PATH",
         "PYTHONPATH",
         "PYTHONHOME",
+        "PYTHONSTARTUP",
+        "BASH_ENV",
+        "ENV",
+        "ZDOTDIR",
         "COMSPEC",
         "SYSTEMROOT",
+        "VEGA_SDK",
+        "VEGA_SDK_HOME",
+        "PYTHON",
+        "CROSS_COMPILE",
     }
 )
 

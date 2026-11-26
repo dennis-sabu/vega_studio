@@ -77,9 +77,7 @@ export function useBoardManager({
           : "Failed to load VEGA board registry.";
       setError(message);
     } finally {
-      if (!signal?.aborted) {
-        setLoadingBoards(false);
-      }
+      setLoadingBoards(false);
     }
   }, []);
 
@@ -87,6 +85,7 @@ export function useBoardManager({
     async (projectDir: string | null, signal?: AbortSignal) => {
       if (!projectDir) {
         setProjectBoardStatus(null);
+        setLoadingStatus(false);
         return;
       }
       setLoadingStatus(true);
@@ -115,9 +114,7 @@ export function useBoardManager({
             : "Failed to inspect project board status.";
         setError(message);
       } finally {
-        if (!signal?.aborted) {
-          setLoadingStatus(false);
-        }
+        setLoadingStatus(false);
       }
     },
     []
@@ -125,7 +122,10 @@ export function useBoardManager({
 
   // Load board registry whenever backend comes online
   useEffect(() => {
-    if (!isBackendConnected) return;
+    if (!isBackendConnected) {
+      queueMicrotask(() => setLoadingBoards(false));
+      return;
+    }
     const controller = new AbortController();
     queueMicrotask(() => {
       if (!controller.signal.aborted) {
@@ -137,12 +137,16 @@ export function useBoardManager({
 
   // Refresh active project board status when project, selected board, or SDK config changes
   useEffect(() => {
-    if (!isBackendConnected) return;
+    if (!isBackendConnected) {
+      queueMicrotask(() => setLoadingStatus(false));
+      return;
+    }
     const controller = new AbortController();
     queueMicrotask(() => {
       if (controller.signal.aborted) return;
       if (!activeProjectDir) {
         setProjectBoardStatus(null);
+        setLoadingStatus(false);
         return;
       }
       void refreshProjectStatus(activeProjectDir, controller.signal);

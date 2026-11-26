@@ -1,47 +1,52 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AiCodeApplyModal } from "@/components/ai/AiCodeApplyModal";
-import type { MonacoEditorHandle } from "@/components/editor/MonacoEditorSurface";
-import { UnsavedChangesDialog } from "@/components/editor/UnsavedChangesDialog";
-import { GitConfirmDialog } from "@/components/git/GitConfirmDialog";
-import { GitHubConfirmDialog } from "@/components/git/GitHubConfirmDialog";
-import { CreateFromExampleModal } from "@/components/learning/CreateFromExampleModal";
-import { NewProjectDialog } from "@/components/project/NewProjectDialog";
-import { OpenProjectDialog } from "@/components/project/OpenProjectDialog";
-import { AppToolbar } from "@/components/shell/AppToolbar";
-import { BottomPanel } from "@/components/shell/BottomPanel";
+import { useCallback, useEffect, useMemo, useRef, useState } from"react";
+import { AiCodeApplyModal } from"@/components/ai/AiCodeApplyModal";
+import type { MonacoEditorHandle } from"@/components/editor/MonacoEditorSurface";
+import { UnsavedChangesDialog } from"@/components/editor/UnsavedChangesDialog";
+import { GitConfirmDialog } from"@/components/git/GitConfirmDialog";
+import { GitHubConfirmDialog } from"@/components/git/GitHubConfirmDialog";
+import { CreateFromExampleModal } from"@/components/learning/CreateFromExampleModal";
+import { NewProjectDialog } from"@/components/project/NewProjectDialog";
+import { OpenProjectDialog } from"@/components/project/OpenProjectDialog";
+import { AppToolbar } from"@/components/shell/AppToolbar";
+import { BottomPanel } from"@/components/shell/BottomPanel";
+import {
+  CommandPaletteModal,
+  type CommandPaletteAction,
+} from"@/components/shell/CommandPaletteModal";
 import {
   GlyphAnimalsCanvas,
   type GlyphAnimalsCanvasHandle,
-} from "@/components/shell/GlyphAnimalsCanvas";
-import { HomeWelcomeView } from "@/components/shell/HomeWelcomeView";
-import { LiquidGlassFilter } from "@/components/shell/LiquidGlassFilter";
-import { PrimaryNav } from "@/components/shell/PrimaryNav";
-import { ResizeHandle } from "@/components/shell/ResizeHandle";
-import { RightPanel } from "@/components/shell/RightPanel";
+} from"@/components/shell/GlyphAnimalsCanvas";
+import { HomeWelcomeView } from"@/components/shell/HomeWelcomeView";
+import { LiquidGlassFilter } from"@/components/shell/LiquidGlassFilter";
+import { PrimaryNav } from"@/components/shell/PrimaryNav";
+import { ResizeHandle } from"@/components/shell/ResizeHandle";
+import { RightPanel } from"@/components/shell/RightPanel";
 import {
   SettingsModal,
   type SettingsCategory,
-} from "@/components/shell/SettingsModal";
-import { SidebarPanel } from "@/components/shell/SidebarPanel";
-import { StatusBar } from "@/components/shell/StatusBar";
-import { WorkspaceEditorArea } from "@/components/shell/WorkspaceEditorArea";
-import { useBackendHealth } from "@/hooks/useBackendHealth";
-import { useBoardManager } from "@/hooks/useBoardManager";
-import { useBuildSystem } from "@/hooks/useBuildSystem";
-import { useEditorSettings } from "@/hooks/useEditorSettings";
-import { useEditorTabs } from "@/hooks/useEditorTabs";
-import { useFileExplorer } from "@/hooks/useFileExplorer";
-import { useGitIntegration } from "@/hooks/useGitIntegration";
-import { useGitHubIntegration } from "@/hooks/useGitHubIntegration";
-import { useLearning, type LearningSubTab } from "@/hooks/useLearning";
-import { useNativeAi } from "@/hooks/useNativeAi";
-import { useOpenCode } from "@/hooks/useOpenCode";
-import { useSdkDoctor } from "@/hooks/useSdkDoctor";
-import { useSerialMonitor } from "@/hooks/useSerialMonitor";
-import { useTerminalManager } from "@/hooks/useTerminalManager";
-import { useUploadSystem } from "@/hooks/useUploadSystem";
+} from"@/components/shell/SettingsModal";
+import { SidebarPanel } from"@/components/shell/SidebarPanel";
+import { StatusBar } from"@/components/shell/StatusBar";
+import { WorkspaceEditorArea } from"@/components/shell/WorkspaceEditorArea";
+import { useBackendHealth } from"@/hooks/useBackendHealth";
+import { useBoardManager } from"@/hooks/useBoardManager";
+import { useBuildSystem } from"@/hooks/useBuildSystem";
+import { useEditorSettings } from"@/hooks/useEditorSettings";
+import { useTerminalSettings } from"@/hooks/useTerminalSettings";
+import { useEditorTabs } from"@/hooks/useEditorTabs";
+import { useFileExplorer } from"@/hooks/useFileExplorer";
+import { useGitIntegration } from"@/hooks/useGitIntegration";
+import { useGitHubIntegration } from"@/hooks/useGitHubIntegration";
+import { useLearning, type LearningSubTab } from"@/hooks/useLearning";
+import { useNativeAi } from"@/hooks/useNativeAi";
+import { useOpenCode } from"@/hooks/useOpenCode";
+import { useSdkDoctor } from"@/hooks/useSdkDoctor";
+import { useSerialMonitor } from"@/hooks/useSerialMonitor";
+import { useTerminalManager } from"@/hooks/useTerminalManager";
+import { useUploadSystem } from"@/hooks/useUploadSystem";
 import {
   BOTTOM_PANEL_DEFAULT_HEIGHT,
   BOTTOM_PANEL_MIN_HEIGHT,
@@ -50,31 +55,34 @@ import {
   SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_MIN_WIDTH,
   useShellLayout,
-} from "@/hooks/useShellLayout";
-import { useWorkspace } from "@/hooks/useWorkspace";
+} from"@/hooks/useShellLayout";
+import { useWorkspace } from"@/hooks/useWorkspace";
 import {
   SPECIES_MAP,
   type AtmosphereTweaks,
   type SpeciesKey,
-} from "@/lib/glyphAnimalsEngine";
+} from"@/lib/glyphAnimalsEngine";
 import type {
   AIContextAttachment,
   PendingCodeApplyProposal,
-} from "@/types/ai";
-import type { BuildDiagnostic, BuildOperation } from "@/types/build";
+} from"@/types/ai";
+import type { BuildDiagnostic, BuildOperation } from"@/types/build";
+import { formatBoardDisplayLabel } from"@/types/board";
 import type {
   CreateProjectFromExamplePayload,
   DocPageDetailResponse,
   ExampleDetailResponse,
   ExampleFileContentResponse,
   IdeActionId,
-} from "@/types/learning";
-import type { OpenCodeContextAttachment } from "@/types/opencode";
-import type { CreateProjectPayload, WorkspaceSummary } from "@/types/project";
-import type { ShellLogEntry } from "@/types/shell";
+} from"@/types/learning";
+import type { OpenCodeContextAttachment } from"@/types/opencode";
+import type { CreateProjectPayload, WorkspaceSummary } from"@/types/project";
+import type { ShellLogEntry } from"@/types/shell";
 
-const SPECIES_STORAGE_KEY = "vega-studio:ambient-species:v1";
-const TWEAKS_STORAGE_PREFIX = "vega-studio:ambient-tweaks:v1:";
+const SPECIES_STORAGE_KEY ="wild-tab:animal";
+const TWEAKS_STORAGE_PREFIX ="wild-tab:tweaks: ";
+const LEGACY_SPECIES_KEY ="vega-studio:ambient-species:v1";
+const LEGACY_TWEAKS_PREFIX ="vega-studio:ambient-tweaks:v1: ";
 
 const LOG_TIME = new Intl.DateTimeFormat(undefined, {
   hour12: false,
@@ -100,7 +108,9 @@ function createLogEntry(
 function loadSavedTweaks(species: SpeciesKey): AtmosphereTweaks {
   const base = SPECIES_MAP[species].defaults;
   try {
-    const raw = window.localStorage.getItem(`${TWEAKS_STORAGE_PREFIX}${species}`);
+    const raw =
+      window.localStorage.getItem(`${TWEAKS_STORAGE_PREFIX}${species}`) ??
+      window.localStorage.getItem(`${LEGACY_TWEAKS_PREFIX}${species}`);
     if (!raw) return { ...base };
     const parsed = JSON.parse(raw) as Partial<AtmosphereTweaks>;
     return { ...base, ...parsed };
@@ -139,6 +149,8 @@ export function IdeShell() {
   );
   const [atmosphereHydrated, setAtmosphereHydrated] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [forcedCount, setForcedCount] = useState<number | null>(null);
   const [settingsCategory, setSettingsCategory] =
     useState<SettingsCategory>("appearance");
   const [newProjectOpen, setNewProjectOpen] = useState(false);
@@ -155,7 +167,7 @@ export function IdeShell() {
     createLogEntry(
       "SHELL",
       "info",
-      "VEGA Studio Phase 5 shell, file explorer & Monaco editor initialized."
+      "VEGA Studio workspace, file explorer & Monaco editor initialized."
     ),
   ]);
 
@@ -174,31 +186,69 @@ export function IdeShell() {
   );
 
   const editorSettings = useEditorSettings();
+  const terminalSettingsState = useTerminalSettings();
+  const terminalAutoAttemptedRef = useRef(false);
 
-  // Hydrate saved ambient species & tweaks safely after mount
+  // Hydrate saved ambient species, URL params (?animal=, ?count=), and cross-tab sync
+  const speciesRef = useRef<SpeciesKey>(species);
+  useEffect(() => {
+    speciesRef.current = species;
+  }, [species]);
+
   useEffect(() => {
     let active = true;
     queueMicrotask(() => {
       if (!active) return;
-      let loadedSpecies: SpeciesKey = "moths";
+      let loadedSpecies: SpeciesKey ="moths";
+      let urlCount: number | null = null;
       try {
-        const savedSpecies = window.localStorage.getItem(SPECIES_STORAGE_KEY);
-        if (savedSpecies && savedSpecies in SPECIES_MAP) {
-          loadedSpecies = savedSpecies as SpeciesKey;
+        const params = new URLSearchParams(window.location.search);
+        const paramAnimal = params.get("animal");
+        if (paramAnimal && paramAnimal in SPECIES_MAP) {
+          loadedSpecies = paramAnimal as SpeciesKey;
+        } else {
+          const savedSpecies =
+            window.localStorage.getItem(SPECIES_STORAGE_KEY) ??
+            window.localStorage.getItem(LEGACY_SPECIES_KEY);
+          if (savedSpecies && savedSpecies in SPECIES_MAP) {
+            loadedSpecies = savedSpecies as SpeciesKey;
+          }
+        }
+        const rawCount = params.get("count");
+        if (rawCount !== null) {
+          const n = Number(rawCount);
+          if (Number.isFinite(n) && n >= 1) urlCount = n;
         }
       } catch {
-        // Ignore storage errors.
+        // Ignore storage / URL parsing errors.
       }
+      setForcedCount(urlCount);
       setSpecies(loadedSpecies);
       setTweaks(loadSavedTweaks(loadedSpecies));
       setAtmosphereHydrated(true);
     });
+
+    const onStorageSync = (e: StorageEvent) => {
+      if (e.key === SPECIES_STORAGE_KEY && e.newValue && e.newValue in SPECIES_MAP) {
+        const next = e.newValue as SpeciesKey;
+        setSpecies(next);
+        setTweaks(loadSavedTweaks(next));
+      } else if (e.key && e.key.startsWith(TWEAKS_STORAGE_PREFIX)) {
+        const keySpecies = e.key.slice(TWEAKS_STORAGE_PREFIX.length);
+        if (keySpecies in SPECIES_MAP && keySpecies === speciesRef.current) {
+          setTweaks(loadSavedTweaks(keySpecies as SpeciesKey));
+        }
+      }
+    };
+    window.addEventListener("storage", onStorageSync);
+
     return () => {
       active = false;
+      window.removeEventListener("storage", onStorageSync);
     };
   }, []);
 
-  // Persist species & tweaks and apply CSS glass parameters to root
+  // Persist species & tweaks (storing only diffs) and apply CSS glass tokens
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty("--blur", `${tweaks.blur}px`);
@@ -208,10 +258,21 @@ export function IdeShell() {
     if (!atmosphereHydrated) return;
     try {
       window.localStorage.setItem(SPECIES_STORAGE_KEY, species);
-      window.localStorage.setItem(
-        `${TWEAKS_STORAGE_PREFIX}${species}`,
-        JSON.stringify(tweaks)
-      );
+      const defaults = SPECIES_MAP[species].defaults;
+      const diff: Partial<AtmosphereTweaks> = {};
+      for (const k of Object.keys(tweaks) as Array<keyof AtmosphereTweaks>) {
+        if (tweaks[k] !== defaults[k]) {
+          (diff as Record<string, unknown>)[k] = tweaks[k];
+        }
+      }
+      if (Object.keys(diff).length > 0) {
+        window.localStorage.setItem(
+          `${TWEAKS_STORAGE_PREFIX}${species}`,
+          JSON.stringify(diff)
+        );
+      } else {
+        window.localStorage.removeItem(`${TWEAKS_STORAGE_PREFIX}${species}`);
+      }
     } catch {
       // Ignore storage errors.
     }
@@ -289,6 +350,42 @@ export function IdeShell() {
     onLog: (level, message) => appendLog("SHELL", level, message),
   });
 
+  // Direct Terminal launch when entering Terminal tab with zero active sessions
+  useEffect(() => {
+    const isTerminalVisible =
+      layout.activeMode === "workspace" &&
+      layout.bottomPanelOpen &&
+      layout.activeBottomTab === "terminal";
+
+    if (!isTerminalVisible) {
+      terminalAutoAttemptedRef.current = false;
+      return;
+    }
+
+    if (
+      !isConnected ||
+      !terminalManager.initialLoaded ||
+      !terminalManager.ptySupported ||
+      terminalManager.sessions.length > 0 ||
+      terminalManager.pendingAction ||
+      terminalManager.error ||
+      !terminalSettingsState.terminalSettings.autoLaunch ||
+      terminalAutoAttemptedRef.current
+    ) {
+      return;
+    }
+
+    terminalAutoAttemptedRef.current = true;
+    void terminalManager.createSession();
+  }, [
+    isConnected,
+    layout.activeBottomTab,
+    layout.activeMode,
+    layout.bottomPanelOpen,
+    terminalManager,
+    terminalSettingsState.terminalSettings.autoLaunch,
+  ]);
+
   const openGitDiffTab = useCallback(() => {
     setComposerFocused(false);
     setSettingsOpen(false);
@@ -324,7 +421,7 @@ export function IdeShell() {
         }
       }
     },
-    onLog: (message) => appendLog("SHELL", "info", message),
+    onLog: (message) => appendLog("SHELL","info", message),
   });
 
   const openCodeAgent = useOpenCode({
@@ -425,7 +522,7 @@ export function IdeShell() {
       .slice(0, 10)
       .map(
         (d) =>
-          `[${d.severity}] ${d.relative_path ?? d.file_path ?? "?"}:${d.line ?? "?"} ${d.message}`
+          `[${d.severity}] ${d.relative_path ?? d.file_path ?? "? "}:${d.line ?? "? "} ${d.message}`
       )
       .join("\n");
     const tailLog = buildSystem.logs
@@ -437,7 +534,7 @@ export function IdeShell() {
       {
         kind: "build_output",
         title: `Build ${buildSystem.latestBuild?.status ?? "failure"} diagnostics`,
-        snippet: snippet || "Build failed with no diagnostic lines captured.",
+        snippet: snippet ||"Build failed with no diagnostic lines captured.",
       },
       "Analyze this VEGA firmware build failure and suggest what to check or fix."
     );
@@ -465,7 +562,7 @@ export function IdeShell() {
           title: `Terminal: ${sessionLabel}`,
           snippet: selectedText,
         },
-        "Analyze this selected terminal output in the context of our VEGA project:"
+        "Analyze this selected terminal output in the context of our VEGA project: "
       );
     },
     [askNativeAiWithContext]
@@ -510,7 +607,7 @@ export function IdeShell() {
       .slice(0, 12)
       .map(
         (d) =>
-          `[${d.severity}] ${d.relative_path ?? d.file_path ?? "?"}:${d.line ?? "?"} ${d.message}`
+          `[${d.severity}] ${d.relative_path ?? d.file_path ?? "? "}:${d.line ?? "? "} ${d.message}`
       )
       .join("\n");
     if (!snippet) return;
@@ -529,7 +626,7 @@ export function IdeShell() {
       `Project: ${proj.project.name}`,
       `Target: board=${proj.project.target.board ?? "unset"}, arch=${proj.project.target.arch}, machine=${proj.project.target.machine}`,
       board
-        ? `Board Specs: ${board.name} (${board.core}, ${board.cpu_frequency_mhz}MHz, ${board.sram_kb}KB SRAM, sensors: ${board.sensors.join(", ")})`
+        ? `Board Specs: ${board.name} (${board.core}, ${board.cpu_frequency_mhz}MHz, ${board.sram_kb}KB SRAM, sensors: ${board.sensors.join(",")})`
         : "",
       `SDK Overall: ${sdkDoctor.report?.overall_status ?? "not checked"}`,
     ]
@@ -600,70 +697,6 @@ export function IdeShell() {
     setConfirmUploadNonce((n) => n + 1);
   }, [openUploadPanel]);
 
-  // Global keyboard shortcuts for shell panel navigation, save & settings
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const mod = event.ctrlKey || event.metaKey;
-      const key = event.key.toLowerCase();
-
-      if (mod && key === "s" && !event.shiftKey && !event.altKey) {
-        event.preventDefault();
-        if (
-          !target?.closest(".monaco-editor") &&
-          editorTabs.activeFileTabPath &&
-          layout.activeMode === "workspace"
-        ) {
-          void editorTabs.saveTab(editorTabs.activeFileTabPath);
-        }
-        return;
-      }
-
-      const isTextInput =
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.isContentEditable;
-      if (isTextInput) return;
-
-      if (!mod) return;
-
-      if (key === "\\" && !event.shiftKey && !event.altKey) {
-        event.preventDefault();
-        toggleSidebar();
-      } else if (key === "j" && !event.shiftKey && !event.altKey) {
-        event.preventDefault();
-        toggleBottomPanel();
-      } else if (key === "a" && event.shiftKey && !event.altKey) {
-        event.preventDefault();
-        toggleRightPanel();
-      } else if (key === "e" && event.shiftKey && !event.altKey) {
-        event.preventDefault();
-        selectNav("explorer");
-      } else if (key === "g" && event.shiftKey && !event.altKey) {
-        event.preventDefault();
-        selectNav("git");
-      } else if (key === "," && !event.shiftKey && !event.altKey) {
-        event.preventDefault();
-        setSettingsOpen((prev) => !prev);
-      } else if (key === "o" && event.shiftKey && !event.altKey) {
-        event.preventDefault();
-        workspace.clearFeedback();
-        setOpenProjectOpen(true);
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [
-    editorTabs,
-    layout.activeMode,
-    selectNav,
-    toggleBottomPanel,
-    toggleRightPanel,
-    toggleSidebar,
-    workspace,
-  ]);
-
   const handleSpeciesChange = useCallback((nextSpecies: SpeciesKey) => {
     setSpecies(nextSpecies);
     setTweaks(loadSavedTweaks(nextSpecies));
@@ -688,7 +721,7 @@ export function IdeShell() {
 
   const handleResetLayout = useCallback(() => {
     resetLayout();
-    appendLog("LAYOUT", "info", "Restored default workspace layout.");
+    appendLog("LAYOUT","info","Restored default workspace layout.");
   }, [appendLog, resetLayout]);
 
   const openNewProjectDialog = useCallback(() => {
@@ -731,8 +764,140 @@ export function IdeShell() {
     onLog: (level, message) => appendLog("SHELL", level, message),
   });
 
+  const anyBlockingModalOpen =
+    settingsOpen ||
+    commandPaletteOpen ||
+    newProjectOpen ||
+    openProjectOpen ||
+    Boolean(editorTabs.unsavedPrompt) ||
+    Boolean(pendingCodeApply) ||
+    Boolean(gitIntegration.confirmDialog) ||
+    Boolean(githubIntegration.confirmDialog) ||
+    Boolean(learning.createModalExample);
+
+  const shortcutCtxRef = useRef({
+    activeMode: layout.activeMode,
+    activeFileTabPath: editorTabs.activeFileTabPath,
+    anyBlockingModalOpen,
+    settingsOpen,
+    hasOtherModal:
+      commandPaletteOpen ||
+      newProjectOpen ||
+      openProjectOpen ||
+      Boolean(editorTabs.unsavedPrompt) ||
+      Boolean(pendingCodeApply) ||
+      Boolean(gitIntegration.confirmDialog) ||
+      Boolean(githubIntegration.confirmDialog) ||
+      Boolean(learning.createModalExample),
+    saveTab: editorTabs.saveTab,
+    toggleSidebar,
+    toggleBottomPanel,
+    toggleRightPanel,
+    selectNav,
+    clearWorkspaceFeedback: workspace.clearFeedback,
+  });
+
+  useEffect(() => {
+    shortcutCtxRef.current = {
+      activeMode: layout.activeMode,
+      activeFileTabPath: editorTabs.activeFileTabPath,
+      anyBlockingModalOpen,
+      settingsOpen,
+      hasOtherModal:
+        commandPaletteOpen ||
+        newProjectOpen ||
+        openProjectOpen ||
+        Boolean(editorTabs.unsavedPrompt) ||
+        Boolean(pendingCodeApply) ||
+        Boolean(gitIntegration.confirmDialog) ||
+        Boolean(githubIntegration.confirmDialog) ||
+        Boolean(learning.createModalExample),
+      saveTab: editorTabs.saveTab,
+      toggleSidebar,
+      toggleBottomPanel,
+      toggleRightPanel,
+      selectNav,
+      clearWorkspaceFeedback: workspace.clearFeedback,
+    };
+  });
+
+  // Global keyboard shortcuts for Command Center, shell navigation, save & settings
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const ctx = shortcutCtxRef.current;
+      const target = event.target as HTMLElement | null;
+      const mod = event.ctrlKey || event.metaKey;
+      const key = event.key.toLowerCase();
+
+      if (!mod) return;
+      if (target?.closest(".xterm")) return;
+
+      if (key === "k" && !event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+        return;
+      }
+
+      const isMonaco = Boolean(target?.closest(".monaco-editor"));
+      const isFormControl =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        Boolean(target?.isContentEditable);
+
+      if (key === "s" && !event.shiftKey && !event.altKey) {
+        if (
+          !isMonaco &&
+          !isFormControl &&
+          !ctx.anyBlockingModalOpen &&
+          ctx.activeMode === "workspace" &&
+          ctx.activeFileTabPath
+        ) {
+          event.preventDefault();
+          void ctx.saveTab(ctx.activeFileTabPath);
+        }
+        return;
+      }
+
+      if (key === "," && !event.shiftKey && !event.altKey) {
+        if (!ctx.hasOtherModal) {
+          event.preventDefault();
+          setSettingsOpen((prev) => !prev);
+        }
+        return;
+      }
+
+      if (ctx.anyBlockingModalOpen) return;
+      if (isFormControl && !isMonaco) return;
+
+      if (key === "\\" && !event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        ctx.toggleSidebar();
+      } else if (key === "j" && !event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        ctx.toggleBottomPanel();
+      } else if (key === "a" && event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        ctx.toggleRightPanel();
+      } else if (key === "e" && event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        ctx.selectNav("explorer");
+      } else if (key === "g" && event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        ctx.selectNav("git");
+      } else if (key === "o" && event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        ctx.clearWorkspaceFeedback();
+        setOpenProjectOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const openExamplesLibrary = useCallback(
-    (tab: LearningSubTab = "examples") => {
+    (tab: LearningSubTab ="examples") => {
       setComposerFocused(false);
       setSettingsOpen(false);
       editorTabs.setActiveFileTabPath(null);
@@ -748,9 +913,9 @@ export function IdeShell() {
     async (payload: CreateProjectFromExamplePayload): Promise<boolean> => {
       if (workspace.activeProject && editorTabs.dirtyCount > 0) {
         const proceed = await editorTabs.confirmWorkspaceTransition({
-          title: "Save changes before creating a project?",
+          title: "Save changes before creating a project? ",
           description:
-            "Open editor tabs contain unsaved changes. Save them before switching to the new example project?",
+            "Open editor tabs contain unsaved changes. Save them before switching to the new example project? ",
           confirmSaveLabel: "Save All & Create",
           confirmDiscardLabel: "Discard & Create",
         });
@@ -822,7 +987,7 @@ export function IdeShell() {
         `Example: ${detail.example.title} (${detail.example.id})`,
         `Verification Status: ${detail.example.verification_status}`,
         `Note: ${detail.example.verification_note}`,
-        `Boards: ${detail.example.compatible_boards.join(", ")}`,
+        `Boards: ${detail.example.compatible_boards.join(",")}`,
       ].join("\n");
       const body = fileContent
         ? `\n\n--- ${fileContent.relative_path} ---\n${fileContent.content}`
@@ -860,7 +1025,7 @@ export function IdeShell() {
             : detail.markdown_content,
           truncated,
         },
-        `Summarize key takeaways from "${detail.doc.title}" and help apply it to my VEGA firmware project:`
+        `Summarize key takeaways from"${detail.doc.title}" and help apply it to my VEGA firmware project:`
       );
     },
     [askNativeAiWithContext]
@@ -877,7 +1042,7 @@ export function IdeShell() {
           snippet: truncated ? snippet.slice(0, 5000) : snippet,
           truncated,
         },
-        "Explain this code snippet from the VEGA Studio documentation:"
+        "Explain this code snippet from the VEGA Studio documentation: "
       );
     },
     [askNativeAiWithContext]
@@ -887,9 +1052,9 @@ export function IdeShell() {
     async (payload: CreateProjectPayload) => {
       if (workspace.activeProject) {
         const proceed = await editorTabs.confirmWorkspaceTransition({
-          title: "Save changes before creating a project?",
+          title: "Save changes before creating a project? ",
           description:
-            "Open editor tabs contain unsaved changes. Save them before switching to the new project?",
+            "Open editor tabs contain unsaved changes. Save them before switching to the new project? ",
           confirmSaveLabel: "Save All & Create",
           confirmDiscardLabel: "Discard & Create",
         });
@@ -897,8 +1062,8 @@ export function IdeShell() {
           throw new Error("Project creation canceled.");
         }
       }
-      editorTabs.resetFileTabs();
       await workspace.createNewProject(payload);
+      editorTabs.resetFileTabs();
       setMode("workspace");
       openCenterTab("overview");
     },
@@ -912,9 +1077,9 @@ export function IdeShell() {
         workspace.activeProject.project_dir !== projectDir
       ) {
         const proceed = await editorTabs.confirmWorkspaceTransition({
-          title: "Save changes before switching projects?",
+          title: "Save changes before switching projects? ",
           description:
-            "Open editor tabs contain unsaved changes. Save them before switching to another project?",
+            "Open editor tabs contain unsaved changes. Save them before switching to another project? ",
           confirmSaveLabel: "Save All & Switch",
           confirmDiscardLabel: "Discard & Switch",
         });
@@ -922,8 +1087,8 @@ export function IdeShell() {
           throw new Error("Project switch canceled.");
         }
       }
-      editorTabs.resetFileTabs();
       await workspace.openExistingProject(projectDir);
+      editorTabs.resetFileTabs();
       setMode("workspace");
       openCenterTab("overview");
     },
@@ -932,9 +1097,9 @@ export function IdeShell() {
 
   const handleCloseProject = useCallback(async () => {
     const proceed = await editorTabs.confirmWorkspaceTransition({
-      title: "Save changes before closing workspace?",
+      title: "Save changes before closing workspace? ",
       description:
-        "Open editor tabs contain unsaved changes. Save them before closing the active workspace?",
+        "Open editor tabs contain unsaved changes. Save them before closing the active workspace? ",
       confirmSaveLabel: "Save All & Close",
       confirmDiscardLabel: "Discard & Close",
     });
@@ -950,9 +1115,9 @@ export function IdeShell() {
         editorTabs.dirtyCount > 0
       ) {
         const proceed = await editorTabs.confirmWorkspaceTransition({
-          title: "Save modified files before building?",
+          title: "Save modified files before building? ",
           description:
-            "Open editor tabs contain unsaved modifications. Save them so Make compiles your latest edits?",
+            "Open editor tabs contain unsaved modifications. Save them so Make compiles your latest edits? ",
           confirmSaveLabel: "Save All & Build",
           confirmDiscardLabel: "Build Saved Copy",
         });
@@ -980,8 +1145,179 @@ export function IdeShell() {
       ) ?? null
     : null;
 
+  const commandPaletteActions = useMemo<CommandPaletteAction[]>(() => {
+    const acts: CommandPaletteAction[] = [
+      {
+        id: "mode-home",
+        category: "View",
+        label: "Switch to Home (Glyph Animals & Composer)",
+        keywords: "home new tab canvas welcome",
+        run: () => setMode("home"),
+      },
+      {
+        id: "mode-workspace",
+        category: "View",
+        label: "Switch to Code Workspace",
+        keywords: "workspace editor ide panes",
+        run: () => setMode("workspace"),
+      },
+      {
+        id: "new-project",
+        category: "Project",
+        label: "New VEGA Project...",
+        keywords: "create firmware aries v3",
+        run: openNewProjectDialog,
+      },
+      {
+        id: "open-project",
+        category: "Project",
+        label: "Open VEGA Project...",
+        shortcut: "Ctrl+Shift+O",
+        keywords: "folder browse directory",
+        run: openOpenProjectDialog,
+      },
+      {
+        id: "open-examples",
+        category: "Learn",
+        label: "Examples & Offline Documentation",
+        keywords: "templates guides vega aries v3",
+        run: () => openExamplesLibrary("examples"),
+      },
+      {
+        id: "open-boards",
+        category: "Hardware",
+        label: "Open Board Manager",
+        keywords: "aries v3 target specs",
+        run: openBoardManager,
+      },
+      {
+        id: "open-sdk-doctor",
+        category: "Toolchain",
+        label: "Open SDK & Toolchain Doctor",
+        keywords: "gcc riscv make python xmodem",
+        run: openSdkDoctor,
+      },
+      {
+        id: "open-native-ai",
+        category: "AI",
+        label: "Open VEGA Assistant",
+        shortcut: "Ctrl+Shift+A",
+        keywords: "ai chat assistant",
+        run: () => {
+          setMode("workspace");
+          setRightTab("native-ai");
+        },
+      },
+      {
+        id: "open-opencode",
+        category: "AI",
+        label: "Open OpenCode Autonomous Agent",
+        keywords: "agent cli coding",
+        run: () => {
+          setMode("workspace");
+          setRightTab("opencode");
+        },
+      },
+      {
+        id: "open-terminal",
+        category: "Panel",
+        label: "Open Integrated Terminal",
+        keywords: "shell bash powershell pty",
+        run: openTerminalPanel,
+      },
+      {
+        id: "open-serial",
+        category: "Panel",
+        label: "Open UART Serial Monitor",
+        keywords: "com ttyUSB baud console",
+        run: openSerialMonitor,
+      },
+      {
+        id: "open-git",
+        category: "Git",
+        label: "Open Source Control",
+        shortcut: "Ctrl+Shift+G",
+        keywords: "commit branch diff github",
+        run: openSourceControl,
+      },
+      {
+        id: "open-diagnostics",
+        category: "System",
+        label: "Inspect Backend Health & Diagnostics",
+        keywords: "status logs health",
+        run: () => {
+          editorTabs.setActiveFileTabPath(null);
+          openCenterTab("diagnostics");
+        },
+      },
+      {
+        id: "open-settings",
+        category: "Settings",
+        label: "Open IDE & Appearance Settings",
+        shortcut: "Ctrl+,",
+        keywords: "preferences fonts terminal ai sdk",
+        run: () => setSettingsOpen(true),
+      },
+    ];
+
+    if (activeProjectName && isConnected) {
+      acts.push(
+        {
+          id: "build-firmware",
+          category: "Build",
+          label: `Build ${activeProjectName} (Make)`,
+          keywords: "compile firmware elf bin",
+          run: () => void handleBuildOperation("build"),
+        },
+        {
+          id: "upload-firmware",
+          category: "Upload",
+          label: `Flash / Upload Firmware to ${activeProjectName}`,
+          keywords: "xmodem flash serial board",
+          run: triggerUploadPrompt,
+        }
+      );
+    }
+
+    for (const r of workspace.recentProjects.filter((x) => x.exists).slice(0, 5)) {
+      acts.push({
+        id: `recent-${r.project_dir}`,
+        category: "Recent",
+        label: `Open Project: ${r.name}`,
+        keywords: r.project_dir,
+        run: () => void handleOpenProjectDir(r.project_dir).catch(() => {}),
+      });
+    }
+
+    return acts;
+  }, [
+    activeProjectName,
+    editorTabs,
+    handleBuildOperation,
+    handleOpenProjectDir,
+    isConnected,
+    openBoardManager,
+    openCenterTab,
+    openExamplesLibrary,
+    openNewProjectDialog,
+    openOpenProjectDialog,
+    openSdkDoctor,
+    openSerialMonitor,
+    openSourceControl,
+    openTerminalPanel,
+    setMode,
+    setRightTab,
+    triggerUploadPrompt,
+    workspace.recentProjects,
+  ]);
+
   return (
-    <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-[#06070c] text-[#e8ebf7]">
+    <div
+      data-mode={layout.activeMode}
+      className={`relative flex h-screen w-screen flex-col overflow-hidden text-[#F4F4F5] ${
+        layout.activeMode === "workspace" ? "bg-[#181818]" : "bg-[#06070c]"
+      }`}
+    >
       <LiquidGlassFilter
         refraction={tweaks.refraction}
         ripple={tweaks.ripple}
@@ -992,8 +1328,10 @@ export function IdeShell() {
         ref={canvasRef}
         species={species}
         tweaks={tweaks}
+        forcedCount={forcedCount}
         dimmed={
           composerFocused ||
+          commandPaletteOpen ||
           settingsOpen ||
           newProjectOpen ||
           openProjectOpen
@@ -1004,6 +1342,26 @@ export function IdeShell() {
       <AppToolbar
         activeMode={layout.activeMode}
         activeProjectName={activeProjectName}
+        activeBoardLabel={
+          activeProjectName
+            ? boardManager.activeProjectBoardId
+              ? formatBoardDisplayLabel(
+                  boardManager.projectBoardStatus?.board?.name,
+                  boardManager.activeProjectBoardId,
+                  { short: true }
+                )
+              : "No Board"
+            : "ARIES V3"
+        }
+        boardSupported={
+          boardManager.projectBoardStatus?.board_supported ??
+          Boolean(
+            boardManager.activeProjectBoardId &&
+              boardManager.boards.some(
+                (b) => b.id === boardManager.activeProjectBoardId
+              )
+          )
+        }
         isBuilding={buildSystem.isBuilding}
         isUploading={uploadSystem.isUploading}
         isSerialConnected={serialMonitor.isConnected}
@@ -1026,8 +1384,13 @@ export function IdeShell() {
         onCancelBuild={() => void buildSystem.cancelActive()}
         onUploadAction={triggerUploadPrompt}
         onCancelUpload={() => void uploadSystem.cancelActive()}
+        onOpenBoardManager={openBoardManager}
+        onOpenSdkDoctor={openSdkDoctor}
+        onOpenExamples={() => openExamplesLibrary("examples")}
         onOpenUploadPanel={openUploadPanel}
         onOpenSerialMonitor={openSerialMonitor}
+        onOpenTerminal={openTerminalPanel}
+        onOpenCommandPalette={() => setCommandPaletteOpen(true)}
         onToggleSidebar={toggleSidebar}
         onToggleBottomPanel={toggleBottomPanel}
         onToggleRightPanel={toggleRightPanel}
@@ -1047,7 +1410,7 @@ export function IdeShell() {
         />
 
         {layout.activeMode === "home" ? (
-          <main className="min-h-0 min-w-0 flex-1 overflow-hidden">
+        <main className="min-h-0 min-w-0 flex-1 overflow-hidden">
             <HomeWelcomeView
               species={species}
               tweaks={tweaks}
@@ -1092,10 +1455,18 @@ export function IdeShell() {
                 setComposerFocused(false);
                 setBottomTab(tab);
               }}
+              onAskAiPrompt={(prompt) => {
+                setComposerFocused(false);
+                setMode("workspace");
+                setRightTab("native-ai");
+                if (prompt) {
+                  nativeAi.setDraftPrompt(prompt);
+                }
+              }}
             />
           </main>
         ) : (
-          <div className="vega-view-enter flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        <div className="vega-view-enter flex min-h-0 min-w-0 flex-1 overflow-hidden">
             {/* Left Sidebar */}
             {effectiveDimensions.showSidebar && (
               <>
@@ -1235,6 +1606,8 @@ export function IdeShell() {
                     selectedDocSlug: learning.selectedDocSlug,
                     onSelectDoc: (slug) => void learning.selectDoc(slug),
                     loading: learning.loadingExamples || learning.loadingDocs,
+                    error: learning.error,
+                    onClearError: learning.clearError,
                     onRefresh: () => void learning.refreshCatalogs(),
                     isBackendConnected: isConnected,
                   }}
@@ -1369,6 +1742,8 @@ export function IdeShell() {
                     selectedDocDetail: learning.selectedDocDetail,
                     loadingDocDetail: learning.loadingDocDetail,
                     onSelectDoc: (slug) => void learning.selectDoc(slug),
+                    error: learning.error,
+                    onClearError: learning.clearError,
                     onRefresh: () => void learning.refreshCatalogs(),
                     onRunIdeAction: handleRunIdeAction,
                     onAskAiAboutExample: handleAskAiAboutExample,
@@ -1493,7 +1868,9 @@ export function IdeShell() {
                       activeSession: terminalManager.activeSession,
                       pendingAction: terminalManager.pendingAction,
                       loading: terminalManager.loading,
+                      initialLoaded: terminalManager.initialLoaded,
                       error: terminalManager.error,
+                      terminalSettings: terminalSettingsState.terminalSettings,
                       onSelectShell: terminalManager.setSelectedShellId,
                       onSelectSession: terminalManager.setActiveSessionId,
                       onCreateSession: () =>
@@ -1512,6 +1889,8 @@ export function IdeShell() {
                       onUpdateCwd: terminalManager.updateSessionCwd,
                       onClearError: terminalManager.clearError,
                       onAnalyzeSelectionInAi: handleAnalyzeTerminalAi,
+                      onOpenTerminalSettings: () =>
+                        openSettingsCategory("terminal"),
                     }}
                     uploadPanelProps={{
                       hasActiveProject: Boolean(workspace.activeProject),
@@ -1768,9 +2147,6 @@ export function IdeShell() {
         serialPort={serialMonitor.activePort}
         serialBaudRate={serialMonitor.baudRate}
         terminalRunningCount={terminalManager.runningCount}
-        sidebarOpen={layout.sidebarOpen}
-        bottomPanelOpen={layout.bottomPanelOpen}
-        rightPanelOpen={layout.rightPanelOpen}
         onInspectBackend={() => {
           editorTabs.setActiveFileTabPath(null);
           openCenterTab("diagnostics");
@@ -1783,9 +2159,6 @@ export function IdeShell() {
         onOpenSerialMonitor={openSerialMonitor}
         onOpenTerminal={openTerminalPanel}
         onOpenProject={openOpenProjectDialog}
-        onToggleSidebar={toggleSidebar}
-        onToggleBottomPanel={toggleBottomPanel}
-        onToggleRightPanel={toggleRightPanel}
       />
 
       <SettingsModal
@@ -1794,12 +2167,14 @@ export function IdeShell() {
         species={species}
         tweaks={tweaks}
         editorSettings={editorSettings.settings}
+        terminalSettings={terminalSettingsState.terminalSettings}
         sdkConfigProps={{
           configState: sdkDoctor.configState,
           hasElectronBrowse: sdkDoctor.hasElectronBrowse,
           isBackendConnected: isConnected,
           saving: sdkDoctor.savingConfig,
           discovering: sdkDoctor.discovering,
+          error: sdkDoctor.error,
           onBrowseDirectory: sdkDoctor.browseDirectory,
           onBrowseFile: sdkDoctor.browseFile,
           onDiscover: sdkDoctor.runDiscovery,
@@ -1812,6 +2187,7 @@ export function IdeShell() {
           saving: nativeAi.savingConfig,
           testing: nativeAi.testingConnection,
           loading: nativeAi.loading,
+          error: nativeAi.error,
           testResult: nativeAi.testResult,
           onRefresh: () => void nativeAi.refreshState(),
           onSaveConfig: nativeAi.saveConfig,
@@ -1826,6 +2202,7 @@ export function IdeShell() {
           isBackendConnected: isConnected,
           saving: openCodeAgent.savingConfig,
           loading: openCodeAgent.loading,
+          error: openCodeAgent.error,
           onBrowseFile: sdkDoctor.browseFile,
           onRefresh: () => void openCodeAgent.refreshInfoAndSessions(),
           onSave: openCodeAgent.saveConfig,
@@ -1837,7 +2214,15 @@ export function IdeShell() {
         onResetTweaks={handleResetTweaks}
         onEditorSettingsChange={editorSettings.updateSettings}
         onResetEditorSettings={editorSettings.resetSettings}
+        onTerminalSettingsChange={terminalSettingsState.updateTerminalSettings}
+        onResetTerminalSettings={terminalSettingsState.resetTerminalSettings}
         onOpenSdkDoctor={openSdkDoctor}
+      />
+
+      <CommandPaletteModal
+        open={commandPaletteOpen}
+        actions={commandPaletteActions}
+        onClose={() => setCommandPaletteOpen(false)}
       />
 
       <UnsavedChangesDialog prompt={editorTabs.unsavedPrompt} />

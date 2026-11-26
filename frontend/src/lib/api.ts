@@ -145,6 +145,23 @@ export interface StatusResponse {
   platform: PlatformInfo;
 }
 
+export interface DiagnosticsExportResponse {
+  schema_version: string;
+  generated_at: string;
+  redaction_applied: boolean;
+  excluded_items: string[];
+  backend: BackendInfo;
+  platform: PlatformInfo;
+  workspace: Record<string, unknown>;
+  sdk: Record<string, unknown>;
+  boards: Record<string, unknown>;
+  git: Record<string, unknown>;
+  github: Record<string, unknown>;
+  opencode: Record<string, unknown>;
+  ai: Record<string, unknown>;
+  recent_backend_logs: string[];
+}
+
 export interface SelectDirectoryOptions {
   title?: string;
   defaultPath?: string;
@@ -166,6 +183,14 @@ export interface VegaStudioBridge {
     options?: SelectDirectoryOptions
   ) => Promise<SelectDirectoryResult>;
   getDefaultProjectsDir?: () => Promise<string>;
+  windowControls?: {
+    mode: "overlay" | "custom";
+    minimize: () => Promise<void>;
+    toggleMaximize: () => Promise<boolean>;
+    close: () => Promise<void>;
+    isMaximized: () => Promise<boolean>;
+    onMaximizedChange: (cb: (maximized: boolean) => void) => () => void;
+  };
 }
 
 declare global {
@@ -201,22 +226,63 @@ export async function apiFetch<T>(
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const url = `${baseUrl}${normalizedPath}`;
 
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      Accept: "application/json",
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
-      ...(init?.headers ?? {}),
-    },
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers: {
+        Accept: "application/json",
+        ...(init?.body ? { "Content-Type": "application/json" } : {}),
+        ...(init?.headers ?? {}),
+      },
+      cache: "no-store",
+    });
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw err;
+    }
+    throw new ApiError(
+      "Backend unreachable — ensure local FastAPI server is running.",
+      0
+    );
+  }
 
   if (!response.ok) {
     let detailMessage = `Request failed with status ${response.status}`;
     try {
-      const errBody = (await response.json()) as { detail?: unknown };
+      const errBody = (await response.json()) as {
+        detail?: unknown;
+        message?: unknown;
+      };
       if (typeof errBody.detail === "string" && errBody.detail.trim()) {
         detailMessage = errBody.detail;
+      } else if (Array.isArray(errBody.detail) && errBody.detail.length > 0) {
+        const parts = errBody.detail
+          .slice(0, 3)
+          .map((item) => {
+            if (typeof item === "string") return item;
+            if (item && typeof item === "object") {
+              const rec = item as { loc?: unknown; msg?: unknown };
+              const loc = Array.isArray(rec.loc)
+                ? rec.loc
+                    .filter((seg) => seg !== "body" && seg !== "query")
+                    .join(".")
+                : "";
+              const msg =
+                typeof rec.msg === "string" ? rec.msg : "Invalid value";
+              return loc ? `${loc}: ${msg}` : msg;
+            }
+            return null;
+          })
+          .filter((x): x is string => Boolean(x));
+        if (parts.length > 0) {
+          detailMessage = parts.join("; ");
+        }
+      } else if (
+        typeof errBody.message === "string" &&
+        errBody.message.trim()
+      ) {
+        detailMessage = errBody.message;
       }
     } catch {
       // Fall back to default HTTP error message.
@@ -237,6 +303,21 @@ export async function fetchStatus(
   signal?: AbortSignal
 ): Promise<StatusResponse> {
   return apiFetch<StatusResponse>("/api/status", { signal });
+}
+
+export async function exportDiagnosticsBundle(
+  projectDir?: string | null,
+  signal?: AbortSignal
+): Promise<DiagnosticsExportResponse> {
+  const params = new URLSearchParams();
+  if (projectDir) {
+    params.set("project_dir", projectDir);
+  }
+  const qs = params.toString();
+  return apiFetch<DiagnosticsExportResponse>(
+    `/api/diagnostics/export${qs ? `?${qs}` : ""}`,
+    { signal }
+  );
 }
 
 export async function fetchWorkspaceState(

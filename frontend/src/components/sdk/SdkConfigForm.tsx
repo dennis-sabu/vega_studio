@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent } from"react";
 import {
   AlertTriangle,
   FileSearch,
@@ -10,13 +10,13 @@ import {
   Save,
   Sparkles,
   Stethoscope,
-} from "lucide-react";
-import type { BrowseOutcome } from "@/hooks/useSdkDoctor";
+} from"lucide-react";
+import type { BrowseOutcome } from"@/hooks/useSdkDoctor";
 import type {
   SdkConfig,
   SdkConfigStateResponse,
   SdkDiscoveryResult,
-} from "@/types/sdk";
+} from"@/types/sdk";
 
 interface SdkConfigFormProps {
   configState: SdkConfigStateResponse | null;
@@ -24,6 +24,7 @@ interface SdkConfigFormProps {
   isBackendConnected: boolean;
   saving: boolean;
   discovering: boolean;
+  error?: string | null;
   onBrowseDirectory: (title: string, defaultPath?: string) => Promise<BrowseOutcome>;
   onBrowseFile: (title: string, defaultPath?: string) => Promise<BrowseOutcome>;
   onDiscover: (applyToConfig?: boolean) => Promise<SdkDiscoveryResult | null>;
@@ -53,6 +54,7 @@ export function SdkConfigForm({
   isBackendConnected,
   saving,
   discovering,
+  error,
   onBrowseDirectory,
   onBrowseFile,
   onDiscover,
@@ -78,7 +80,7 @@ export function SdkConfigForm({
   };
 
   const handleBrowse = async (
-    kind: "dir" | "file",
+    kind: "dir" |"file",
     key: keyof SdkConfig,
     title: string,
     currentVal: string | null
@@ -137,27 +139,27 @@ export function SdkConfigForm({
     id: string,
     label: string,
     key:
-      | "sdk_root"
-      | "toolchain_root"
-      | "compiler_path"
-      | "make_path"
-      | "python_path"
-      | "uploader_script",
-    kind: "dir" | "file",
+      |"sdk_root"
+      |"toolchain_root"
+      |"compiler_path"
+      |"make_path"
+      |"python_path"
+      |"uploader_script",
+    kind: "dir" |"file",
     placeholder: string,
     hint: string
   ) => {
     const val = draft[key] ?? "";
     return (
-      <div className="space-y-1">
-        <div className="flex items-center justify-between gap-2">
+    <div className="space-y-1">
+      <div className="flex items-center justify-between gap-2">
           <label
             htmlFor={id}
-            className="text-xs font-medium text-[#e8ebf7]/85"
+            className="text-xs font-medium text-[#F4F4F5]"
           >
             {label}
           </label>
-          <span className="font-mono text-[10px] text-[#e8ebf7]/40">{hint}</span>
+          <span className="font-mono text-[10px] text-[#A1A1AA]">{hint}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <input
@@ -166,7 +168,7 @@ export function SdkConfigForm({
             value={val}
             onChange={(e) => updateField(key, e.target.value || null)}
             placeholder={placeholder}
-            className="h-8 min-w-0 flex-1 rounded-lg border border-white/10 bg-[#06070c]/85 px-2.5 font-mono text-xs text-[#e8ebf7] placeholder:text-[#e8ebf7]/30 focus:border-[#7aa2ff]/55 focus:outline-none"
+            className="h-8 min-w-0 flex-1 rounded-lg border border-[#2D2D30] bg-[#181818] px-2.5 font-mono text-xs text-[#F4F4F5] placeholder:text-[#8E8E98] focus:border-[#7AA2FF]/55 focus:outline-none"
           />
           <button
             type="button"
@@ -178,12 +180,12 @@ export function SdkConfigForm({
             onClick={() =>
               void handleBrowse(kind, key, `Select ${label}`, draft[key])
             }
-            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 text-xs text-[#e8ebf7]/75 transition-colors hover:bg-white/[0.09] hover:text-[#e8ebf7]"
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-[#2D2D30] bg-[#252527] px-2.5 text-xs text-[#F4F4F5] transition-colors hover:bg-[#252527] hover:text-[#F4F4F5]"
           >
             {kind === "dir" ? (
-              <FolderOpen className="h-3.5 w-3.5 text-[#7aa2ff]" />
+            <FolderOpen className="h-3.5 w-3.5 text-[#7AA2FF]" />
             ) : (
-              <FileSearch className="h-3.5 w-3.5 text-[#7aa2ff]" />
+            <FileSearch className="h-3.5 w-3.5 text-[#7AA2FF]" />
             )}
             <span className="hidden sm:inline">Browse</span>
           </button>
@@ -193,14 +195,14 @@ export function SdkConfigForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+  <form onSubmit={handleSubmit} className="space-y-4">
       {/* Header action cluster */}
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-[#06070c]/65 px-3.5 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#2D2D30] bg-[#181818] px-3.5 py-2.5">
         <div className="min-w-0">
-          <p className="text-xs font-medium text-[#e8ebf7]">
+          <p className="text-xs font-medium text-[#F4F4F5]">
             VEGA SDK &amp; Toolchain Paths
           </p>
-          <p className="text-[11px] text-[#e8ebf7]/50">
+          <p className="text-[11px] text-[#B4B4BC]">
             Stored in local application user data (`vega_studio.db`), never inside
             project repositories.
           </p>
@@ -210,12 +212,12 @@ export function SdkConfigForm({
             type="button"
             disabled={!isBackendConnected || discovering || saving}
             onClick={() => void handleAutoDetect()}
-            className="inline-flex h-7 items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.05] px-3 text-[11px] font-medium text-[#e8ebf7]/85 hover:bg-white/12 disabled:opacity-45"
+            className="inline-flex h-7 items-center gap-1.5 rounded-full border border-[#2D2D30] bg-[#252527] px-3 text-[11px] font-medium text-[#F4F4F5] hover:bg-[#2D2D31] disabled:opacity-45"
           >
             {discovering ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-[#7aa2ff]" />
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-[#7AA2FF]" />
             ) : (
-              <Sparkles className="h-3.5 w-3.5 text-[#7aa2ff]" />
+            <Sparkles className="h-3.5 w-3.5 text-[#7AA2FF]" />
             )}
             <span>Auto-Detect</span>
           </button>
@@ -226,29 +228,38 @@ export function SdkConfigForm({
             className={`inline-flex h-7 items-center gap-1 rounded-full border px-3 text-[11px] font-medium transition-colors disabled:opacity-45 ${
               confirmReset
                 ? "border-red-400/45 bg-red-500/20 text-red-200"
-                : "border-white/10 bg-transparent text-[#e8ebf7]/65 hover:bg-white/[0.06] hover:text-[#e8ebf7]"
+                : "border-[#2D2D30] bg-transparent text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
             }`}
           >
-            <RotateCcw className="h-3 w-3" />
-            <span>{confirmReset ? "Confirm Reset?" : "Reset Defaults"}</span>
+          <RotateCcw className="h-3 w-3" />
+            <span>{confirmReset ? "Confirm Reset? " : "Reset Defaults"}</span>
           </button>
         </div>
       </div>
 
+      {error && (
+        <div
+          role="alert"
+          className="rounded-xl border border-red-400/30 bg-red-500/12 px-3 py-2 text-xs text-red-200"
+        >
+          {error}
+        </div>
+      )}
+
       {browseNotice && (
-        <div className="rounded-xl border border-[#7aa2ff]/25 bg-[#7aa2ff]/10 px-3 py-2 text-xs text-[#e8ebf7]/85">
+      <div className="rounded-xl border border-[#7AA2FF]/25 bg-[#7AA2FF]/10 px-3 py-2 text-xs text-[#F4F4F5]">
           {browseNotice}
         </div>
       )}
 
       {configState && configState.validation_warnings.length > 0 && (
-        <div className="space-y-1 rounded-xl border border-amber-400/25 bg-amber-500/10 p-3 text-xs text-amber-200">
-          <div className="flex items-center gap-1.5 font-medium">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+      <div className="space-y-1 rounded-xl border border-amber-400/25 bg-amber-500/10 p-3 text-xs text-amber-200">
+        <div className="flex items-center gap-1.5 font-medium">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
             <span>Configured Path Notes</span>
           </div>
           {configState.validation_warnings.map((w) => (
-            <p key={w} className="font-mono text-[11px] opacity-85">
+          <p key={w} className="font-mono text-[11px] opacity-85">
               • {w}
             </p>
           ))}
@@ -256,8 +267,8 @@ export function SdkConfigForm({
       )}
 
       {/* Primary SDK & Toolchain paths */}
-      <div className="space-y-3 rounded-2xl border border-white/[0.08] bg-[#06070c]/60 p-4">
-        <div className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/45 uppercase">
+      <div className="space-y-3 rounded-2xl border border-[#2D2D30] bg-[#181818] p-4">
+        <div className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#B4B4BC] uppercase">
           SDK &amp; Cross-Compiler
         </div>
 
@@ -288,8 +299,8 @@ export function SdkConfigForm({
       </div>
 
       {/* Build & Upload Prerequisites */}
-      <div className="space-y-3 rounded-2xl border border-white/[0.08] bg-[#06070c]/60 p-4">
-        <div className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/45 uppercase">
+      <div className="space-y-3 rounded-2xl border border-[#2D2D30] bg-[#181818] p-4">
+        <div className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#B4B4BC] uppercase">
           Build &amp; Upload Tools
         </div>
 
@@ -323,8 +334,8 @@ export function SdkConfigForm({
       </div>
 
       {/* Target Architecture & Extra PATH */}
-      <div className="space-y-3 rounded-2xl border border-white/[0.08] bg-[#06070c]/60 p-4">
-        <div className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/45 uppercase">
+      <div className="space-y-3 rounded-2xl border border-[#2D2D30] bg-[#181818] p-4">
+        <div className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#B4B4BC] uppercase">
           VEGA ARIES V3 Target &amp; Environment
         </div>
 
@@ -332,7 +343,7 @@ export function SdkConfigForm({
           <div className="space-y-1">
             <label
               htmlFor="prefix-input"
-              className="text-xs font-medium text-[#e8ebf7]/85"
+              className="text-xs font-medium text-[#F4F4F5]"
             >
               Cross-Compile Prefix
             </label>
@@ -343,14 +354,14 @@ export function SdkConfigForm({
               onChange={(e) =>
                 updateField("cross_compile_prefix", e.target.value)
               }
-              className="h-8 w-full rounded-lg border border-white/10 bg-[#06070c]/85 px-2.5 font-mono text-xs text-[#e8ebf7] focus:border-[#7aa2ff]/55 focus:outline-none"
+              className="h-8 w-full rounded-lg border border-[#2D2D30] bg-[#181818] px-2.5 font-mono text-xs text-[#F4F4F5] focus:border-[#7AA2FF]/55 focus:outline-none"
             />
           </div>
 
           <div className="space-y-1">
             <label
               htmlFor="arch-input"
-              className="text-xs font-medium text-[#e8ebf7]/85"
+              className="text-xs font-medium text-[#F4F4F5]"
             >
               Target Architecture
             </label>
@@ -359,14 +370,14 @@ export function SdkConfigForm({
               type="text"
               value={draft.target_arch}
               onChange={(e) => updateField("target_arch", e.target.value)}
-              className="h-8 w-full rounded-lg border border-white/10 bg-[#06070c]/85 px-2.5 font-mono text-xs text-[#e8ebf7] focus:border-[#7aa2ff]/55 focus:outline-none"
+              className="h-8 w-full rounded-lg border border-[#2D2D30] bg-[#181818] px-2.5 font-mono text-xs text-[#F4F4F5] focus:border-[#7AA2FF]/55 focus:outline-none"
             />
           </div>
 
           <div className="space-y-1">
             <label
               htmlFor="machine-input"
-              className="text-xs font-medium text-[#e8ebf7]/85"
+              className="text-xs font-medium text-[#F4F4F5]"
             >
               Target Machine
             </label>
@@ -375,7 +386,7 @@ export function SdkConfigForm({
               type="text"
               value={draft.target_machine}
               onChange={(e) => updateField("target_machine", e.target.value)}
-              className="h-8 w-full rounded-lg border border-white/10 bg-[#06070c]/85 px-2.5 font-mono text-xs text-[#e8ebf7] focus:border-[#7aa2ff]/55 focus:outline-none"
+              className="h-8 w-full rounded-lg border border-[#2D2D30] bg-[#181818] px-2.5 font-mono text-xs text-[#F4F4F5] focus:border-[#7AA2FF]/55 focus:outline-none"
             />
           </div>
         </div>
@@ -384,11 +395,11 @@ export function SdkConfigForm({
           <div className="flex items-center justify-between gap-2">
             <label
               htmlFor="extra-path-input"
-              className="text-xs font-medium text-[#e8ebf7]/85"
+              className="text-xs font-medium text-[#F4F4F5]"
             >
               Additional Toolchain PATH Entries (Optional)
             </label>
-            <span className="font-mono text-[10px] text-[#e8ebf7]/40">
+            <span className="font-mono text-[10px] text-[#A1A1AA]">
               One directory per line (never mutates OS PATH)
             </span>
           </div>
@@ -406,14 +417,14 @@ export function SdkConfigForm({
               )
             }
             placeholder="~/vega/vega-tools-rv32/bin"
-            className="w-full rounded-lg border border-white/10 bg-[#06070c]/85 p-2.5 font-mono text-xs text-[#e8ebf7] placeholder:text-[#e8ebf7]/30 focus:border-[#7aa2ff]/55 focus:outline-none"
+            className="w-full rounded-lg border border-[#2D2D30] bg-[#181818] p-2.5 font-mono text-xs text-[#F4F4F5] placeholder:text-[#8E8E98] focus:border-[#7AA2FF]/55 focus:outline-none"
           />
         </div>
       </div>
 
       {/* Footer Submit Controls */}
       <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-        <span className="font-mono text-[11px] text-[#e8ebf7]/45">
+        <span className="font-mono text-[11px] text-[#B4B4BC]">
           {hasUnsavedEdits
             ? "Unsaved SDK configuration edits"
             : configState?.is_customized
@@ -426,12 +437,12 @@ export function SdkConfigForm({
             type="button"
             disabled={!isBackendConnected || saving}
             onClick={() => void handleSave(false)}
-            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.05] px-4 text-xs font-medium text-[#e8ebf7] hover:bg-white/12 disabled:opacity-45"
+            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#2D2D30] bg-[#252527] px-4 text-xs font-medium text-[#F4F4F5] hover:bg-[#2D2D31] disabled:opacity-45"
           >
             {saving ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-[#7aa2ff]" />
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-[#7AA2FF]" />
             ) : (
-              <Save className="h-3.5 w-3.5 text-[#7aa2ff]" />
+            <Save className="h-3.5 w-3.5 text-[#7AA2FF]" />
             )}
             <span>Save Only</span>
           </button>
@@ -439,12 +450,12 @@ export function SdkConfigForm({
           <button
             type="submit"
             disabled={!isBackendConnected || saving}
-            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#7aa2ff]/45 bg-[#7aa2ff]/20 px-4 text-xs font-medium text-[#e8ebf7] hover:bg-[#7aa2ff]/30 disabled:opacity-45"
+            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#7AA2FF]/45 bg-[#7AA2FF]/20 px-4 text-xs font-medium text-[#F4F4F5] hover:bg-[#7AA2FF]/30 disabled:opacity-45"
           >
             {saving ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-[#7aa2ff]" />
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-[#7AA2FF]" />
             ) : (
-              <Stethoscope className="h-3.5 w-3.5 text-[#7aa2ff]" />
+            <Stethoscope className="h-3.5 w-3.5 text-[#7AA2FF]" />
             )}
             <span>Save &amp; Run Diagnostics</span>
           </button>

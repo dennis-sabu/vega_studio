@@ -300,6 +300,7 @@ class _PosixPtyHandle:
 
         self._write_lock = threading.Lock()
         self._closed = False
+        self._fd_closed = False
         self._decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
 
         master_fd, slave_fd = posix_pty.openpty()
@@ -397,7 +398,7 @@ class _PosixPtyHandle:
     def poll_exit_code(self) -> Optional[int]:
         return self._proc.poll()
 
-    def terminate(self) -> Optional[int]:
+    def terminate_process_only(self) -> Optional[int]:
         self._closed = True
         if self._proc.poll() is None:
             try:
@@ -416,13 +417,21 @@ class _PosixPtyHandle:
                     self._proc.wait(timeout=1.0)
                 except (subprocess.TimeoutExpired, OSError):
                     pass
-
-        try:
-            os.close(self._master_fd)
-        except OSError:
-            pass
-
         return self._proc.poll()
+
+    def close_fd(self) -> None:
+        self._closed = True
+        if not self._fd_closed:
+            self._fd_closed = True
+            try:
+                os.close(self._master_fd)
+            except OSError:
+                pass
+
+    def terminate(self) -> Optional[int]:
+        rc = self.terminate_process_only()
+        self.close_fd()
+        return rc
 
 
 # ---------------------------------------------------------------------------
@@ -567,7 +576,10 @@ class TerminalService:
                         id="pwsh",
                         label="PowerShell 7",
                         executable=str(Path(pwsh).resolve()),
-                        default_args=["-NoLogo"],
+                        # -NoLogo suppresses banner; -NoProfile stops profile
+                        # scripts that emit [?1;2c (Primary Device Attributes)
+                        # and trigger the bell tone on Windows ConPTY.
+                        default_args=["-NoLogo", "-NoProfile"],
                     )
                 )
 
@@ -578,7 +590,9 @@ class TerminalService:
                         id="powershell",
                         label="Windows PowerShell",
                         executable=str(Path(ps).resolve()),
-                        default_args=["-NoLogo"],
+                        # -NoLogo suppresses banner; -NoProfile stops profile
+                        # scripts that emit [?1;2c and trigger the bell on ConPTY.
+                        default_args=["-NoLogo", "-NoProfile"],
                     )
                 )
 
@@ -701,12 +715,17 @@ class TerminalService:
     ) -> Tuple[str, Optional[str]]:
         """Validate requested working directory or select safe active-project/default cwd."""
         validated_project_dir: Optional[str] = None
-        if project_dir:
-            proj_path = Path(os.path.expanduser(project_dir)).resolve(strict=False)
-            if proj_path.is_dir():
-                validated_project_dir = self._validate_directory_readable(
-                    proj_path, "Project directory"
-                )
+        if project_dir and project_dir.strip():
+            try:
+                proj_path = Path(os.path.expanduser(project_dir.strip())).resolve(strict=False)
+            except OSError as exc:
+                raise TerminalServiceError(
+                    f"Invalid project directory path '{project_dir}': {exc}",
+                    status_code=400,
+                ) from exc
+            validated_project_dir = self._validate_directory_readable(
+                proj_path, "Project directory"
+            )
         else:
             try:
                 active_dir = self._projects.persistence.get_active_project_dir()
@@ -720,17 +739,23 @@ class TerminalService:
         if requested_cwd:
             expanded = os.path.expanduser(requested_cwd)
             raw_path = Path(expanded)
-            if raw_path.is_absolute():
-                resolved = raw_path.resolve(strict=False)
-            elif validated_project_dir:
-                resolved = (Path(validated_project_dir) / raw_path).resolve(
-                    strict=False
-                )
-            else:
+            try:
+                if raw_path.is_absolute():
+                    resolved = raw_path.resolve(strict=False)
+                elif validated_project_dir:
+                    resolved = (Path(validated_project_dir) / raw_path).resolve(
+                        strict=False
+                    )
+                else:
+                    raise TerminalServiceError(
+                        "Relative working directory requires an open project directory.",
+                        status_code=400,
+                    )
+            except OSError as exc:
                 raise TerminalServiceError(
-                    "Relative working directory requires an open project directory.",
+                    f"Invalid working directory path '{requested_cwd}': {exc}",
                     status_code=400,
-                )
+                ) from exc
             cwd_str = self._validate_directory_readable(
                 resolved, "Working directory"
             )
@@ -903,31 +928,53 @@ class TerminalService:
         if handle is None:
             return
 
-        while not record.stop_event.is_set():
-            chunk = handle.read()
-            if chunk is None:
-                break
+        try:
+            while not record.stop_event.is_set():
+                chunk = handle.read()
+                if chunk is None:
+                    break
 
-            detected_cwd = self._detect_osc_cwd(chunk)
+                detected_cwd = self._detect_osc_cwd(chunk)
+                with record.lock:
+                    record.seq_counter += 1
+                    seq = record.seq_counter
+                    record.append_replay(chunk)
+                    record.summary.output_bytes += len(chunk.encode("utf-8", errors="replace"))
+                    record.summary.last_activity_at = utc_now_iso()
+                    if detected_cwd:
+                        record.summary.cwd = detected_cwd
+                    cwd_snapshot = record.summary.cwd
+
+                self._broadcast_event(
+                    record,
+                    {
+                        "type": "output",
+                        "seq": seq,
+                        "data": chunk,
+                        "cwd": cwd_snapshot,
+                    },
+                )
+        except Exception as exc:
             with record.lock:
-                record.seq_counter += 1
-                seq = record.seq_counter
-                record.append_replay(chunk)
-                record.summary.output_bytes += len(chunk.encode("utf-8", errors="replace"))
-                record.summary.last_activity_at = utc_now_iso()
-                if detected_cwd:
-                    record.summary.cwd = detected_cwd
-                cwd_snapshot = record.summary.cwd
-
-            self._broadcast_event(
-                record,
-                {
-                    "type": "output",
-                    "seq": seq,
-                    "data": chunk,
-                    "cwd": cwd_snapshot,
-                },
-            )
+                if not record.intentional_stop and record.summary.status != "closed":
+                    record.summary.status = "error"
+                    record.summary.error_message = str(exc)
+                    record.summary.exited_at = utc_now_iso()
+                    record.summary.last_activity_at = record.summary.exited_at
+                    err_snap = record.summary.model_copy(deep=True)
+                else:
+                    err_snap = None
+            if err_snap is not None:
+                self._broadcast_event(record, {"type": "state", "session": err_snap.model_dump()})
+            return
+        finally:
+            if not record.intentional_stop:
+                close_fd = getattr(handle, "close_fd", None)
+                if callable(close_fd):
+                    try:
+                        close_fd()
+                    except Exception:
+                        pass
 
         # Wait briefly for process exit code if process closed its stream just prior to exit
         exit_code = handle.poll_exit_code()
@@ -939,7 +986,7 @@ class TerminalService:
                 time.sleep(0.03)
 
         with record.lock:
-            if record.intentional_stop or record.summary.status == "closed":
+            if record.intentional_stop or record.summary.status in ("closed", "error"):
                 return
             record.summary.status = "exited"
             record.summary.exit_code = exit_code if exit_code is not None else 0
@@ -1067,6 +1114,15 @@ class TerminalService:
         )
 
         with self._lock:
+            if self._shutting_down:
+                try:
+                    handle.terminate()
+                except Exception:
+                    pass
+                raise TerminalServiceError(
+                    "Backend is shutting down; cannot register terminal session.",
+                    status_code=503,
+                )
             if len(self._sessions) >= self._max_sessions:
                 try:
                     handle.terminate()
@@ -1183,11 +1239,22 @@ class TerminalService:
 
         if old_handle is not None:
             try:
-                old_handle.terminate()
+                kill_only = getattr(old_handle, "terminate_process_only", None)
+                if callable(kill_only):
+                    kill_only()
+                else:
+                    old_handle.terminate()
             except Exception:
                 pass
         if old_thread is not None and old_thread.is_alive():
             old_thread.join(timeout=2.5)
+        if old_handle is not None:
+            close_fd = getattr(old_handle, "close_fd", None)
+            if callable(close_fd):
+                try:
+                    close_fd()
+                except Exception:
+                    pass
 
         with record.lock:
             desired_cwd = record.summary.cwd or record.summary.initial_cwd
@@ -1198,12 +1265,26 @@ class TerminalService:
             exe = record.executable
             args = list(record.default_args)
 
-        if not Path(desired_cwd).is_dir():
-            desired_cwd = fallback_cwd
-        cwd_str, validated_proj = self.resolve_working_directory(desired_cwd, proj_dir)
-        env = self._build_terminal_env(validated_proj)
-
-        new_handle = self._spawn_pty_handle(exe, args, cwd_str, env, cols, rows)
+        try:
+            if not Path(desired_cwd).is_dir():
+                desired_cwd = fallback_cwd
+            cwd_str, validated_proj = self.resolve_working_directory(desired_cwd, proj_dir)
+            env = self._build_terminal_env(validated_proj)
+            new_handle = self._spawn_pty_handle(exe, args, cwd_str, env, cols, rows)
+        except Exception as exc:
+            with record.lock:
+                record.pty_handle = None
+                record.reader_thread = None
+                record.summary.status = "error"
+                record.summary.error_message = (
+                    exc.message if isinstance(exc, TerminalServiceError) else str(exc)
+                )
+                record.summary.last_activity_at = utc_now_iso()
+                err_snap = record.summary.model_copy(deep=True)
+            self._broadcast_event(record, {"type": "state", "session": err_snap.model_dump()})
+            if isinstance(exc, TerminalServiceError):
+                raise
+            raise TerminalServiceError(f"Failed restarting terminal: {exc}", status_code=500) from exc
         now = utc_now_iso()
 
         with record.lock:
@@ -1262,11 +1343,22 @@ class TerminalService:
 
         if handle is not None:
             try:
-                handle.terminate()
+                kill_only = getattr(handle, "terminate_process_only", None)
+                if callable(kill_only):
+                    kill_only()
+                else:
+                    handle.terminate()
             except Exception:
                 pass
         if thread is not None and thread.is_alive():
             thread.join(timeout=2.5)
+        if handle is not None:
+            close_fd = getattr(handle, "close_fd", None)
+            if callable(close_fd):
+                try:
+                    close_fd()
+                except Exception:
+                    pass
 
         with record.lock:
             record.pty_handle = None

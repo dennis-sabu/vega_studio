@@ -1,19 +1,23 @@
 """Health and status router."""
 from __future__ import annotations
 
+import asyncio
 import platform
 import sys
 from datetime import datetime, timezone
+from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.config import settings
 from app.models.health import (
     BackendInfo,
+    DiagnosticsExportResponse,
     HealthResponse,
     PlatformInfo,
     StatusResponse,
 )
+from app.services.diagnostics_service import build_safe_diagnostics_bundle
 
 router = APIRouter(prefix="/api", tags=["health"])
 
@@ -48,3 +52,15 @@ async def status() -> StatusResponse:
             architecture=platform.machine(),
         ),
     )
+
+
+@router.get(
+    "/diagnostics/export",
+    response_model=DiagnosticsExportResponse,
+    summary="Export redacted local diagnostics bundle",
+)
+async def export_diagnostics(
+    project_dir: Optional[str] = Query(default=None),
+) -> DiagnosticsExportResponse:
+    """Return a non-secret, redacted diagnostics bundle for offline support."""
+    return await asyncio.to_thread(build_safe_diagnostics_bundle, project_dir)

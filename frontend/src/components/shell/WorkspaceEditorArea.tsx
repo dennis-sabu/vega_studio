@@ -8,7 +8,8 @@ import {
   type ComponentProps,
   type KeyboardEvent,
   type MouseEvent,
-} from "react";
+} from"react";
+import { createPortal } from"react-dom";
 import {
   Activity,
   AlertCircle,
@@ -17,6 +18,7 @@ import {
   Check,
   ChevronRight,
   Cpu,
+  Download,
   FileDiff,
   FolderOpen,
   FolderPlus,
@@ -25,40 +27,48 @@ import {
   PanelBottom,
   PanelLeft,
   PanelRight,
+  Plus,
   RefreshCw,
   Replace,
   RotateCcw,
   Save,
   Search,
   Server,
+  ShieldCheck,
   SlidersHorizontal,
   Stethoscope,
   Wifi,
   WifiOff,
   WrapText,
   X,
-} from "lucide-react";
+} from"lucide-react";
 import {
   MonacoEditorSurface,
   type MonacoEditorHandle,
-} from "@/components/editor/MonacoEditorSurface";
-import { BoardManagerView } from "@/components/board/BoardManagerView";
-import { FileIcon } from "@/components/explorer/FileIcon";
-import { GitDiffView } from "@/components/git/GitDiffView";
-import { ExamplesDocsView } from "@/components/learning/ExamplesDocsView";
-import { SdkDoctorView } from "@/components/sdk/SdkDoctorView";
-import { Tooltip } from "@/components/ui/Tooltip";
-import { fetchStatus, type HealthResponse, type StatusResponse } from "@/lib/api";
+} from"@/components/editor/MonacoEditorSurface";
+import { BoardManagerView } from"@/components/board/BoardManagerView";
+import { FileIcon } from"@/components/explorer/FileIcon";
+import { GitDiffView } from"@/components/git/GitDiffView";
+import { ExamplesDocsView } from"@/components/learning/ExamplesDocsView";
+import { SdkDoctorView } from"@/components/sdk/SdkDoctorView";
+import { Tooltip } from"@/components/ui/Tooltip";
+import {
+  exportDiagnosticsBundle,
+  fetchStatus,
+  type HealthResponse,
+  type StatusResponse,
+} from"@/lib/api";
 import type {
   EditorCursorPosition,
   EditorRevealTarget,
   EditorSettings,
-} from "@/types/editor";
-import type { OpenFileTab } from "@/types/explorer";
-import type { AIContextAttachment } from "@/types/ai";
-import type { OpenCodeContextAttachment } from "@/types/opencode";
-import type { WorkspaceSummary } from "@/types/project";
-import type { CenterTabId, ShellLayoutState } from "@/types/shell";
+} from"@/types/editor";
+import type { OpenFileTab } from"@/types/explorer";
+import type { AIContextAttachment } from"@/types/ai";
+import type { OpenCodeContextAttachment } from"@/types/opencode";
+import type { WorkspaceSummary } from"@/types/project";
+import { formatBoardDisplayLabel } from"@/types/board";
+import type { CenterTabId, ShellLayoutState } from"@/types/shell";
 
 interface WorkspaceEditorAreaProps {
   openTabs: CenterTabId[];
@@ -187,6 +197,80 @@ export function WorkspaceEditorArea({
   const [statusData, setStatusData] = useState<StatusResponse | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [exportingDiagnostics, setExportingDiagnostics] = useState(false);
+  const [diagnosticsNotice, setDiagnosticsNotice] = useState<{
+    kind: "ok" |"error";
+    text: string;
+  } | null>(null);
+  const [viewsMenuCoords, setViewsMenuCoords] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
+  const viewsMenuRef = useRef<HTMLDivElement | null>(null);
+  const viewsDropdownRef = useRef<HTMLDivElement | null>(null);
+  const tabButtonRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  useEffect(() => {
+    if (!viewsMenuCoords) return;
+    const handlePointerDown = (e: globalThis.MouseEvent) => {
+      const target = e.target as Node | null;
+      if (
+        !viewsMenuRef.current?.contains(target) &&
+        !viewsDropdownRef.current?.contains(target)
+      ) {
+        setViewsMenuCoords(null);
+      }
+    };
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") setViewsMenuCoords(null);
+    };
+    const handleResize = () => setViewsMenuCoords(null);
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [viewsMenuCoords]);
+
+  const activeProjectDir = activeProject?.project_dir ?? null;
+
+  const handleExportSafeDiagnostics = useCallback(async () => {
+    if (!isConnected || exportingDiagnostics) return;
+    setExportingDiagnostics(true);
+    setDiagnosticsNotice(null);
+    try {
+      const bundle = await exportDiagnosticsBundle(activeProjectDir);
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const stamp = new Date().toISOString().replace(/[:.]/g,"-");
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `vega-studio-diagnostics-${stamp}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setDiagnosticsNotice({
+        kind: "ok",
+        text: "Redacted diagnostics bundle saved locally (secrets and keys excluded).",
+      });
+    } catch (err: unknown) {
+      setDiagnosticsNotice({
+        kind: "error",
+        text:
+          err instanceof Error
+            ? err.message
+            : "Failed to export safe diagnostics bundle.",
+      });
+    } finally {
+      setExportingDiagnostics(false);
+    }
+  }, [activeProjectDir, exportingDiagnostics, isConnected]);
 
   useEffect(() => {
     if (!tabMenu) return;
@@ -259,21 +343,26 @@ export function WorkspaceEditorArea({
     const nextIdx = (navIndex + delta + navTargets.length) % navTargets.length;
     const target = navTargets[nextIdx];
     if (!target) return;
+    const focusKey =
+      target.kind === "shell" ? `shell:${target.id}` : `file:${target.path}`;
     if (target.kind === "shell") {
       onSelectTab(target.id);
     } else {
       onSelectFileTab(target.path);
     }
+    requestAnimationFrame(() => {
+      tabButtonRefs.current[focusKey]?.focus();
+    });
   };
 
   return (
-    <div className="vega-view-enter flex min-h-0 min-w-0 flex-1 flex-col bg-[#06070c]/58 backdrop-blur-[2px]">
+    <div className="vega-view-enter flex min-h-0 min-w-0 flex-1 flex-col bg-[#1F1F1F]">
       {/* Central Workspace Tab Strip */}
-      <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/[0.08] bg-[#070910]/85 px-2 select-none">
+      <div className="flex h-8 shrink-0 items-center justify-between border-b border-[#2B2B2E] bg-[#181818] px-1 select-none">
         <div
           role="tablist"
           aria-label="Workspace and editor tabs"
-          className="vega-scroll flex min-w-0 items-center gap-1 overflow-x-auto"
+          className="vega-no-scrollbar flex h-full min-w-0 flex-1 items-end gap-0.5 overflow-x-auto"
         >
           {openTabs.map((tabId, idx) => {
             const { label, icon: Icon } = TAB_META[tabId];
@@ -282,18 +371,21 @@ export function WorkspaceEditorArea({
             return (
               <div
                 key={tabId}
+                ref={(el) => {
+                  tabButtonRefs.current[`shell:${tabId}`] = el;
+                }}
                 role="tab"
                 aria-selected={isSelected}
                 tabIndex={isSelected ? 0 : -1}
                 onClick={() => onSelectTab(tabId)}
                 onKeyDown={(e) => handleTabKeyDown(e, idx)}
-                className={`group inline-flex h-7 shrink-0 cursor-pointer items-center gap-2 rounded-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7aa2ff]/50 ${
+                className={`group relative inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 border-x px-2.5 text-[11.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#7AA2FF] ${
                   isSelected
-                    ? "border-white/12 bg-[#0e101a] text-[#e8ebf7]"
-                    : "border-transparent bg-transparent text-[#e8ebf7]/50 hover:bg-white/[0.04] hover:text-[#e8ebf7]/80"
+                    ? "border-[#2D2D30]/60 border-t-2 border-t-[#7AA2FF] bg-[#1F1F1F] text-[#F4F4F5]"
+                    : "border-transparent border-t-2 border-t-transparent bg-[#181818] text-[#B4B4BC] hover:bg-[#1F1F1F]/75 hover:text-[#F4F4F5]"
                 }`}
               >
-                <Icon className="h-3.5 w-3.5 text-[#7aa2ff]" />
+                <Icon className="h-3.5 w-3.5 text-[#7AA2FF]" />
                 <span>{label}</span>
                 <button
                   type="button"
@@ -302,7 +394,7 @@ export function WorkspaceEditorArea({
                     e.stopPropagation();
                     onCloseTab(tabId);
                   }}
-                  className="inline-flex h-4 w-4 items-center justify-center rounded text-[#e8ebf7]/40 opacity-70 transition-colors hover:bg-white/10 hover:text-[#e8ebf7] group-hover:opacity-100"
+                  className="inline-flex h-4 w-4 items-center justify-center rounded-[4px] text-[#B4B4BC] opacity-75 transition-colors hover:bg-[#2D2D31] hover:text-[#F4F4F5] group-hover:opacity-100"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -313,7 +405,7 @@ export function WorkspaceEditorArea({
           {openTabs.length > 0 && openFileTabs.length > 0 && (
             <div
               aria-hidden="true"
-              className="mx-1 h-4 w-px shrink-0 bg-white/10"
+              className="mx-1 my-auto h-4 w-px shrink-0 bg-[#2C2C30]"
             />
           )}
 
@@ -324,6 +416,9 @@ export function WorkspaceEditorArea({
             return (
               <div
                 key={`file:${fileTab.uid}`}
+                ref={(el) => {
+                  tabButtonRefs.current[`file:${fileTab.path}`] = el;
+                }}
                 role="tab"
                 title={
                   fileTab.isDirty
@@ -344,10 +439,10 @@ export function WorkspaceEditorArea({
                   });
                 }}
                 onKeyDown={(e) => handleTabKeyDown(e, navIndex)}
-                className={`group inline-flex h-7 max-w-[210px] shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7aa2ff]/50 ${
+                className={`group relative inline-flex h-8 max-w-[200px] shrink-0 cursor-pointer items-center gap-1.5 border-x px-2.5 text-[11.5px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#7AA2FF] ${
                   isSelected
-                    ? "border-[#7aa2ff]/35 bg-[#0e1222] text-[#e8ebf7]"
-                    : "border-transparent bg-transparent text-[#e8ebf7]/60 hover:bg-white/[0.04] hover:text-[#e8ebf7]/90"
+                    ? "border-[#2D2D30]/60 border-t-2 border-t-[#7AA2FF] bg-[#1F1F1F] text-[#F4F4F5]"
+                    : "border-transparent border-t-2 border-t-transparent bg-[#181818] text-[#B4B4BC] hover:bg-[#1F1F1F]/75 hover:text-[#F4F4F5]"
                 }`}
               >
                 <FileIcon
@@ -360,11 +455,11 @@ export function WorkspaceEditorArea({
                 </span>
 
                 {fileTab.isSaving ? (
-                  <Loader2 className="h-3 w-3 shrink-0 animate-spin text-[#7aa2ff]" />
+                <Loader2 className="h-3 w-3 shrink-0 animate-spin text-[#7AA2FF]" />
                 ) : fileTab.isDirty ? (
                   <span
                     aria-label="Unsaved changes"
-                    className="h-2 w-2 shrink-0 rounded-full bg-amber-300 shadow-[0_0_6px_rgba(252,211,77,0.45)]"
+                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300"
                   />
                 ) : null}
 
@@ -375,24 +470,24 @@ export function WorkspaceEditorArea({
                     e.stopPropagation();
                     onCloseFileTab(fileTab.path);
                   }}
-                  className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-[#e8ebf7]/40 opacity-70 transition-colors hover:bg-white/10 hover:text-[#e8ebf7] group-hover:opacity-100"
+                  className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] text-[#A1A1AA] opacity-70 transition-colors hover:bg-[#2D2D31] hover:text-[#F4F4F5] group-hover:opacity-100"
                 >
-                  <X className="h-3 w-3" />
+                <X className="h-3 w-3" />
                 </button>
               </div>
             );
           })}
         </div>
 
-        <div className="flex shrink-0 items-center gap-1 pl-2">
+        <div className="flex shrink-0 items-center gap-1 pl-1.5">
           {dirtyCount > 0 && (
             <Tooltip label="Save all modified files">
               <button
                 type="button"
                 onClick={onSaveAllFileTabs}
-                className="inline-flex h-6 items-center gap-1 rounded border border-[#7aa2ff]/30 bg-[#7aa2ff]/12 px-2 font-mono text-[10.5px] font-medium text-[#e8ebf7] transition-colors hover:bg-[#7aa2ff]/22"
+                className="inline-flex h-6 items-center gap-1 rounded-[5px] border border-[#7AA2FF]/30 bg-[#7AA2FF]/12 px-2 font-mono text-[10.5px] font-medium text-[#F4F4F5] transition-colors hover:bg-[#7AA2FF]/22"
               >
-                <Save className="h-3 w-3 text-[#7aa2ff]" />
+              <Save className="h-3 w-3 text-[#7AA2FF]" />
                 <span>Save All ({dirtyCount})</span>
               </button>
             </Tooltip>
@@ -402,75 +497,98 @@ export function WorkspaceEditorArea({
               type="button"
               onClick={onCloseAllFileTabs}
               title="Close all editor tabs"
-              className="hidden rounded px-2 py-1 text-[11px] text-[#e8ebf7]/50 hover:bg-white/[0.06] hover:text-[#e8ebf7] lg:inline-block"
+              className="hidden h-6 items-center rounded-[5px] px-2 text-[11px] text-[#B4B4BC] hover:bg-[#252527] hover:text-[#F4F4F5] lg:inline-flex"
             >
               Close All
             </button>
           )}
-          {!openTabs.includes("overview") && (
-            <button
-              type="button"
-              onClick={() => onOpenTab("overview")}
-              className="rounded px-2 py-1 text-[11px] text-[#e8ebf7]/55 hover:bg-white/[0.06] hover:text-[#e8ebf7]"
-            >
-              + Overview
-            </button>
-          )}
-          {!openTabs.includes("diagnostics") && (
-            <button
-              type="button"
-              onClick={() => onOpenTab("diagnostics")}
-              className="rounded px-2 py-1 text-[11px] text-[#e8ebf7]/55 hover:bg-white/[0.06] hover:text-[#e8ebf7]"
-            >
-              + Status
-            </button>
-          )}
-          {!openTabs.includes("sdk-doctor") && (
-            <button
-              type="button"
-              onClick={() => onOpenTab("sdk-doctor")}
-              className="rounded px-2 py-1 text-[11px] text-[#e8ebf7]/55 hover:bg-white/[0.06] hover:text-[#e8ebf7]"
-            >
-              + SDK Doctor
-            </button>
-          )}
-          {!openTabs.includes("board-manager") && (
-            <button
-              type="button"
-              onClick={() => onOpenTab("board-manager")}
-              className="rounded px-2 py-1 text-[11px] text-[#e8ebf7]/55 hover:bg-white/[0.06] hover:text-[#e8ebf7]"
-            >
-              + Board Manager
-            </button>
-          )}
-          {!openTabs.includes("git-diff") && (
-            <button
-              type="button"
-              onClick={() => onOpenTab("git-diff")}
-              className="rounded px-2 py-1 text-[11px] text-[#e8ebf7]/55 hover:bg-white/[0.06] hover:text-[#e8ebf7]"
-            >
-              + Git Diff
-            </button>
-          )}
-          {!openTabs.includes("examples-docs") && (
-            <button
-              type="button"
-              onClick={() => onOpenTab("examples-docs")}
-              className="rounded px-2 py-1 text-[11px] text-[#e8ebf7]/55 hover:bg-white/[0.06] hover:text-[#e8ebf7]"
-            >
-              + Examples
-            </button>
-          )}
+
+          {/* Compact View Switcher Dropdown */}
+          <div ref={viewsMenuRef} className="relative">
+            <Tooltip label="Open IDE View Tab" side="bottom">
+              <button
+                type="button"
+                aria-label="Open IDE View Tab"
+                aria-expanded={Boolean(viewsMenuCoords)}
+                onClick={(e) => {
+                  if (viewsMenuCoords) {
+                    setViewsMenuCoords(null);
+                    return;
+                  }
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const menuW = 180;
+                  const menuH = 220;
+                  const left = Math.max(8, Math.min(rect.right - menuW, window.innerWidth - menuW - 8));
+                  const top = Math.min(rect.bottom + 6, window.innerHeight - menuH - 8);
+                  setViewsMenuCoords({ left, top });
+                }}
+                className={`inline-flex h-6 items-center gap-1 rounded-[5px] border px-1.5 text-[11px] transition-colors ${
+                  viewsMenuCoords
+                    ? "border-[#7AA2FF]/35 bg-[#7AA2FF]/14 text-[#F4F4F5]"
+                    : "border-[#2D2D30] bg-[#252527] text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
+                }`}
+              >
+              <Plus className="h-3 w-3 text-[#7AA2FF]" />
+              <span className="hidden xl:inline">Views</span>
+              </button>
+            </Tooltip>
+
+            {viewsMenuCoords &&
+              typeof document !== "undefined" &&
+              createPortal(
+                <div
+                  ref={viewsDropdownRef}
+                  role="menu"
+                  aria-label="Workspace views"
+                  style={{
+                    left: `${viewsMenuCoords.left}px`,
+                    top: `${viewsMenuCoords.top}px`,
+                  }}
+                  className="vega-tweaks-glass fixed z-[110] w-44 rounded-[10px] border border-[#2D2D30] p-1 shadow-2xl"
+                >
+                  {(Object.keys(TAB_META) as CenterTabId[]).map((id) => {
+                    const { label, icon: Icon } = TAB_META[id];
+                    const isOpen = openTabs.includes(id);
+                    const isActive = activeFileTab === null && activeTab === id;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          onOpenTab(id);
+                          setViewsMenuCoords(null);
+                        }}
+                        className={`flex w-full items-center justify-between gap-2 rounded-[6px] px-2.5 py-1.5 text-left text-[11.5px] transition-colors ${
+                          isActive
+                            ? "bg-[#7AA2FF]/20 text-[#F4F4F5]"
+                            : "text-[#F4F4F5] hover:bg-[#252527] hover:text-[#F4F4F5]"
+                        }`}
+                      >
+                      <span className="flex items-center gap-2">
+                        <Icon className="h-3.5 w-3.5 text-[#7AA2FF]" />
+                          <span>{label}</span>
+                        </span>
+                        {isOpen && (
+                        <Check className="h-3 w-3 text-[#7AA2FF]" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>,
+                document.body
+              )}
+          </div>
         </div>
       </div>
 
       {/* Central Workspace Body */}
       {activeFileTab ? (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#06070c]">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#1F1F1F]">
           {/* Editor Header & Action Strip */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.08] bg-[#070910]/90 px-3 py-1.5 select-none">
-            <div className="flex min-w-0 items-center gap-1.5 font-mono text-[11px] text-[#e8ebf7]/55">
-              <span className="truncate text-[#7aa2ff]">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#2D2D30] bg-[#181818] px-3 py-1.5 select-none">
+            <div className="flex min-w-0 items-center gap-1.5 font-mono text-[11px] text-[#E4E4E7]">
+              <span className="truncate text-[#7AA2FF]">
                 {activeProject?.project.name ?? "workspace"}
               </span>
               {activeFileTab.path.split("/").map((segment, index, parts) => (
@@ -478,12 +596,12 @@ export function WorkspaceEditorArea({
                   key={`${segment}-${index}`}
                   className="inline-flex min-w-0 items-center gap-1"
                 >
-                  <ChevronRight className="h-3 w-3 shrink-0 text-[#e8ebf7]/30" />
+                <ChevronRight className="h-3 w-3 shrink-0 text-[#A1A1AA]" />
                   <span
                     className={`truncate ${
                       index === parts.length - 1
-                        ? "font-semibold text-[#e8ebf7]"
-                        : "text-[#e8ebf7]/60"
+                        ? "font-semibold text-[#F4F4F5]"
+                        : "text-[#E4E4E7]"
                     }`}
                   >
                     {segment}
@@ -491,7 +609,7 @@ export function WorkspaceEditorArea({
                 </span>
               ))}
               {activeFileTab.isDirty && (
-                <span className="ml-1 rounded-full border border-amber-400/30 bg-amber-500/12 px-2 py-0.5 text-[10px] font-medium text-amber-200">
+              <span className="ml-1 rounded-full border border-amber-400/30 bg-amber-500/12 px-2 py-0.5 text-[10px] font-medium text-amber-200">
                   Unsaved
                 </span>
               )}
@@ -504,10 +622,10 @@ export function WorkspaceEditorArea({
                   disabled={activeFileTab.loading || Boolean(activeFileTab.error)}
                   aria-label="Find in file"
                   onClick={() => monacoHandleRef.current?.triggerFind()}
-                  className="inline-flex h-6 items-center gap-1 rounded px-1.5 font-mono text-[10.5px] text-[#e8ebf7]/65 hover:bg-white/[0.07] hover:text-[#e8ebf7] disabled:opacity-35"
+                  className="inline-flex h-6 items-center gap-1 rounded px-1.5 font-mono text-[10.5px] text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5] disabled:opacity-50"
                 >
-                  <Search className="h-3 w-3" />
-                  <span className="hidden xl:inline">Find</span>
+                <Search className="h-3 w-3" />
+                <span className="hidden xl:inline">Find</span>
                 </button>
               </Tooltip>
 
@@ -517,14 +635,14 @@ export function WorkspaceEditorArea({
                   disabled={activeFileTab.loading || Boolean(activeFileTab.error)}
                   aria-label="Find and replace in file"
                   onClick={() => monacoHandleRef.current?.triggerReplace()}
-                  className="inline-flex h-6 items-center gap-1 rounded px-1.5 font-mono text-[10.5px] text-[#e8ebf7]/65 hover:bg-white/[0.07] hover:text-[#e8ebf7] disabled:opacity-35"
+                  className="inline-flex h-6 items-center gap-1 rounded px-1.5 font-mono text-[10.5px] text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5] disabled:opacity-50"
                 >
-                  <Replace className="h-3 w-3" />
-                  <span className="hidden xl:inline">Replace</span>
+                <Replace className="h-3 w-3" />
+                <span className="hidden xl:inline">Replace</span>
                 </button>
               </Tooltip>
 
-              <div className="mx-0.5 h-3.5 w-px bg-white/10" />
+              <div className="mx-0.5 h-3.5 w-px bg-[#2C2C30]" />
 
               <Tooltip label="Cycle Tab Size (2 / 4 / 8)" side="bottom">
                 <button
@@ -539,7 +657,7 @@ export function WorkspaceEditorArea({
                         : 2;
                     onUpdateEditorSettings({ tabSize: nextSize });
                   }}
-                  className="hidden h-6 items-center rounded px-1.5 font-mono text-[10.5px] text-[#e8ebf7]/60 hover:bg-white/[0.07] hover:text-[#e8ebf7] disabled:opacity-45 sm:inline-flex"
+                  className="hidden h-6 items-center rounded px-1.5 font-mono text-[10.5px] text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5] disabled:opacity-45 sm:inline-flex"
                 >
                   {activeFileTab.monacoLanguage === "makefile"
                     ? "Tabs: 4"
@@ -558,12 +676,12 @@ export function WorkspaceEditorArea({
                   }
                   className={`inline-flex h-6 items-center gap-1 rounded px-1.5 font-mono text-[10.5px] transition-colors ${
                     editorSettings.wordWrap === "on"
-                      ? "bg-[#7aa2ff]/18 text-[#e8ebf7]"
-                      : "text-[#e8ebf7]/60 hover:bg-white/[0.07] hover:text-[#e8ebf7]"
+                      ? "bg-[#7AA2FF]/18 text-[#F4F4F5]"
+                      : "text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
                   }`}
                 >
-                  <WrapText className="h-3 w-3" />
-                  <span className="hidden lg:inline">Wrap</span>
+                <WrapText className="h-3 w-3" />
+                <span className="hidden lg:inline">Wrap</span>
                 </button>
               </Tooltip>
 
@@ -578,8 +696,8 @@ export function WorkspaceEditorArea({
                   }
                   className={`hidden h-6 items-center rounded px-1.5 font-mono text-[10.5px] transition-colors md:inline-flex ${
                     editorSettings.minimap
-                      ? "bg-[#7aa2ff]/18 text-[#e8ebf7]"
-                      : "text-[#e8ebf7]/60 hover:bg-white/[0.07] hover:text-[#e8ebf7]"
+                      ? "bg-[#7AA2FF]/18 text-[#F4F4F5]"
+                      : "text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
                   }`}
                 >
                   Minimap
@@ -591,13 +709,13 @@ export function WorkspaceEditorArea({
                   type="button"
                   aria-label="Open Editor Settings"
                   onClick={onOpenSettings}
-                  className="inline-flex h-6 w-6 items-center justify-center rounded text-[#e8ebf7]/55 hover:bg-white/[0.07] hover:text-[#e8ebf7]"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
                 >
-                  <SlidersHorizontal className="h-3 w-3" />
+                <SlidersHorizontal className="h-3 w-3" />
                 </button>
               </Tooltip>
 
-              <div className="mx-0.5 h-3.5 w-px bg-white/10" />
+              <div className="mx-0.5 h-3.5 w-px bg-[#2C2C30]" />
 
               <Tooltip label="Save File" shortcut="Ctrl+S" side="bottom">
                 <button
@@ -611,16 +729,16 @@ export function WorkspaceEditorArea({
                   onClick={() => void onSaveFileTab(activeFileTab.uid)}
                   className={`inline-flex h-6 items-center gap-1.5 rounded-md border px-2.5 font-mono text-[11px] font-medium transition-colors ${
                     activeFileTab.isDirty
-                      ? "border-[#7aa2ff]/45 bg-[#7aa2ff]/20 text-[#e8ebf7] hover:bg-[#7aa2ff]/30"
-                      : "border-white/10 bg-white/[0.03] text-[#e8ebf7]/45 disabled:cursor-default"
+                      ? "border-[#7AA2FF]/45 bg-[#7AA2FF]/20 text-[#F4F4F5] hover:bg-[#7AA2FF]/30"
+                      : "border-[#2D2D30] bg-[#252527] text-[#B4B4BC] disabled:cursor-default"
                   }`}
                 >
                   {activeFileTab.isSaving ? (
-                    <Loader2 className="h-3 w-3 animate-spin text-[#7aa2ff]" />
+                  <Loader2 className="h-3 w-3 animate-spin text-[#7AA2FF]" />
                   ) : activeFileTab.isDirty ? (
-                    <Save className="h-3 w-3 text-[#7aa2ff]" />
+                  <Save className="h-3 w-3 text-[#7AA2FF]" />
                   ) : (
-                    <Check className="h-3 w-3 text-emerald-400/80" />
+                  <Check className="h-3 w-3 text-emerald-400/80" />
                   )}
                   <span>
                     {activeFileTab.isSaving
@@ -636,18 +754,18 @@ export function WorkspaceEditorArea({
 
           {/* Conflict / Save Error Alerts */}
           {activeFileTab.conflictError && (
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-400/25 bg-amber-500/12 px-3 py-2 text-xs text-amber-200">
-              <div className="flex min-w-0 items-center gap-2">
-                <AlertCircle className="h-4 w-4 shrink-0 text-amber-300" />
-                <span className="truncate">{activeFileTab.conflictError}</span>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-400/25 bg-amber-500/12 px-3 py-2 text-xs text-amber-200">
+            <div className="flex min-w-0 items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 text-amber-300" />
+              <span className="truncate">{activeFileTab.conflictError}</span>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => onReloadFileTab(activeFileTab.uid)}
-                  className="inline-flex h-6 items-center gap-1 rounded border border-white/15 bg-white/[0.08] px-2.5 text-[11px] font-medium text-[#e8ebf7] hover:bg-white/15"
+                  className="inline-flex h-6 items-center gap-1 rounded border border-[#2D2D30] bg-[#252527] px-2.5 text-[11px] font-medium text-[#F4F4F5] hover:bg-[#2D2D31]"
                 >
-                  <RotateCcw className="h-3 w-3" />
+                <RotateCcw className="h-3 w-3" />
                   <span>Reload Disk</span>
                 </button>
                 <button
@@ -655,7 +773,7 @@ export function WorkspaceEditorArea({
                   onClick={() => onSaveFileTab(activeFileTab.uid, true)}
                   className="inline-flex h-6 items-center gap-1 rounded border border-amber-400/40 bg-amber-500/25 px-2.5 text-[11px] font-medium text-amber-100 hover:bg-amber-500/35"
                 >
-                  <Save className="h-3 w-3" />
+                <Save className="h-3 w-3" />
                   <span>Overwrite Disk</span>
                 </button>
               </div>
@@ -663,10 +781,10 @@ export function WorkspaceEditorArea({
           )}
 
           {activeFileTab.saveError && (
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-red-400/25 bg-red-500/12 px-3 py-2 text-xs text-red-200">
-              <div className="flex min-w-0 items-center gap-2">
-                <AlertCircle className="h-4 w-4 shrink-0 text-red-300" />
-                <span className="truncate">{activeFileTab.saveError}</span>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-red-400/25 bg-red-500/12 px-3 py-2 text-xs text-red-200">
+            <div className="flex min-w-0 items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 text-red-300" />
+              <span className="truncate">{activeFileTab.saveError}</span>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 <button
@@ -679,7 +797,7 @@ export function WorkspaceEditorArea({
                 <button
                   type="button"
                   onClick={() => onCloseFileTab(activeFileTab.path)}
-                  className="inline-flex h-6 items-center rounded border border-white/12 bg-white/[0.06] px-2.5 text-[11px] text-[#e8ebf7]/80 hover:bg-white/12"
+                  className="inline-flex h-6 items-center rounded border border-[#2D2D30] bg-[#252527] px-2.5 text-[11px] text-[#F4F4F5] hover:bg-[#2D2D31]"
                 >
                   Close Tab
                 </button>
@@ -689,34 +807,34 @@ export function WorkspaceEditorArea({
 
           {/* Live Monaco Viewport or Error/Loading State */}
           {activeFileTab.error ? (
-            <div className="flex flex-1 items-center justify-center p-6">
-              <div className="vega-glass w-full max-w-md rounded-2xl border border-red-400/25 bg-[#090b13]/92 p-6 text-center">
-                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-red-400/30 bg-red-500/12 text-red-300">
-                  <AlertCircle className="h-5 w-5" />
+          <div className="flex flex-1 items-center justify-center p-6">
+            <div className="vega-glass w-full max-w-md rounded-2xl border border-red-400/25 p-6 text-center">
+              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-red-400/30 bg-red-500/12 text-red-300">
+                <AlertCircle className="h-5 w-5" />
                 </div>
-                <h2 className="text-sm font-medium text-[#e8ebf7]">
+                <h2 className="text-sm font-medium text-[#F4F4F5]">
                   {activeFileTab.errorStatus === 415
                     ? "Binary or Unsupported Text File"
                     : activeFileTab.errorStatus === 404
                     ? "File No Longer Exists"
                     : "Unable to Open File"}
                 </h2>
-                <p className="mt-1.5 font-mono text-xs text-red-200/85">
+                <p className="mt-1.5 font-mono text-xs text-red-200">
                   {activeFileTab.error}
                 </p>
                 <div className="mt-4 flex items-center justify-center gap-2">
                   <button
                     type="button"
                     onClick={() => onReloadFileTab(activeFileTab.uid)}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.06] px-3.5 text-xs font-medium text-[#e8ebf7] hover:bg-white/12"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#2D2D30] bg-[#252527] px-3.5 text-xs font-medium text-[#F4F4F5] hover:bg-[#2D2D31]"
                   >
-                    <RotateCcw className="h-3.5 w-3.5 text-[#7aa2ff]" />
+                  <RotateCcw className="h-3.5 w-3.5 text-[#7AA2FF]" />
                     <span>Retry</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => onCloseFileTab(activeFileTab.path)}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/10 bg-transparent px-3.5 text-xs font-medium text-[#e8ebf7]/70 hover:bg-white/[0.06] hover:text-[#e8ebf7]"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[#2D2D30] bg-transparent px-3.5 text-xs font-medium text-[#F4F4F5] hover:bg-[#252527] hover:text-[#F4F4F5]"
                   >
                     <span>Close Tab</span>
                   </button>
@@ -724,7 +842,7 @@ export function WorkspaceEditorArea({
               </div>
             </div>
           ) : (
-            <div className="relative flex min-h-0 flex-1 flex-col">
+          <div className="relative flex min-h-0 flex-1 flex-col">
               <MonacoEditorSurface
                 ref={attachMonacoRef}
                 activeTab={activeFileTab}
@@ -738,8 +856,8 @@ export function WorkspaceEditorArea({
                 onAskNativeAi={onAskNativeAi}
               />
               {activeFileTab.loading && (
-                <div className="absolute inset-0 z-20 flex items-center justify-center gap-2.5 bg-[#06070c]/88 text-xs text-[#e8ebf7]/70 backdrop-blur-[2px]">
-                  <Loader2 className="h-4 w-4 animate-spin text-[#7aa2ff]" />
+              <div className="absolute inset-0 z-20 flex items-center justify-center gap-2.5 bg-[#1F1F1F]/90 text-xs text-[#F4F4F5] backdrop-blur-sm">
+                <Loader2 className="h-4 w-4 animate-spin text-[#7AA2FF]" />
                   <span>Loading {activeFileTab.name}...</span>
                 </div>
               )}
@@ -751,136 +869,138 @@ export function WorkspaceEditorArea({
       ) : activeTab === "examples-docs" ? (
         <ExamplesDocsView {...examplesDocsProps} />
       ) : (
-        <div className="vega-scroll min-h-0 flex-1 overflow-y-auto p-5">
+      <div className="vega-scroll min-h-0 flex-1 overflow-y-auto p-4">
           {activeTab === null ? (
-          <div className="vega-glass flex h-full min-h-[220px] flex-col items-center justify-center rounded-[20px] bg-[#080a12]/62 p-8 text-center">
-            <Cpu className="mb-3 h-7 w-7 text-[#7aa2ff]/70" />
-            <h2 className="text-sm font-medium text-[#e8ebf7]">
-              No Workspace Tab Open
+          <div className="flex h-full min-h-[220px] flex-col items-center justify-center rounded-[8px] border border-[#2D2D30] bg-[#181818] p-6 text-center">
+            <Cpu className="mb-2.5 h-6 w-6 text-[#7AA2FF]" />
+            <h2 className="text-sm font-medium text-[#F4F4F5]">
+              No Editor Tab Open
             </h2>
-            <p className="mt-1 max-w-sm text-xs text-[#e8ebf7]/55">
-              Select a file from the Explorer sidebar to open it in Monaco
-              Editor, or reopen Shell Overview / Home below.
+            <p className="mt-1 max-w-sm text-xs text-[#E4E4E7]">
+              Select a file from the Explorer sidebar to edit source code, or open Shell Overview below.
             </p>
             <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
               <button
                 type="button"
                 onClick={() => onOpenTab("overview")}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.05] px-3.5 text-xs font-medium text-[#e8ebf7] hover:bg-white/10"
+                className="inline-flex h-7.5 items-center gap-1.5 rounded-[6px] border border-[#2D2D30] bg-[#252527] px-3 text-xs font-medium text-[#F4F4F5] hover:bg-[#252527]"
               >
-                <Layers className="h-3.5 w-3.5 text-[#7aa2ff]" />
+              <Layers className="h-3.5 w-3.5 text-[#7AA2FF]" />
                 <span>Shell Overview</span>
               </button>
               <button
                 type="button"
                 onClick={onOpenHome}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/10 bg-transparent px-3.5 text-xs font-medium text-[#e8ebf7]/70 hover:bg-white/[0.05] hover:text-[#e8ebf7]"
+                className="inline-flex h-7.5 items-center gap-1.5 rounded-[6px] border border-[#2D2D30] bg-transparent px-3 text-xs font-medium text-[#F4F4F5] hover:bg-[#252527] hover:text-[#F4F4F5]"
               >
                 <span>Go to Home</span>
               </button>
             </div>
           </div>
         ) : activeTab === "overview" ? (
-          <div className="mx-auto flex max-w-4xl flex-col gap-5">
-            {/* Active Project / Workspace Card */}
+        <div className="flex w-full flex-col gap-4">
+            {/* Active Project / Workspace Summary */}
             {activeProject ? (
-              <div className="rounded-2xl border border-white/[0.10] bg-[#090b13]/88 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-md">
-                <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#7aa2ff] uppercase">
-                        Active Workspace
+            <div className="rounded-[10px] border border-[#2D2D30] bg-[#181818] p-4">
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[10px] font-medium tracking-[0.06em] text-[#7AA2FF] uppercase">
+                        Active Project
                       </span>
                       <button
                         type="button"
                         onClick={() => onOpenTab("board-manager")}
-                        className={`rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold transition-colors ${
+                        className={`rounded-[5px] border px-2 py-0.5 font-mono text-[10px] font-medium transition-colors ${
                           activeProject.project.target.board &&
                           boardManagerProps.projectBoardStatus?.board_supported !== false
-                            ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
-                            : "border-amber-400/30 bg-amber-500/12 text-amber-200 hover:bg-amber-500/22"
+                            ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/18"
+                            : "border-amber-400/30 bg-amber-500/12 text-amber-200 hover:bg-amber-500/20"
                         }`}
                       >
-                        {activeProject.project.target.board ?? "No Board Selected"}
+                        {formatBoardDisplayLabel(
+                          boardManagerProps.projectBoardStatus?.board?.name,
+                          activeProject.project.target.board
+                        )}
                       </button>
                     </div>
-                    <h1 className="mt-1 truncate text-lg font-medium tracking-tight text-[#e8ebf7]">
+                    <h1 className="mt-1 truncate text-[16px] font-medium tracking-tight text-[#F4F4F5]">
                       {activeProject.project.name}
                     </h1>
-                    <p className="mt-0.5 truncate font-mono text-[11px] text-[#e8ebf7]/50">
+                    <p className="mt-0.5 truncate font-mono text-[11px] text-[#B4B4BC]">
                       {activeProject.project_dir}
                     </p>
                     {activeProject.project.description && (
-                      <p className="mt-2 text-xs text-[#e8ebf7]/65">
+                    <p className="mt-1.5 text-xs text-[#E4E4E7]">
                         {activeProject.project.description}
                       </p>
                     )}
                   </div>
 
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-1.5">
                     <button
                       type="button"
                       onClick={onOpenProject}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.05] px-3 text-xs font-medium text-[#e8ebf7] hover:bg-white/10"
+                      className="inline-flex h-7.5 items-center gap-1.5 rounded-[6px] border border-[#2D2D30] bg-[#252527] px-3 text-xs font-medium text-[#F4F4F5] hover:bg-[#252527]"
                     >
-                      <FolderOpen className="h-3.5 w-3.5 text-[#7aa2ff]" />
+                    <FolderOpen className="h-3.5 w-3.5 text-[#7AA2FF]" />
                       <span>Switch</span>
                     </button>
                     <button
                       type="button"
                       onClick={onCloseProject}
-                      className="inline-flex h-8 items-center rounded-full border border-white/10 bg-transparent px-3 text-xs font-medium text-[#e8ebf7]/65 hover:bg-white/[0.06] hover:text-[#e8ebf7]"
+                      className="inline-flex h-7.5 items-center rounded-[6px] border border-[#2D2D30] bg-transparent px-3 text-xs font-medium text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
                     >
                       Close
                     </button>
                   </div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-2.5 border-t border-white/[0.08] pt-3.5 font-mono text-[11px] sm:grid-cols-4">
+                <dl className="mt-3.5 grid grid-cols-2 gap-3 border-t border-[#2D2D30] pt-3 font-mono text-[11px] sm:grid-cols-4">
                   <div>
-                    <span className="block text-[10px] text-[#e8ebf7]/40 uppercase">
+                    <dt className="text-[10px] text-[#A1A1AA] uppercase">
                       Architecture
-                    </span>
-                    <span className="text-[#e8ebf7]/85">
+                    </dt>
+                    <dd className="mt-0.5 text-[#F4F4F5]">
                       {activeProject.project.target.arch}
-                    </span>
+                    </dd>
                   </div>
                   <div>
-                    <span className="block text-[10px] text-[#e8ebf7]/40 uppercase">
+                    <dt className="text-[10px] text-[#A1A1AA] uppercase">
                       Machine
-                    </span>
-                    <span className="text-[#e8ebf7]/85">
+                    </dt>
+                    <dd className="mt-0.5 text-[#F4F4F5]">
                       {activeProject.project.target.machine}
-                    </span>
+                    </dd>
                   </div>
                   <div>
-                    <span className="block text-[10px] text-[#e8ebf7]/40 uppercase">
-                      Schema
-                    </span>
-                    <span className="text-[#e8ebf7]/85">
+                    <dt className="text-[10px] text-[#A1A1AA] uppercase">
+                      Manifest
+                    </dt>
+                    <dd className="mt-0.5 text-[#F4F4F5]">
                       vega-project v{activeProject.project.schemaVersion}
-                    </span>
+                    </dd>
                   </div>
                   <div>
-                    <span className="block text-[10px] text-[#e8ebf7]/40 uppercase">
+                    <dt className="text-[10px] text-[#A1A1AA] uppercase">
                       Structure
-                    </span>
-                    <span
-                      className={
+                    </dt>
+                    <dd
+                      className={`mt-0.5 ${
                         activeProject.structure_valid
                           ? "text-emerald-300"
                           : "text-amber-300"
-                      }
+                      }`}
                     >
                       {activeProject.structure_valid ? "Valid" : "Incomplete"}
-                    </span>
+                    </dd>
                   </div>
-                </div>
+                </dl>
 
                 {activeProject.warnings.length > 0 && (
-                  <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-400/25 bg-amber-500/10 p-3 text-xs text-amber-200">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                    <div className="space-y-0.5">
+                <div className="mt-3 flex items-start gap-2 rounded-[6px] border border-amber-400/25 bg-amber-500/10 p-2.5 text-xs text-amber-200">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <div className="space-y-0.5">
                       {activeProject.warnings.map((w) => (
                         <p key={w}>{w}</p>
                       ))}
@@ -889,133 +1009,170 @@ export function WorkspaceEditorArea({
                 )}
               </div>
             ) : (
-              <div className="flex flex-col justify-between gap-3 rounded-2xl border border-white/[0.09] bg-[#090b13]/84 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-md sm:flex-row sm:items-center">
+            <div className="flex flex-col justify-between gap-3 rounded-[8px] border border-[#2D2D30] bg-[#181818] p-4 sm:flex-row sm:items-center">
                 <div>
-                  <p className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#7aa2ff] uppercase">
-                    Phase 3 · Workspace &amp; Project Management
+                  <p className="font-mono text-[10px] font-medium tracking-[0.06em] text-[#7AA2FF] uppercase">
+                    Workspace
                   </p>
-                  <h1 className="mt-1 text-lg font-medium tracking-tight text-[#e8ebf7]">
+                  <h1 className="mt-0.5 text-[16px] font-medium tracking-tight text-[#F4F4F5]">
                     No Active VEGA Project
                   </h1>
-                  <p className="mt-1 text-xs text-[#e8ebf7]/60">
-                    Create a portable VEGA ARIES V3 project or open an existing
-                    project directory containing vega-project.json.
+                  <p className="mt-1 text-xs text-[#E4E4E7]">
+                    Create a portable VEGA ARIES V3 project or open an existing directory containing vega-project.json.
                   </p>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex shrink-0 items-center gap-1.5">
                   <button
                     type="button"
                     onClick={onNewProject}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#e8ebf7] px-3.5 text-xs font-semibold text-[#06070c] transition-colors hover:bg-white"
+                    className="inline-flex h-7.5 items-center gap-1.5 rounded-[6px] bg-[#7AA2FF] px-3 text-xs font-semibold text-[#0D0D0F] transition-colors hover:bg-[#93B4FF]"
                   >
-                    <FolderPlus className="h-3.5 w-3.5" />
+                  <FolderPlus className="h-3.5 w-3.5" />
                     <span>New Project</span>
                   </button>
                   <button
                     type="button"
                     onClick={onOpenProject}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.05] px-3.5 text-xs font-medium text-[#e8ebf7] transition-colors hover:bg-white/10"
+                    className="inline-flex h-7.5 items-center gap-1.5 rounded-[6px] border border-[#2D2D30] bg-[#252527] px-3 text-xs font-medium text-[#F4F4F5] transition-colors hover:bg-[#252527]"
                   >
-                    <FolderOpen className="h-3.5 w-3.5 text-[#7aa2ff]" />
+                  <FolderOpen className="h-3.5 w-3.5 text-[#7AA2FF]" />
                     <span>Open Project</span>
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Interactive Shell Region Inspector Cards */}
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <div className="rounded-xl border border-white/[0.09] bg-[#090b13]/82 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-md">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/45 uppercase">
-                    Left Sidebar
-                  </span>
+            {/* Full-Width Workspace Region Cards */}
+            <div className="overflow-hidden rounded-[10px] border border-[#2D2D30] bg-[#181818]">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#2D2D30] px-4 py-2.5">
+                <span className="font-mono text-[10.5px] font-semibold tracking-[0.06em] text-[#E4E4E7] uppercase">
+                  Workspace Regions &amp; Quick Controls
+                </span>
+                <span className="font-mono text-[10.5px] text-[#B4B4BC]">
+                  Drag dividers or double-click handles to reset sizes
+                </span>
+              </div>
+              <div className="grid grid-cols-1 divide-y divide-[#2D2D30] lg:grid-cols-3 lg:divide-x lg:divide-y-0">
+                <div className="flex items-center justify-between gap-3 p-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-xs font-medium text-[#F4F4F5]">
+                      <PanelLeft className="h-3.5 w-3.5 text-[#7AA2FF]" />
+                      <span>Left Sidebar</span>
+                      <span className="font-mono text-[11px] text-[#B4B4BC]">
+                        {layout.sidebarOpen
+                          ? `${layout.sidebarWidth}px · ${layout.activeNav}`
+                          : "Collapsed"}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11.5px] text-[#E4E4E7]">
+                      Explorer, Source Control, Examples &amp; Docs, SDK Doctor, Board Tools.
+                    </p>
+                  </div>
                   <button
                     type="button"
                     onClick={onToggleSidebar}
-                    className="inline-flex h-6 items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-2 text-[11px] text-[#e8ebf7]/75 hover:bg-white/10"
+                    className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[6px] border border-[#2D2D30] bg-[#252527] px-2.5 text-[11px] font-medium text-[#F4F4F5] hover:bg-[#2D2D31]"
                   >
-                    <PanelLeft className="h-3 w-3" />
                     <span>{layout.sidebarOpen ? "Hide" : "Show"}</span>
                   </button>
                 </div>
-                <p className="mt-2 font-mono text-sm font-semibold text-[#e8ebf7]">
-                  {layout.sidebarOpen
-                    ? `${layout.sidebarWidth}px · ${layout.activeNav}`
-                    : "Collapsed"}
-                </p>
-                <p className="mt-1 text-[11px] text-[#e8ebf7]/50">
-                  Resizable explorer, Git, SDK examples, and board tools region.
-                </p>
-              </div>
 
-              <div className="rounded-xl border border-white/[0.09] bg-[#090b13]/82 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-md">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/45 uppercase">
-                    Secondary Panel
-                  </span>
+                <div className="flex items-center justify-between gap-3 p-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-xs font-medium text-[#F4F4F5]">
+                      <PanelBottom className="h-3.5 w-3.5 text-[#7AA2FF]" />
+                      <span>Secondary Panel</span>
+                      <span className="font-mono text-[11px] text-[#B4B4BC]">
+                        {layout.bottomPanelOpen
+                          ? `${layout.bottomPanelHeight}px · ${layout.activeBottomTab}`
+                          : "Collapsed"}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11.5px] text-[#E4E4E7]">
+                      Build Output, PTY Terminal, Serial Monitor, Upload, Diagnostics, Logs.
+                    </p>
+                  </div>
                   <button
                     type="button"
                     onClick={onToggleBottomPanel}
-                    className="inline-flex h-6 items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-2 text-[11px] text-[#e8ebf7]/75 hover:bg-white/10"
+                    className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[6px] border border-[#2D2D30] bg-[#252527] px-2.5 text-[11px] font-medium text-[#F4F4F5] hover:bg-[#2D2D31]"
                   >
-                    <PanelBottom className="h-3 w-3" />
                     <span>{layout.bottomPanelOpen ? "Hide" : "Show"}</span>
                   </button>
                 </div>
-                <p className="mt-2 font-mono text-sm font-semibold text-[#e8ebf7]">
-                  {layout.bottomPanelOpen
-                    ? `${layout.bottomPanelHeight}px · ${layout.activeBottomTab}`
-                    : "Collapsed"}
-                </p>
-                <p className="mt-1 text-[11px] text-[#e8ebf7]/50">
-                  Hosts Build Output, Terminal, Serial Monitor, Diagnostics, and
-                  Logs.
-                </p>
-              </div>
 
-              <div className="rounded-xl border border-white/[0.09] bg-[#090b13]/82 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-md">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/45 uppercase">
-                    Assistant Panel
-                  </span>
+                <div className="flex items-center justify-between gap-3 p-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-xs font-medium text-[#F4F4F5]">
+                      <PanelRight className="h-3.5 w-3.5 text-[#7AA2FF]" />
+                      <span>Unified AI Workspace</span>
+                      <span className="font-mono text-[11px] text-[#B4B4BC]">
+                        {layout.rightPanelOpen
+                          ? `${layout.rightPanelWidth}px · ${layout.activeRightTab}`
+                          : "Hidden"}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11.5px] text-[#E4E4E7]">
+                      Native VEGA Assistant and OpenCode CLI coding agent.
+                    </p>
+                  </div>
                   <button
                     type="button"
                     onClick={onToggleRightPanel}
-                    className="inline-flex h-6 items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-2 text-[11px] text-[#e8ebf7]/75 hover:bg-white/10"
+                    className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[6px] border border-[#2D2D30] bg-[#252527] px-2.5 text-[11px] font-medium text-[#F4F4F5] hover:bg-[#2D2D31]"
                   >
-                    <PanelRight className="h-3 w-3" />
                     <span>{layout.rightPanelOpen ? "Hide" : "Show"}</span>
                   </button>
                 </div>
-                <p className="mt-2 font-mono text-sm font-semibold text-[#e8ebf7]">
-                  {layout.rightPanelOpen
-                    ? `${layout.rightPanelWidth}px · ${layout.activeRightTab}`
-                    : "Hidden"}
-                </p>
-                <p className="mt-1 text-[11px] text-[#e8ebf7]/50">
-                  Hideable dock reserved for Native AI and OpenCode CLI
-                  sessions.
-                </p>
               </div>
             </div>
 
-            {/* Editor Slot Placeholder */}
-            <div className="rounded-xl border border-dashed border-white/[0.10] bg-[#070910]/72 p-5 backdrop-blur-sm">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/45 uppercase">
-                  Central Editor Region (Phase 3 Slot)
-                </span>
-                <span className="font-mono text-[11px] text-[#e8ebf7]/40">
-                  Monaco Editor · C / C++ / ASM / Makefile
-                </span>
-              </div>
-              <p className="mt-2 text-xs leading-relaxed text-[#e8ebf7]/55">
-                Resize the sidebar, bottom panel, or right panel dividers using
-                pointer drag or keyboard arrows (`Home`/`End` for bounds,
-                double-click a divider to reset). Layout preferences persist
-                automatically in local storage.
-              </p>
+            {/* Quick Feature Launch Row */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <button
+                type="button"
+                onClick={() => onOpenTab("board-manager")}
+                className="flex items-center gap-3 rounded-[10px] border border-[#2D2D30] bg-[#181818] p-3.5 text-left transition-colors hover:border-[#7AA2FF]/45 hover:bg-[#252527]"
+              >
+              <Cpu className="h-4.5 w-4.5 shrink-0 text-[#7AA2FF]" />
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-[#F4F4F5]">Board Manager</p>
+                <p className="truncate text-[11px] text-[#B4B4BC]">VEGA ARIES V3 specs &amp; target</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenTab("sdk-doctor")}
+                className="flex items-center gap-3 rounded-[10px] border border-[#2D2D30] bg-[#181818] p-3.5 text-left transition-colors hover:border-[#7AA2FF]/45 hover:bg-[#252527]"
+              >
+              <Stethoscope className="h-4.5 w-4.5 shrink-0 text-[#7AA2FF]" />
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-[#F4F4F5]">SDK Doctor</p>
+                <p className="truncate text-[11px] text-[#B4B4BC]">Check RISC-V GCC &amp; Make</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenTab("examples-docs")}
+                className="flex items-center gap-3 rounded-[10px] border border-[#2D2D30] bg-[#181818] p-3.5 text-left transition-colors hover:border-[#7AA2FF]/45 hover:bg-[#252527]"
+              >
+              <BookOpen className="h-4.5 w-4.5 shrink-0 text-[#7AA2FF]" />
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-[#F4F4F5]">Examples &amp; Docs</p>
+                <p className="truncate text-[11px] text-[#B4B4BC]">Starters &amp; reference manual</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenTab("diagnostics")}
+                className="flex items-center gap-3 rounded-[10px] border border-[#2D2D30] bg-[#181818] p-3.5 text-left transition-colors hover:border-[#7AA2FF]/45 hover:bg-[#252527]"
+              >
+              <Activity className="h-4.5 w-4.5 shrink-0 text-[#7AA2FF]" />
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-[#F4F4F5]">Backend Health</p>
+                <p className="truncate text-[11px] text-[#B4B4BC]">Runtime status &amp; diagnostics</p>
+                </div>
+              </button>
             </div>
           </div>
         ) : activeTab === "sdk-doctor" ? (
@@ -1024,29 +1181,29 @@ export function WorkspaceEditorArea({
           <BoardManagerView {...boardManagerProps} />
         ) : (
           /* Live Backend Health & Status Tab */
-          <div className="mx-auto flex max-w-3xl flex-col gap-4">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/[0.09] bg-[#090b13]/84 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-md">
+          <div className="flex w-full flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-[#2D2D30] bg-[#181818] p-4">
               <div className="flex items-center gap-3">
                 <div
-                  className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
+                  className={`flex h-9 w-9 items-center justify-center rounded-[6px] border ${
                     isConnected
                       ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-300"
                       : "border-red-400/25 bg-red-500/10 text-red-300"
                   }`}
                 >
                   {isConnected ? (
-                    <Wifi className="h-5 w-5" />
+                  <Wifi className="h-4.5 w-4.5" />
                   ) : (
-                    <WifiOff className="h-5 w-5" />
+                  <WifiOff className="h-4.5 w-4.5" />
                   )}
                 </div>
                 <div>
-                  <h2 className="text-sm font-medium text-[#e8ebf7]">
+                  <h2 className="text-sm font-medium text-[#F4F4F5]">
                     {isConnected
                       ? "FastAPI Backend Connected"
                       : "FastAPI Backend Unavailable"}
                   </h2>
-                  <p className="font-mono text-[11px] text-[#e8ebf7]/50">
+                  <p className="font-mono text-[11px] text-[#B4B4BC]">
                     {isConnected && health
                       ? `${health.service} v${health.version} · Checked ${lastChecked ? TIME_FORMAT.format(lastChecked) : "just now"}`
                       : healthError ??
@@ -1059,7 +1216,7 @@ export function WorkspaceEditorArea({
                 type="button"
                 onClick={() => void refreshStatus()}
                 disabled={statusLoading}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/12 bg-white/[0.05] px-3.5 text-xs font-medium text-[#e8ebf7] transition-colors hover:bg-white/10 disabled:opacity-50"
+                className="inline-flex h-7.5 items-center gap-1.5 rounded-[6px] border border-[#2D2D30] bg-[#252527] px-3 text-xs font-medium text-[#F4F4F5] transition-colors hover:bg-[#252527] disabled:opacity-50"
               >
                 <RefreshCw
                   className={`h-3.5 w-3.5 ${statusLoading ? "animate-spin" : ""}`}
@@ -1069,30 +1226,30 @@ export function WorkspaceEditorArea({
             </div>
 
             {isConnected && statusData ? (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-white/[0.09] bg-[#090b13]/82 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-md">
-                  <div className="mb-2.5 flex items-center gap-2">
-                    <Server className="h-4 w-4 text-[#7aa2ff]" />
-                    <span className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/50 uppercase">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rounded-[8px] border border-[#2D2D30] bg-[#181818] p-3.5">
+                <div className="mb-2 flex items-center gap-2">
+                  <Server className="h-3.5 w-3.5 text-[#7AA2FF]" />
+                  <span className="font-mono text-[10px] font-medium tracking-[0.06em] text-[#E4E4E7] uppercase">
                       Backend Service
                     </span>
                   </div>
                   <dl className="space-y-1.5 font-mono text-xs">
                     <div className="flex justify-between gap-2">
-                      <dt className="text-[#e8ebf7]/45">Service</dt>
-                      <dd className="text-[#e8ebf7]">
+                      <dt className="text-[#B4B4BC]">Service</dt>
+                      <dd className="text-[#F4F4F5]">
                         {String(statusData.backend.service ?? "—")}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
-                      <dt className="text-[#e8ebf7]/45">Environment</dt>
-                      <dd className="text-[#e8ebf7]">
+                      <dt className="text-[#B4B4BC]">Environment</dt>
+                      <dd className="text-[#F4F4F5]">
                         {String(statusData.backend.env ?? "—")}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
-                      <dt className="text-[#e8ebf7]/45">Bind</dt>
-                      <dd className="text-[#e8ebf7]">
+                      <dt className="text-[#B4B4BC]">Bind</dt>
+                      <dd className="text-[#F4F4F5]">
                         {String(statusData.backend.host ?? "127.0.0.1")}:
                         {String(statusData.backend.port ?? 8765)}
                       </dd>
@@ -1100,31 +1257,31 @@ export function WorkspaceEditorArea({
                   </dl>
                 </div>
 
-                <div className="rounded-xl border border-white/[0.09] bg-[#090b13]/82 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-md">
-                  <div className="mb-2.5 flex items-center gap-2">
-                    <Cpu className="h-4 w-4 text-[#7aa2ff]" />
-                    <span className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/50 uppercase">
+                <div className="rounded-[8px] border border-[#2D2D30] bg-[#181818] p-3.5">
+                  <div className="mb-2 flex items-center gap-2">
+                    <Cpu className="h-3.5 w-3.5 text-[#7AA2FF]" />
+                    <span className="font-mono text-[10px] font-medium tracking-[0.06em] text-[#E4E4E7] uppercase">
                       Runtime Platform
                     </span>
                   </div>
                   <dl className="space-y-1.5 font-mono text-xs">
                     <div className="flex justify-between gap-2">
-                      <dt className="text-[#e8ebf7]/45">OS</dt>
-                      <dd className="text-[#e8ebf7]">
+                      <dt className="text-[#B4B4BC]">OS</dt>
+                      <dd className="text-[#F4F4F5]">
                         {String(statusData.platform.os ?? "—")}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
-                      <dt className="text-[#e8ebf7]/45">Arch</dt>
-                      <dd className="text-[#e8ebf7]">
+                      <dt className="text-[#B4B4BC]">Arch</dt>
+                      <dd className="text-[#F4F4F5]">
                         {String(statusData.platform.architecture ?? "—")}
                       </dd>
                     </div>
                     <div className="flex justify-between gap-2">
-                      <dt className="text-[#e8ebf7]/45">Python</dt>
-                      <dd className="truncate text-[#e8ebf7]">
+                      <dt className="text-[#B4B4BC]">Python</dt>
+                      <dd className="truncate text-[#F4F4F5]">
                         {String(statusData.platform.python_version ?? "—").split(
-                          " "
+                          ""
                         )[0]}
                       </dd>
                     </div>
@@ -1132,76 +1289,126 @@ export function WorkspaceEditorArea({
                 </div>
               </div>
             ) : (
-              <div className="rounded-xl border border-white/8 bg-[#0b0d14] p-4 text-xs text-[#e8ebf7]/55">
+            <div className="rounded-[8px] border border-[#2D2D30] bg-[#181818] p-4 text-xs text-[#E4E4E7]">
                 {statusError
                   ? `Backend status query failed: ${statusError}`
                   : "Start the FastAPI backend (or launch via Electron) to inspect detailed runtime diagnostics."}
               </div>
             )}
+
+            {/* Safe Redacted Diagnostics Bundle Export */}
+            <div className="rounded-[8px] border border-[#2D2D30] bg-[#181818] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-emerald-300" />
+                    <span className="text-xs font-medium text-[#F4F4F5]">
+                      Safe Local Diagnostics Export
+                    </span>
+                  </div>
+                  <p className="max-w-xl text-xs leading-relaxed text-[#E4E4E7]">
+                    Exports a redacted JSON snapshot containing app version, OS/arch, SDK/board/Git/OpenCode/AI non-secret readiness, and the redacted backend log tail. Secrets, keys, source files, and transcripts are excluded.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={!isConnected || exportingDiagnostics}
+                  onClick={() => void handleExportSafeDiagnostics()}
+                  className="inline-flex h-7.5 shrink-0 items-center gap-1.5 rounded-[6px] border border-[#7AA2FF]/35 bg-[#7AA2FF]/14 px-3 text-xs font-medium text-[#F4F4F5] transition-colors hover:bg-[#7AA2FF]/24 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  {exportingDiagnostics ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-[#7AA2FF]" />
+                  ) : (
+                  <Download className="h-3.5 w-3.5 text-[#7AA2FF]" />
+                  )}
+                  <span>
+                    {exportingDiagnostics ? "Exporting..." : "Export Safe Diagnostics"}
+                  </span>
+                </button>
+              </div>
+              {diagnosticsNotice && (
+                <p
+                  role={diagnosticsNotice.kind === "error" ? "alert" : "status"}
+                  className={`mt-3 rounded-[6px] border px-3 py-2 text-xs ${
+                    diagnosticsNotice.kind === "ok"
+                      ? "border-emerald-400/25 bg-emerald-500/10 text-emerald-200"
+                      : "border-red-400/30 bg-red-500/12 text-red-200"
+                  }`}
+                >
+                  {diagnosticsNotice.text}
+                </p>
+              )}
+            </div>
           </div>
           )}
         </div>
       )}
 
-      {tabMenu && (
-        <div
-          role="menu"
-          onMouseDown={(e) => e.stopPropagation()}
-          style={{ left: `${tabMenu.x}px`, top: `${tabMenu.y}px` }}
-          className="fixed z-50 w-44 rounded-xl border border-white/14 bg-[#0b0e18]/96 p-1 shadow-2xl backdrop-blur-md"
-        >
-          <button
-            type="button"
-            disabled={
-              !tabMenu.tab.isDirty ||
-              tabMenu.tab.loading ||
-              Boolean(tabMenu.tab.error)
-            }
-            onClick={() => {
-              const targetUid = tabMenu.tab.uid;
-              setTabMenu(null);
-              void onSaveFileTab(targetUid);
+      {tabMenu &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            role="menu"
+            onMouseDown={(e) => e.stopPropagation()}
+            style={{
+              left: `${Math.max(8, Math.min(tabMenu.x, window.innerWidth - 190))}px`,
+              top: `${Math.max(8, Math.min(tabMenu.y, window.innerHeight - 170))}px`,
             }}
-            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs text-[#e8ebf7]/85 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
+            className="vega-tweaks-glass fixed z-[110] w-44 rounded-xl border border-[#2D2D30] p-1 shadow-2xl"
           >
-            <span>Save</span>
-            <span className="font-mono text-[10px] text-[#e8ebf7]/45">Ctrl+S</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const targetPath = tabMenu.tab.path;
-              setTabMenu(null);
-              onCloseFileTab(targetPath);
-            }}
-            className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-xs text-[#e8ebf7]/85 hover:bg-white/[0.08]"
-          >
-            Close Tab
-          </button>
-          <button
-            type="button"
-            disabled={openFileTabs.length <= 1}
-            onClick={() => {
-              const keepPath = tabMenu.tab.path;
-              setTabMenu(null);
-              onCloseOtherFileTabs(keepPath);
-            }}
-            className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-xs text-[#e8ebf7]/85 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Close Other Tabs
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setTabMenu(null);
-              onCloseAllFileTabs();
-            }}
-            className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-xs text-red-200/85 hover:bg-red-500/15"
-          >
-            Close All Tabs
-          </button>
-        </div>
-      )}
+            <button
+              type="button"
+              disabled={
+                !tabMenu.tab.isDirty ||
+                tabMenu.tab.loading ||
+                Boolean(tabMenu.tab.error)
+              }
+              onClick={() => {
+                const targetUid = tabMenu.tab.uid;
+                setTabMenu(null);
+                void onSaveFileTab(targetUid);
+              }}
+              className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs text-[#F4F4F5] hover:bg-[#252527] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <span>Save</span>
+              <span className="font-mono text-[10px] text-[#B4B4BC]">Ctrl+S</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const targetPath = tabMenu.tab.path;
+                setTabMenu(null);
+                onCloseFileTab(targetPath);
+              }}
+              className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-xs text-[#F4F4F5] hover:bg-[#252527]"
+            >
+              Close Tab
+            </button>
+            <button
+              type="button"
+              disabled={openFileTabs.length <= 1}
+              onClick={() => {
+                const keepPath = tabMenu.tab.path;
+                setTabMenu(null);
+                onCloseOtherFileTabs(keepPath);
+              }}
+              className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-xs text-[#F4F4F5] hover:bg-[#252527] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Close Other Tabs
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTabMenu(null);
+                onCloseAllFileTabs();
+              }}
+              className="flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-xs text-red-200 hover:bg-red-500/15"
+            >
+              Close All Tabs
+            </button>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

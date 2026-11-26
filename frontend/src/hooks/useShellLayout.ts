@@ -26,8 +26,8 @@ export const BOTTOM_PANEL_DEFAULT_HEIGHT = 200;
 
 const MIN_CENTER_WIDTH = 360;
 const MIN_CENTER_HEIGHT = 160;
-const NAV_RAIL_WIDTH = 48;
-const CHROME_VERTICAL_OVERHEAD = 72; // toolbar + status bar
+const NAV_RAIL_WIDTH = 44;
+const CHROME_VERTICAL_OVERHEAD = 62; // 38px titlebar + 24px status bar
 
 export const DEFAULT_SHELL_LAYOUT: ShellLayoutState = {
   activeMode: "home",

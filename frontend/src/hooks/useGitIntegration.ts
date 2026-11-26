@@ -31,6 +31,7 @@ import type {
 } from "@/types/git";
 
 const HISTORY_PAGE_SIZE = 25;
+const HISTORY_MAX_CLIENT_COMMITS = 500;
 
 interface UseGitIntegrationOptions {
   projectDir: string | null;
@@ -70,6 +71,7 @@ export function useGitIntegration({
   const [inspectError, setInspectError] = useState<string | null>(null);
 
   const projectDirRef = useRef(projectDir);
+  const inspectAbortRef = useRef<AbortController | null>(null);
   const onOpenDiffTabRef = useRef(onOpenDiffTab);
   const onAfterWtChangeRef = useRef(onAfterWorkingTreeChange);
   const onLogRef = useRef(onLog);
@@ -82,6 +84,8 @@ export function useGitIntegration({
   });
 
   const resetRepoViews = useCallback(() => {
+    inspectAbortRef.current?.abort();
+    inspectAbortRef.current = null;
     setStatus(null);
     setBranches([]);
     setCommits([]);
@@ -89,7 +93,9 @@ export function useGitIntegration({
     setActiveDiff(null);
     setActiveCommit(null);
     setInspectError(null);
+    setInspectLoading(false);
     setConfirmDialog(null);
+    setCommitMessage("");
   }, []);
 
   const refreshAll = useCallback(
@@ -155,17 +161,29 @@ export function useGitIntegration({
       if (!controller.signal.aborted) {
         setError(null);
         setNotice(null);
+        inspectAbortRef.current?.abort();
+        inspectAbortRef.current = null;
         setActiveDiff(null);
         setActiveCommit(null);
         void refreshAll(controller.signal);
       }
     });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      inspectAbortRef.current?.abort();
+    };
   }, [isBackendConnected, projectDir, refreshAll]);
 
   const loadMoreHistory = useCallback(async () => {
     const targetDir = projectDirRef.current;
-    if (!targetDir || !isBackendConnected || loadingMoreHistory) return;
+    if (
+      !targetDir ||
+      !isBackendConnected ||
+      loadingMoreHistory ||
+      commits.length >= HISTORY_MAX_CLIENT_COMMITS
+    ) {
+      return;
+    }
 
     setLoadingMoreHistory(true);
     try {
@@ -174,18 +192,27 @@ export function useGitIntegration({
         HISTORY_PAGE_SIZE,
         commits.length
       );
+      if (projectDirRef.current !== targetDir) return;
+      let reachedCap = false;
       setCommits((prev) => {
         const seen = new Set(prev.map((c) => c.hash));
-        return [
+        const merged = [
           ...prev,
           ...nextPage.commits.filter((c) => !seen.has(c.hash)),
         ];
+        if (merged.length >= HISTORY_MAX_CLIENT_COMMITS) {
+          reachedCap = true;
+          return merged.slice(0, HISTORY_MAX_CLIENT_COMMITS);
+        }
+        return merged;
       });
-      setHistoryHasMore(nextPage.has_more);
+      setHistoryHasMore(Boolean(nextPage.has_more) && !reachedCap);
     } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load more commits."
-      );
+      if (projectDirRef.current === targetDir) {
+        setError(
+          err instanceof Error ? err.message : "Failed to load more commits."
+        );
+      }
     } finally {
       setLoadingMoreHistory(false);
     }
@@ -472,6 +499,10 @@ export function useGitIntegration({
       const targetDir = projectDirRef.current;
       if (!targetDir || !isBackendConnected) return;
 
+      inspectAbortRef.current?.abort();
+      const ctrl = new AbortController();
+      inspectAbortRef.current = ctrl;
+
       onOpenDiffTabRef.current?.();
       setInspectLoading(true);
       setInspectError(null);
@@ -483,14 +514,24 @@ export function useGitIntegration({
         const diff = await fetchGitDiff(targetDir, path, {
           staged: options?.staged,
           commit: options?.commit,
+          signal: ctrl.signal,
         });
+        if (ctrl.signal.aborted || projectDirRef.current !== targetDir) return;
         setActiveDiff(diff);
       } catch (err: unknown) {
+        if (
+          ctrl.signal.aborted ||
+          (err instanceof Error && err.name === "AbortError")
+        ) {
+          return;
+        }
         setInspectError(
           err instanceof Error ? err.message : "Failed to load file diff."
         );
       } finally {
-        setInspectLoading(false);
+        if (inspectAbortRef.current === ctrl) {
+          setInspectLoading(false);
+        }
       }
     },
     [isBackendConnected]
@@ -501,20 +542,37 @@ export function useGitIntegration({
       const targetDir = projectDirRef.current;
       if (!targetDir || !isBackendConnected) return;
 
+      inspectAbortRef.current?.abort();
+      const ctrl = new AbortController();
+      inspectAbortRef.current = ctrl;
+
       onOpenDiffTabRef.current?.();
       setInspectLoading(true);
       setInspectError(null);
       setActiveDiff(null);
 
       try {
-        const detail = await fetchGitCommitDetail(targetDir, commitHash);
+        const detail = await fetchGitCommitDetail(
+          targetDir,
+          commitHash,
+          ctrl.signal
+        );
+        if (ctrl.signal.aborted || projectDirRef.current !== targetDir) return;
         setActiveCommit(detail);
       } catch (err: unknown) {
+        if (
+          ctrl.signal.aborted ||
+          (err instanceof Error && err.name === "AbortError")
+        ) {
+          return;
+        }
         setInspectError(
           err instanceof Error ? err.message : "Failed to load commit details."
         );
       } finally {
-        setInspectLoading(false);
+        if (inspectAbortRef.current === ctrl) {
+          setInspectLoading(false);
+        }
       }
     },
     [isBackendConnected]

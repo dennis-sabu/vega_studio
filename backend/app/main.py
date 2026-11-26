@@ -25,35 +25,40 @@ from app.routers import terminal as terminal_router
 from app.routers import upload as upload_router
 from app.services.ai_service import get_ai_service
 from app.services.build_service import get_build_service
+from app.services.diagnostics_service import configure_backend_logging
 from app.services.github_service import get_github_service
 from app.services.opencode_service import get_opencode_service
 from app.services.serial_service import get_serial_service
 from app.services.terminal_service import get_terminal_service
 from app.services.upload_service import get_upload_service
 
-logging.basicConfig(
-    level=settings.LOG_LEVEL.upper(),
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+configure_backend_logging(settings)
 logger = logging.getLogger("vega_studio.backend")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan context manager for startup and graceful shutdown."""
+    configure_backend_logging(settings)
     logger.info(
         "VEGA Studio Backend started on http://%s:%d",
         settings.HOST,
         settings.PORT,
     )
     yield
-    get_build_service().shutdown()
-    get_upload_service().shutdown()
-    get_serial_service().shutdown()
-    get_terminal_service().shutdown()
-    get_github_service().shutdown()
-    get_opencode_service().shutdown()
-    get_ai_service().shutdown()
+    for name, getter in (
+        ("build", get_build_service),
+        ("upload", get_upload_service),
+        ("serial", get_serial_service),
+        ("terminal", get_terminal_service),
+        ("github", get_github_service),
+        ("opencode", get_opencode_service),
+        ("ai", get_ai_service),
+    ):
+        try:
+            getter().shutdown()
+        except Exception:
+            logger.exception("Error shutting down %s service", name)
     logger.info("VEGA Studio Backend shutting down")
 
 

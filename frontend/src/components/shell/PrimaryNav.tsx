@@ -60,7 +60,11 @@ export function PrimaryNav({
   return (
     <aside
       aria-label="Primary IDE navigation"
-      className="vega-chrome-glass relative z-20 flex w-12 shrink-0 flex-col items-center justify-between border-r border-white/[0.08] py-2 select-none"
+      className={`relative z-20 flex w-11 shrink-0 flex-col items-center justify-between border-r py-2 select-none ${
+        isWorkspaceMode
+          ? "border-[#2B2B2E] bg-[#181818]"
+          : "vega-chrome-glass border-white/[0.14]"
+      }`}
     >
       <nav
         aria-label="IDE activity sections"
@@ -82,21 +86,21 @@ export function PrimaryNav({
                 aria-pressed={isActive}
                 onClick={() => onSelectNav(id)}
                 onKeyDown={(e) => handleKeyDown(e, idx)}
-                className={`relative flex h-9 w-9 items-center justify-center rounded-lg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7aa2ff]/50 ${
+                className={`relative flex h-8 w-8 items-center justify-center rounded-[6px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#7AA2FF] ${
                   isActive
-                    ? "bg-white/10 text-[#e8ebf7]"
+                    ? "bg-[#262629] text-[#F4F4F5]"
                     : isSelectedWhileCollapsed
-                      ? "bg-white/[0.04] text-[#7aa2ff]"
-                      : "text-[#e8ebf7]/45 hover:bg-white/[0.06] hover:text-[#e8ebf7]/80"
+                      ? "bg-[#222224] text-[#7AA2FF]"
+                      : "text-[#A1A1AA] hover:bg-[#252528] hover:text-[#F4F4F5]"
                 }`}
               >
                 {isActive && (
                   <span
                     aria-hidden="true"
-                    className="absolute -left-1.5 top-2 bottom-2 w-0.5 rounded-r bg-[#7aa2ff]"
+                    className="absolute -left-1.5 top-1.5 bottom-1.5 w-[2px] rounded-r bg-[#7AA2FF]"
                   />
                 )}
-                <Icon className="h-[18px] w-[18px]" />
+                <Icon className="h-[17px] w-[17px]" />
               </button>
             </Tooltip>
           );
@@ -110,13 +114,13 @@ export function PrimaryNav({
             onClick={onToggleSettings}
             aria-label="Appearance & Shell Settings"
             aria-pressed={settingsOpen}
-            className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7aa2ff]/50 ${
+            className={`flex h-8 w-8 items-center justify-center rounded-[6px] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#7AA2FF] ${
               settingsOpen
-                ? "bg-white/12 text-[#e8ebf7]"
-                : "text-[#e8ebf7]/55 hover:bg-white/[0.06] hover:text-[#e8ebf7]"
+                ? "bg-[#262629] text-[#F4F4F5]"
+                : "text-[#A1A1AA] hover:bg-[#252528] hover:text-[#F4F4F5]"
             }`}
           >
-            <Settings className="h-[18px] w-[18px]" />
+            <Settings className="h-[17px] w-[17px]" />
           </button>
         </Tooltip>
       </div>

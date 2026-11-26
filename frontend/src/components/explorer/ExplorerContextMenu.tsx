@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect } from"react";
+import { createPortal } from"react-dom";
 import {
   Edit3,
   FilePlus,
@@ -8,8 +9,8 @@ import {
   FolderPlus,
   RefreshCw,
   Trash2,
-} from "lucide-react";
-import type { FileNode } from "@/types/explorer";
+} from"lucide-react";
+import type { FileNode } from"@/types/explorer";
 
 export interface ContextMenuState {
   x: number;
@@ -78,13 +79,13 @@ export function ExplorerContextMenu({
       ? Math.min(menu.y, window.innerHeight - 230)
       : menu.y;
 
-  return (
+  const menuNode = (
     <div
       role="menu"
       aria-label="Explorer actions"
       onPointerDown={(e) => e.stopPropagation()}
       style={{ left: `${Math.max(8, clampedLeft)}px`, top: `${Math.max(8, clampedTop)}px` }}
-      className="vega-glass fixed z-50 w-48 rounded-xl bg-[#0b0d16]/95 p-1.5 text-xs shadow-2xl"
+      className="vega-glass fixed z-[110] w-48 rounded-xl border border-[#2D2D30] p-1.5 text-xs shadow-2xl"
     >
       {node && node.kind === "file" && (
         <>
@@ -96,12 +97,12 @@ export function ExplorerContextMenu({
               onOpenFile(node);
               onClose();
             }}
-            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[#e8ebf7] hover:bg-white/10 disabled:opacity-40"
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[#F4F4F5] hover:bg-[#2D2D31] disabled:opacity-40"
           >
-            <FolderOpen className="h-3.5 w-3.5 text-[#7aa2ff]" />
+          <FolderOpen className="h-3.5 w-3.5 text-[#7AA2FF]" />
             <span>Open in Workspace</span>
           </button>
-          <div className="my-1 h-px bg-white/8" />
+          <div className="my-1 h-px bg-[#2C2C30]" />
         </>
       )}
 
@@ -112,9 +113,9 @@ export function ExplorerContextMenu({
           onNewFile(targetDir);
           onClose();
         }}
-        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[#e8ebf7]/85 hover:bg-white/10 hover:text-[#e8ebf7]"
+        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[#F4F4F5] hover:bg-[#2D2D31] hover:text-[#F4F4F5]"
       >
-        <FilePlus className="h-3.5 w-3.5 text-[#7aa2ff]" />
+      <FilePlus className="h-3.5 w-3.5 text-[#7AA2FF]" />
         <span>New File...</span>
       </button>
 
@@ -125,9 +126,9 @@ export function ExplorerContextMenu({
           onNewFolder(targetDir);
           onClose();
         }}
-        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[#e8ebf7]/85 hover:bg-white/10 hover:text-[#e8ebf7]"
+        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[#F4F4F5] hover:bg-[#2D2D31] hover:text-[#F4F4F5]"
       >
-        <FolderPlus className="h-3.5 w-3.5 text-[#7aa2ff]" />
+      <FolderPlus className="h-3.5 w-3.5 text-[#7AA2FF]" />
         <span>New Folder...</span>
       </button>
 
@@ -139,16 +140,16 @@ export function ExplorerContextMenu({
             onRefresh(targetDir);
             onClose();
           }}
-          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[#e8ebf7]/85 hover:bg-white/10 hover:text-[#e8ebf7]"
+          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[#F4F4F5] hover:bg-[#2D2D31] hover:text-[#F4F4F5]"
         >
-          <RefreshCw className="h-3.5 w-3.5 text-[#e8ebf7]/60" />
+        <RefreshCw className="h-3.5 w-3.5 text-[#E4E4E7]" />
           <span>Refresh</span>
         </button>
       )}
 
       {!isRoot && node && (
         <>
-          <div className="my-1 h-px bg-white/8" />
+        <div className="my-1 h-px bg-[#2C2C30]" />
           <button
             type="button"
             role="menuitem"
@@ -162,13 +163,13 @@ export function ExplorerContextMenu({
               onRename(node);
               onClose();
             }}
-            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[#e8ebf7]/85 hover:bg-white/10 hover:text-[#e8ebf7] disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[#F4F4F5] hover:bg-[#2D2D31] hover:text-[#F4F4F5] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <span className="flex items-center gap-2">
-              <Edit3 className="h-3.5 w-3.5 text-[#e8ebf7]/60" />
+          <span className="flex items-center gap-2">
+            <Edit3 className="h-3.5 w-3.5 text-[#E4E4E7]" />
               <span>Rename</span>
             </span>
-            <span className="font-mono text-[10px] text-[#e8ebf7]/35">F2</span>
+            <span className="font-mono text-[10px] text-[#A1A1AA]">F2</span>
           </button>
 
           <button
@@ -184,16 +185,20 @@ export function ExplorerContextMenu({
               onDelete(node);
               onClose();
             }}
-            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-red-300/90 hover:bg-red-500/15 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-red-200 hover:bg-red-500/15 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <span className="flex items-center gap-2">
-              <Trash2 className="h-3.5 w-3.5" />
+          <span className="flex items-center gap-2">
+            <Trash2 className="h-3.5 w-3.5" />
               <span>Delete</span>
             </span>
-            <span className="font-mono text-[10px] text-red-300/45">Del</span>
+            <span className="font-mono text-[10px] text-red-200/85">Del</span>
           </button>
         </>
       )}
     </div>
   );
+
+  return typeof document !== "undefined"
+    ? createPortal(menuNode, document.body)
+    : null;
 }

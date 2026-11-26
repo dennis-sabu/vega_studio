@@ -27,6 +27,7 @@ export function MonacoDiffSurface({
     null
   );
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let disposed = false;
@@ -34,35 +35,46 @@ export function MonacoDiffSurface({
     let origModel: MonacoType.editor.ITextModel | null = null;
     let modModel: MonacoType.editor.ITextModel | null = null;
 
-    void loadVegaMonaco().then((monaco) => {
-      if (disposed || !hostRef.current) return;
+    loadVegaMonaco()
+      .then((monaco) => {
+        if (disposed || !hostRef.current) return;
 
-      const { monacoLanguage } = detectMonacoLanguageClient(path);
-      origModel = monaco.editor.createModel(originalContent, monacoLanguage);
-      modModel = monaco.editor.createModel(modifiedContent, monacoLanguage);
+        const { monacoLanguage } = detectMonacoLanguageClient(path);
+        origModel = monaco.editor.createModel(originalContent, monacoLanguage);
+        modModel = monaco.editor.createModel(modifiedContent, monacoLanguage);
 
-      diffEditor = monaco.editor.createDiffEditor(hostRef.current, {
-        theme: VEGA_MONACO_THEME,
-        readOnly: true,
-        automaticLayout: true,
-        renderSideBySide: sideBySide,
-        enableSplitViewResizing: true,
-        ignoreTrimWhitespace: false,
-        scrollBeyondLastLine: false,
-        minimap: { enabled: false },
-        fontSize: 12.5,
-        fontFamily:
-          'var(--font-mono), "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+        diffEditor = monaco.editor.createDiffEditor(hostRef.current, {
+          theme: VEGA_MONACO_THEME,
+          readOnly: true,
+          automaticLayout: true,
+          renderSideBySide: sideBySide,
+          enableSplitViewResizing: true,
+          ignoreTrimWhitespace: false,
+          scrollBeyondLastLine: false,
+          minimap: { enabled: false },
+          fontSize: 12.5,
+          fontFamily:
+            'var(--font-mono), "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+        });
+
+        diffEditor.setModel({
+          original: origModel,
+          modified: modModel,
+        });
+
+        diffEditorRef.current = diffEditor;
+        setLoadError(null);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (disposed) return;
+        setLoadError(
+          err instanceof Error
+            ? err.message
+            : "Failed to initialize Monaco diff viewer."
+        );
+        setLoading(false);
       });
-
-      diffEditor.setModel({
-        original: origModel,
-        modified: modModel,
-      });
-
-      diffEditorRef.current = diffEditor;
-      setLoading(false);
-    });
 
     return () => {
       disposed = true;
@@ -81,16 +93,21 @@ export function MonacoDiffSurface({
   }, [modifiedContent, originalContent, path, sideBySide]);
 
   return (
-    <div className="vega-monaco-host relative min-h-[260px] flex-1 overflow-hidden bg-[#06070c]">
+    <div className="vega-monaco-host relative min-h-[260px] flex-1 overflow-hidden bg-[#1F1F1F]">
       {loading && (
-        <div className="flex h-full items-center justify-center gap-2 font-mono text-xs text-[#e8ebf7]/55">
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-[#7aa2ff]" />
+        <div className="flex h-full items-center justify-center gap-2 font-mono text-xs text-[#e6eeff]">
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-[#82aaff]" />
           <span>Loading Monaco diff view…</span>
+        </div>
+      )}
+      {!loading && loadError && (
+        <div className="flex h-full items-center justify-center p-4 text-center font-mono text-xs text-red-200/90">
+          {loadError}
         </div>
       )}
       <div
         ref={hostRef}
-        className={`h-full w-full ${loading ? "hidden" : "block"}`}
+        className={`h-full w-full ${loading || loadError ? "hidden" : "block"}`}
       />
     </div>
   );

@@ -12,11 +12,14 @@ import {
   useState,
 } from "react";
 import { Loader2 } from "lucide-react";
+import { resolveTerminalFontCss } from "@/hooks/useTerminalSettings";
 import { getTerminalWsUrl } from "@/lib/api";
-import type {
-  TerminalSessionSummary,
-  TerminalStatus,
-  TerminalWsServerEvent,
+import {
+  DEFAULT_TERMINAL_SETTINGS,
+  type TerminalSessionSummary,
+  type TerminalSettings,
+  type TerminalStatus,
+  type TerminalWsServerEvent,
 } from "@/types/terminal";
 
 export interface XtermSurfaceHandle {
@@ -33,34 +36,35 @@ interface XtermSurfaceProps {
   sessionStatus: TerminalStatus;
   active: boolean;
   isBackendConnected: boolean;
+  terminalSettings?: TerminalSettings;
   onSessionUpdate: (session: TerminalSessionSummary) => void;
   onCwdUpdate: (sessionId: string, cwd: string) => void;
   onWsError?: (message: string) => void;
 }
 
 const VEGA_XTERM_THEME = {
-  background: "#06070c",
-  foreground: "#e8ebf7",
-  cursor: "#7aa2ff",
-  cursorAccent: "#06070c",
-  selectionBackground: "rgba(122, 162, 255, 0.28)",
-  selectionForeground: "#ffffff",
-  black: "#151821",
-  red: "#f87171",
-  green: "#6ee7b7",
-  yellow: "#fcd34d",
-  blue: "#7aa2ff",
-  magenta: "#c084fc",
-  cyan: "#67e8f9",
-  white: "#e8ebf7",
-  brightBlack: "#5c647d",
-  brightRed: "#fca5a5",
-  brightGreen: "#86efac",
-  brightYellow: "#fde68a",
-  brightBlue: "#93c5fd",
-  brightMagenta: "#d8b4fe",
-  brightCyan: "#a5f3fc",
-  brightWhite: "#ffffff",
+  background: "#181818",
+  foreground: "#F4F4F5",
+  cursor: "#7AA2FF",
+  cursorAccent: "#181818",
+  selectionBackground: "rgba(38, 79, 120, 0.72)",
+  selectionForeground: "#FFFFFF",
+  black: "#1F1F22",
+  red: "#F87171",
+  green: "#4ADE80",
+  yellow: "#FACC15",
+  blue: "#60A5FA",
+  magenta: "#C084FC",
+  cyan: "#22D3EE",
+  white: "#F4F4F5",
+  brightBlack: "#8E8E98",
+  brightRed: "#FCA5A5",
+  brightGreen: "#86EFAC",
+  brightYellow: "#FEF08A",
+  brightBlue: "#93C5FD",
+  brightMagenta: "#D8B4FE",
+  brightCyan: "#67E8F9",
+  brightWhite: "#FFFFFF",
 };
 
 export const XtermSurface = forwardRef<XtermSurfaceHandle, XtermSurfaceProps>(
@@ -70,6 +74,7 @@ export const XtermSurface = forwardRef<XtermSurfaceHandle, XtermSurfaceProps>(
       sessionStatus,
       active,
       isBackendConnected,
+      terminalSettings = DEFAULT_TERMINAL_SETTINGS,
       onSessionUpdate,
       onCwdUpdate,
       onWsError,
@@ -92,6 +97,7 @@ export const XtermSurface = forwardRef<XtermSurfaceHandle, XtermSurfaceProps>(
     const activeRef = useRef(active);
     const statusRef = useRef(sessionStatus);
     const backendConnectedRef = useRef(isBackendConnected);
+    const terminalSettingsRef = useRef(terminalSettings);
     const onSessionUpdateRef = useRef(onSessionUpdate);
     const onCwdUpdateRef = useRef(onCwdUpdate);
     const onWsErrorRef = useRef(onWsError);
@@ -101,6 +107,7 @@ export const XtermSurface = forwardRef<XtermSurfaceHandle, XtermSurfaceProps>(
       activeRef.current = active;
       statusRef.current = sessionStatus;
       backendConnectedRef.current = isBackendConnected;
+      terminalSettingsRef.current = terminalSettings;
       onSessionUpdateRef.current = onSessionUpdate;
       onCwdUpdateRef.current = onCwdUpdate;
       onWsErrorRef.current = onWsError;
@@ -240,6 +247,13 @@ export const XtermSurface = forwardRef<XtermSurfaceHandle, XtermSurfaceProps>(
         performFit();
       };
 
+      ws.onerror = () => {
+        if (wsRef.current !== ws) return;
+        onWsErrorRef.current?.(
+          "Terminal WebSocket connection interrupted — attempting reconnect."
+        );
+      };
+
       ws.onmessage = (event: MessageEvent<string>) => {
         if (wsRef.current !== ws) return;
         let msg: TerminalWsServerEvent;
@@ -317,88 +331,121 @@ export const XtermSurface = forwardRef<XtermSurfaceHandle, XtermSurfaceProps>(
       let termInstance: Terminal | null = null;
 
       void (async () => {
-        const [{ Terminal: XTerm }, { FitAddon: XFit }, { WebLinksAddon: XWebLinks }] =
-          await Promise.all([
-            import("@xterm/xterm"),
-            import("@xterm/addon-fit"),
-            import("@xterm/addon-web-links"),
-          ]);
+        try {
+          const [{ Terminal: XTerm }, { FitAddon: XFit }, { WebLinksAddon: XWebLinks }] =
+            await Promise.all([
+              import("@xterm/xterm"),
+              import("@xterm/addon-fit"),
+              import("@xterm/addon-web-links"),
+            ]);
 
-        if (disposed || !hostRef.current) return;
+          if (disposed || !hostRef.current) return;
 
-        const term = new XTerm({
-          cursorBlink: true,
-          fontSize: 12.5,
-          lineHeight: 1.25,
-          scrollback: 5000,
-          fontFamily:
-            'var(--font-mono), "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-          theme: VEGA_XTERM_THEME,
-          convertEol: false,
-        });
-
-        const fitAddon = new XFit();
-        const webLinksAddon = new XWebLinks((_event, uri) => {
-          if (uri.startsWith("https://") || uri.startsWith("http://")) {
-            window.open(uri, "_blank", "noopener,noreferrer");
+          const cfg = terminalSettingsRef.current;
+          const primaryFont =
+            cfg.fontFamily === "jetbrains-mono"
+              ? "JetBrains Mono"
+              : cfg.fontFamily === "geist-mono"
+                ? "Geist Mono"
+                : null;
+          try {
+            if (typeof document !== "undefined" && document.fonts) {
+              if (primaryFont) {
+                await document.fonts.load(`400 ${cfg.fontSize}px "${primaryFont}"`);
+              }
+              await document.fonts.ready;
+            }
+          } catch {
+            // Proceed cleanly with configured fallback stack if font loader throws.
           }
-        });
 
-        term.loadAddon(fitAddon);
-        term.loadAddon(webLinksAddon);
-        term.open(hostRef.current);
+          if (disposed || !hostRef.current) return;
 
-        // Ctrl+Shift+C (or Ctrl+C when text is selected) copies; Ctrl+Shift+V pastes
-        term.attachCustomKeyEventHandler((ev: KeyboardEvent) => {
-          if (ev.type !== "keydown") return true;
-          const mod = ev.ctrlKey || ev.metaKey;
-          if (!mod) return true;
-          const k = ev.key.toLowerCase();
+          const term = new XTerm({
+            cursorBlink: cfg.cursorBlink,
+            cursorStyle: cfg.cursorStyle,
+            fontSize: cfg.fontSize,
+            lineHeight: cfg.lineHeight,
+            scrollback: 5000,
+            fontFamily: resolveTerminalFontCss(cfg.fontFamily),
+            theme: VEGA_XTERM_THEME,
+            convertEol: true,
+          });
+          // xterm.js 6 fires onBell for \x07 BEL bytes; suppress the system
+          // bell entirely so Windows ConPTY DA responses don't produce a sound.
+          term.onBell(() => { /* no-op: bell suppressed */ });
 
-          if (k === "c" && (ev.shiftKey || term.hasSelection())) {
-            const sel = term.getSelection();
-            if (sel && navigator.clipboard) {
-              void navigator.clipboard.writeText(sel).catch(() => {});
+          const fitAddon = new XFit();
+          const webLinksAddon = new XWebLinks((_event, uri) => {
+            if (uri.startsWith("https://") || uri.startsWith("http://")) {
+              window.open(uri, "_blank", "noopener,noreferrer");
+            }
+          });
+
+          term.loadAddon(fitAddon);
+          term.loadAddon(webLinksAddon);
+          term.open(hostRef.current);
+
+          // Ctrl+Shift+C (or Ctrl+C when text is selected) copies; Ctrl+Shift+V pastes
+          term.attachCustomKeyEventHandler((ev: KeyboardEvent) => {
+            if (ev.type !== "keydown") return true;
+            const mod = ev.ctrlKey || ev.metaKey;
+            if (!mod) return true;
+            const k = ev.key.toLowerCase();
+
+            if (k === "c" && (ev.shiftKey || term.hasSelection())) {
+              const sel = term.getSelection();
+              if (sel && navigator.clipboard) {
+                void navigator.clipboard.writeText(sel).catch(() => {});
+              }
               return false;
             }
+
+            if (k === "v" && ev.shiftKey && navigator.clipboard) {
+              void navigator.clipboard
+                .readText()
+                .then((text) => {
+                  if (text) term.paste(text);
+                })
+                .catch(() => {});
+              return false;
+            }
+
+            return true;
+          });
+
+          dataDisposable = term.onData((data) => {
+            if (statusRef.current !== "running") return;
+            sendJson({ type: "input", data });
+          });
+
+          termInstance = term;
+          termRef.current = term;
+          fitAddonRef.current = fitAddon;
+          setReady(true);
+
+          resizeObserver = new ResizeObserver(() => {
+            requestAnimationFrame(() => performFit());
+          });
+          resizeObserver.observe(hostRef.current);
+
+          requestAnimationFrame(() => {
+            performFit();
+            if (activeRef.current) {
+              term.focus();
+            }
+          });
+
+          connectSocketRef.current();
+        } catch (err: unknown) {
+          if (!disposed) {
+            onWsErrorRef.current?.(
+              err instanceof Error
+                ? `Failed to initialize terminal: ${err.message}`
+                : "Failed to initialize terminal surface."
+            );
           }
-
-          if (k === "v" && ev.shiftKey && navigator.clipboard) {
-            void navigator.clipboard
-              .readText()
-              .then((text) => {
-                if (text) term.paste(text);
-              })
-              .catch(() => {});
-            return false;
-          }
-
-          return true;
-        });
-
-        dataDisposable = term.onData((data) => {
-          if (statusRef.current !== "running") return;
-          sendJson({ type: "input", data });
-        });
-
-        termInstance = term;
-        termRef.current = term;
-        fitAddonRef.current = fitAddon;
-        setReady(true);
-
-        resizeObserver = new ResizeObserver(() => {
-          requestAnimationFrame(() => performFit());
-        });
-        resizeObserver.observe(hostRef.current);
-
-        requestAnimationFrame(() => {
-          performFit();
-          if (activeRef.current) {
-            term.focus();
-          }
-        });
-
-        connectSocketRef.current();
+        }
       })();
 
       return () => {
@@ -423,6 +470,50 @@ export const XtermSurface = forwardRef<XtermSurfaceHandle, XtermSurfaceProps>(
       }
     }, [closeSocket, connectSocket, isBackendConnected, ready]);
 
+    // Apply live typography & cursor updates without disconnecting PTY
+    useEffect(() => {
+      if (!ready) return;
+      const term = termRef.current;
+      if (!term) return;
+
+      term.options.fontFamily = resolveTerminalFontCss(
+        terminalSettings.fontFamily
+      );
+      term.options.fontSize = terminalSettings.fontSize;
+      term.options.lineHeight = terminalSettings.lineHeight;
+      term.options.cursorStyle = terminalSettings.cursorStyle;
+      term.options.cursorBlink = terminalSettings.cursorBlink;
+
+      const primaryFont =
+        terminalSettings.fontFamily === "jetbrains-mono"
+          ? "JetBrains Mono"
+          : terminalSettings.fontFamily === "geist-mono"
+            ? "Geist Mono"
+            : null;
+      void (async () => {
+        try {
+          if (primaryFont && typeof document !== "undefined" && document.fonts) {
+            await document.fonts.load(
+              `400 ${terminalSettings.fontSize}px "${primaryFont}"`
+            );
+          }
+        } catch {
+          // Ignore font load errors.
+        }
+        if (mountedRef.current) {
+          requestAnimationFrame(() => performFit());
+        }
+      })();
+    }, [
+      performFit,
+      ready,
+      terminalSettings.cursorBlink,
+      terminalSettings.cursorStyle,
+      terminalSettings.fontFamily,
+      terminalSettings.fontSize,
+      terminalSettings.lineHeight,
+    ]);
+
     // Refit and focus smoothly when switching between terminal tabs
     useEffect(() => {
       if (!active || !ready) return;
@@ -435,13 +526,13 @@ export const XtermSurface = forwardRef<XtermSurfaceHandle, XtermSurfaceProps>(
 
     return (
       <div
-        className={`relative min-h-0 flex-1 overflow-hidden bg-[#06070c] ${
+        className={`relative min-h-0 flex-1 overflow-hidden bg-[#181818] ${
           active ? "flex" : "hidden"
         }`}
       >
         {!ready && (
-          <div className="flex flex-1 items-center justify-center gap-2 font-mono text-xs text-[#e8ebf7]/50">
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-[#7aa2ff]" />
+          <div className="flex flex-1 items-center justify-center gap-2 font-mono text-xs text-[#F4F4F5]">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-[#7AA2FF]" />
             <span>Initializing xterm.js surface…</span>
           </div>
         )}

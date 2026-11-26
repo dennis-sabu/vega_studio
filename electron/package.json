@@ -2,16 +2,22 @@
   "name": "vega-studio-electron",
   "version": "0.1.0",
   "private": true,
+  "description": "Desktop Firmware IDE for C-DAC VEGA ARIES V3 RISC-V",
+  "author": {
+    "name": "VEGA Studio Team",
+    "email": "maintainers@vega-studio.local"
+  },
+  "homepage": "https://github.com/vega-studio/vega-studio",
+  "license": "MIT",
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc",
     "dev": "npm run build && electron dist/main.js",
     "start": "electron dist/main.js"
   },
-  "dependencies": {
-    "electron": "^33.0.0"
-  },
   "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.18.0",
     "typescript": "^5.5.0",
     "@types/node": "^20.0.0"
   }

@@ -106,17 +106,29 @@ export function useOpenCode({
   useEffect(() => {
     if (!isBackendConnected) {
       queueMicrotask(() => {
+        setLoading(false);
         setInfo(null);
         setConfigState(null);
         setSessions([]);
+        setActiveSessionId(null);
         setSessionDetail(null);
+        setPendingContexts([]);
+        setDraftPrompt("");
         setWsState("disconnected");
       });
       return;
     }
 
     const ctrl = new AbortController();
-    queueMicrotask(() => setLoading(true));
+    queueMicrotask(() => {
+      if (ctrl.signal.aborted) return;
+      setLoading(true);
+      setError(null);
+      setActiveSessionId(null);
+      setSessionDetail(null);
+      setPendingContexts([]);
+      setDraftPrompt("");
+    });
     Promise.all([
       fetchOpenCodeInfo(false, ctrl.signal),
       fetchOpenCodeConfig(ctrl.signal),
@@ -127,7 +139,7 @@ export function useOpenCode({
         setInfo(infoRes);
         setConfigState(cfgRes);
         setSessions(sessRes.sessions);
-        // Auto-select most recent active/idle session for the newly opened project if none selected for it
+        // Auto-select most recent active/idle session ONLY for the active project
         if (projectDir) {
           const normProj = normalizeFsPath(projectDir);
           const matching = sessRes.sessions.find(
@@ -136,18 +148,9 @@ export function useOpenCode({
               s.status !== "closed" &&
               s.status !== "unavailable"
           );
-          if (matching) {
-            setActiveSessionId((prev) => {
-              const currentMatchesProject =
-                prev &&
-                sessRes.sessions.some(
-                  (s) =>
-                    s.session_id === prev &&
-                    normalizeFsPath(s.project_dir) === normProj
-                );
-              return currentMatchesProject ? prev : matching.session_id;
-            });
-          }
+          setActiveSessionId(matching ? matching.session_id : null);
+        } else {
+          setActiveSessionId(null);
         }
       })
       .catch((err) => {
@@ -160,7 +163,7 @@ export function useOpenCode({
         }
       })
       .finally(() => {
-        if (!ctrl.signal.aborted) setLoading(false);
+        setLoading(false);
       });
 
     return () => ctrl.abort();
@@ -290,6 +293,8 @@ export function useOpenCode({
         }
       };
 
+      let retryCount = 0;
+
       socket.onerror = () => {
         if (!cancelled) {
           setWsState("disconnected");
@@ -299,9 +304,22 @@ export function useOpenCode({
       socket.onclose = () => {
         if (cancelled) return;
         setWsState("disconnected");
+        if (retryCount >= 8) return;
+        const delayMs = Math.min(1800 * Math.pow(2, retryCount), 15000);
+        retryCount += 1;
         reconnectTimer = window.setTimeout(() => {
-          if (!cancelled) connectWs();
-        }, 1800);
+          if (!cancelled && document.visibilityState !== "hidden") {
+            connectWs();
+          } else if (!cancelled) {
+            const onVis = () => {
+              if (document.visibilityState !== "hidden") {
+                document.removeEventListener("visibilitychange", onVis);
+                if (!cancelled) connectWs();
+              }
+            };
+            document.addEventListener("visibilitychange", onVis);
+          }
+        }, delayMs);
       };
     };
 

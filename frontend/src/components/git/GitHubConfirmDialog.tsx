@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from"react";
 import {
   AlertTriangle,
   ArrowDownToLine,
@@ -10,9 +10,9 @@ import {
   Link2,
   Loader2,
   Trash2,
-} from "lucide-react";
-import type { GitHubConfirmDialogState } from "@/hooks/useGitHubIntegration";
-import type { GitHubVisibility } from "@/types/github";
+} from"lucide-react";
+import type { GitHubConfirmDialogState } from"@/hooks/useGitHubIntegration";
+import type { GitHubVisibility } from"@/types/github";
 
 interface GitHubConfirmDialogProps {
   dialog: GitHubConfirmDialogState;
@@ -50,6 +50,34 @@ export function GitHubConfirmDialog({
   onConfirmPull,
   onConfirmPush,
 }: GitHubConfirmDialogProps) {
+  const isOpen = Boolean(dialog);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    return () => {
+      queueMicrotask(() => {
+        if (prev && prev.isConnected) prev.focus();
+      });
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !pending) {
+        event.preventDefault();
+        event.stopPropagation();
+        onCancel();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, pending, onCancel]);
+
   if (!dialog) return null;
 
   return (
@@ -57,13 +85,13 @@ export function GitHubConfirmDialog({
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="github-confirm-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-md"
       onClick={() => {
         if (!pending) onCancel();
       }}
     >
       <div
-        className="vega-glass w-full max-w-lg rounded-2xl border border-white/15 bg-[#090b13]/95 p-5 shadow-2xl"
+        className="vega-glass w-full max-w-lg rounded-2xl border border-[#2D2D30] p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {dialog.kind === "update_remote" && (
@@ -138,16 +166,16 @@ function UpdateRemoteBody({
 }) {
   const [url, setUrl] = useState(initialUrl);
   return (
-    <div className="space-y-3">
-      <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-400/35 bg-amber-500/12 text-amber-300">
-          <Link2 className="h-4 w-4" />
+  <div className="space-y-3">
+    <div className="flex items-start gap-3">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-400/35 bg-amber-500/12 text-amber-300">
+        <Link2 className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1 space-y-1">
-          <h2 id="github-confirm-title" className="text-sm font-semibold text-[#e8ebf7]">
+          <h2 id="github-confirm-title" className="text-sm font-semibold text-[#F4F4F5]">
             Update Remote &lsquo;{name}&rsquo; URL?
           </h2>
-          <p className="text-xs text-[#e8ebf7]/65">
+          <p className="text-xs text-[#E4E4E7]">
             Changing a remote URL affects future fetch, pull, and push targets for this repository. Use HTTPS or SSH without embedded credentials.
           </p>
         </div>
@@ -160,7 +188,7 @@ function UpdateRemoteBody({
         aria-label="Updated remote URL"
         onChange={(e) => setUrl(e.target.value)}
         placeholder="https://github.com/owner/repo.git"
-        className="w-full rounded-lg border border-white/15 bg-[#06070c] px-2.5 py-1.5 font-mono text-xs text-[#e8ebf7] focus:border-[#7aa2ff]/60 focus:outline-none"
+        className="w-full rounded-lg border border-[#2D2D30] bg-[#181818] px-2.5 py-1.5 font-mono text-xs text-[#F4F4F5] focus:border-[#7AA2FF]/60 focus:outline-none"
       />
 
       <DialogFooter
@@ -186,16 +214,16 @@ function RemoveRemoteBody({
   onConfirm: (name: string) => void;
 }) {
   return (
-    <div className="space-y-3">
-      <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-400/35 bg-red-500/12 text-red-300">
-          <Trash2 className="h-4 w-4" />
+  <div className="space-y-3">
+    <div className="flex items-start gap-3">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-400/35 bg-red-500/12 text-red-300">
+        <Trash2 className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1 space-y-1">
-          <h2 id="github-confirm-title" className="text-sm font-semibold text-[#e8ebf7]">
+          <h2 id="github-confirm-title" className="text-sm font-semibold text-[#F4F4F5]">
             Remove Remote &lsquo;{name}&rsquo;?
           </h2>
-          <p className="text-xs leading-relaxed text-[#e8ebf7]/65">
+          <p className="text-xs leading-relaxed text-[#E4E4E7]">
             This disconnects local remote configuration &lsquo;{name}&rsquo; in `.git/config`. Your local commits and the remote GitHub repository itself remain intact.
           </p>
         </div>
@@ -240,16 +268,16 @@ function CreateRepoBody({
   const [remoteName, setRemoteName] = useState("origin");
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#7aa2ff]/35 bg-[#7aa2ff]/12 text-[#7aa2ff]">
-          <FolderPlus className="h-4 w-4" />
+  <div className="space-y-3">
+    <div className="flex items-start gap-3">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#7AA2FF]/35 bg-[#7AA2FF]/12 text-[#7AA2FF]">
+        <FolderPlus className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1 space-y-1">
-          <h2 id="github-confirm-title" className="text-sm font-semibold text-[#e8ebf7]">
+          <h2 id="github-confirm-title" className="text-sm font-semibold text-[#F4F4F5]">
             Create GitHub Repository
           </h2>
-          <p className="text-xs text-[#e8ebf7]/65">
+          <p className="text-xs text-[#E4E4E7]">
             Creates a new repository under your signed-in GitHub account via `gh repo create`. Local working tree files are never auto-staged or overwritten.
           </p>
         </div>
@@ -257,7 +285,7 @@ function CreateRepoBody({
 
       <div className="space-y-2.5 text-xs">
         <div>
-          <label className="mb-1 block font-mono text-[10.5px] text-[#e8ebf7]/70">
+          <label className="mb-1 block font-mono text-[10.5px] text-[#F4F4F5]">
             Repository Name
           </label>
           <input
@@ -265,12 +293,12 @@ function CreateRepoBody({
             value={name}
             disabled={pending}
             onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-lg border border-white/15 bg-[#06070c] px-2.5 py-1.5 font-mono text-xs text-[#e8ebf7] focus:border-[#7aa2ff]/60 focus:outline-none"
+            className="w-full rounded-lg border border-[#2D2D30] bg-[#181818] px-2.5 py-1.5 font-mono text-xs text-[#F4F4F5] focus:border-[#7AA2FF]/60 focus:outline-none"
           />
         </div>
 
         <div>
-          <label className="mb-1 block font-mono text-[10.5px] text-[#e8ebf7]/70">
+          <label className="mb-1 block font-mono text-[10.5px] text-[#F4F4F5]">
             Description (optional)
           </label>
           <input
@@ -279,12 +307,12 @@ function CreateRepoBody({
             disabled={pending}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="VEGA ARIES V3 firmware project"
-            className="w-full rounded-lg border border-white/15 bg-[#06070c] px-2.5 py-1.5 text-xs text-[#e8ebf7] focus:border-[#7aa2ff]/60 focus:outline-none"
+            className="w-full rounded-lg border border-[#2D2D30] bg-[#181818] px-2.5 py-1.5 text-xs text-[#F4F4F5] focus:border-[#7AA2FF]/60 focus:outline-none"
           />
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
-          <label className="inline-flex cursor-pointer items-center gap-1.5 text-[#e8ebf7]/85">
+          <label className="inline-flex cursor-pointer items-center gap-1.5 text-[#F4F4F5]">
             <input
               type="radio"
               checked={visibility === "private"}
@@ -292,7 +320,7 @@ function CreateRepoBody({
             />
             <span>Private (Recommended)</span>
           </label>
-          <label className="inline-flex cursor-pointer items-center gap-1.5 text-[#e8ebf7]/85">
+          <label className="inline-flex cursor-pointer items-center gap-1.5 text-[#F4F4F5]">
             <input
               type="radio"
               checked={visibility === "public"}
@@ -302,7 +330,7 @@ function CreateRepoBody({
           </label>
         </div>
 
-        <label className="flex cursor-pointer items-center gap-2 text-[#e8ebf7]/75">
+        <label className="flex cursor-pointer items-center gap-2 text-[#F4F4F5]">
           <input
             type="checkbox"
             checked={configureRemote}
@@ -314,11 +342,11 @@ function CreateRepoBody({
             value={remoteName}
             disabled={!configureRemote || pending}
             onChange={(e) => setRemoteName(e.target.value)}
-            className="w-24 rounded border border-white/15 bg-[#06070c] px-1.5 py-0.5 font-mono text-[11px] text-[#e8ebf7] disabled:opacity-40"
+            className="w-24 rounded border border-[#2D2D30] bg-[#181818] px-1.5 py-0.5 font-mono text-[11px] text-[#F4F4F5] disabled:opacity-40"
           />
         </label>
 
-        <label className="flex cursor-pointer items-center gap-2 text-[#e8ebf7]/75">
+        <label className="flex cursor-pointer items-center gap-2 text-[#F4F4F5]">
           <input
             type="checkbox"
             checked={addReadme}
@@ -377,23 +405,23 @@ function PublishBody({
     preview.blockers.length > 0 || (remoteCollision && !reuseExistingRemote);
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#7aa2ff]/35 bg-[#7aa2ff]/12 text-[#7aa2ff]">
-          <CloudUpload className="h-4 w-4" />
+  <div className="space-y-3">
+    <div className="flex items-start gap-3">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#7AA2FF]/35 bg-[#7AA2FF]/12 text-[#7AA2FF]">
+        <CloudUpload className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1 space-y-1">
-          <h2 id="github-confirm-title" className="text-sm font-semibold text-[#e8ebf7]">
+          <h2 id="github-confirm-title" className="text-sm font-semibold text-[#F4F4F5]">
             Publish Project to GitHub
           </h2>
-          <p className="text-xs text-[#e8ebf7]/65">
-            Branch{" "}
-            <span className="font-mono text-[#e8ebf7]">
-              {preview.current_branch || "(none)"}
-            </span>{" "}
+          <p className="text-xs text-[#E4E4E7]">
+            Branch{""}
+            <span className="font-mono text-[#F4F4F5]">
+              {preview.current_branch ||"(none)"}
+            </span>{""}
             {preview.username ? (
               <>
-                under <span className="font-mono text-[#7aa2ff]">{preview.username}</span>
+              under <span className="font-mono text-[#7AA2FF]">{preview.username}</span>
               </>
             ) : null}
             . Only existing commits are pushed.
@@ -402,7 +430,7 @@ function PublishBody({
       </div>
 
       {preview.blockers.length > 0 && (
-        <ul className="space-y-1 rounded-lg border border-red-400/30 bg-red-500/10 p-2.5 text-xs text-red-200">
+      <ul className="space-y-1 rounded-lg border border-red-400/30 bg-red-500/10 p-2.5 text-xs text-red-200">
           {preview.blockers.map((b, idx) => (
             <li key={idx}>• {b}</li>
           ))}
@@ -410,7 +438,7 @@ function PublishBody({
       )}
 
       {preview.warnings.length > 0 && (
-        <ul className="space-y-1 rounded-lg border border-amber-400/30 bg-amber-500/10 p-2.5 text-xs text-amber-200">
+      <ul className="space-y-1 rounded-lg border border-amber-400/30 bg-amber-500/10 p-2.5 text-xs text-amber-200">
           {preview.warnings.map((w, idx) => (
             <li key={idx}>• {w}</li>
           ))}
@@ -419,7 +447,7 @@ function PublishBody({
 
       <div className="space-y-2.5 text-xs">
         <div>
-          <label className="mb-1 block font-mono text-[10.5px] text-[#e8ebf7]/70">
+          <label className="mb-1 block font-mono text-[10.5px] text-[#F4F4F5]">
             GitHub Repository Name
           </label>
           <input
@@ -427,12 +455,12 @@ function PublishBody({
             value={name}
             disabled={pending}
             onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-lg border border-white/15 bg-[#06070c] px-2.5 py-1.5 font-mono text-xs text-[#e8ebf7] focus:border-[#7aa2ff]/60 focus:outline-none"
+            className="w-full rounded-lg border border-[#2D2D30] bg-[#181818] px-2.5 py-1.5 font-mono text-xs text-[#F4F4F5] focus:border-[#7AA2FF]/60 focus:outline-none"
           />
         </div>
 
         <div>
-          <label className="mb-1 block font-mono text-[10.5px] text-[#e8ebf7]/70">
+          <label className="mb-1 block font-mono text-[10.5px] text-[#F4F4F5]">
             Description (optional)
           </label>
           <input
@@ -441,13 +469,13 @@ function PublishBody({
             disabled={pending}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="VEGA ARIES V3 firmware project"
-            className="w-full rounded-lg border border-white/15 bg-[#06070c] px-2.5 py-1.5 text-xs text-[#e8ebf7] focus:border-[#7aa2ff]/60 focus:outline-none"
+            className="w-full rounded-lg border border-[#2D2D30] bg-[#181818] px-2.5 py-1.5 text-xs text-[#F4F4F5] focus:border-[#7AA2FF]/60 focus:outline-none"
           />
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-4">
-            <label className="inline-flex cursor-pointer items-center gap-1.5 text-[#e8ebf7]/85">
+            <label className="inline-flex cursor-pointer items-center gap-1.5 text-[#F4F4F5]">
               <input
                 type="radio"
                 checked={visibility === "private"}
@@ -455,7 +483,7 @@ function PublishBody({
               />
               <span>Private</span>
             </label>
-            <label className="inline-flex cursor-pointer items-center gap-1.5 text-[#e8ebf7]/85">
+            <label className="inline-flex cursor-pointer items-center gap-1.5 text-[#F4F4F5]">
               <input
                 type="radio"
                 checked={visibility === "public"}
@@ -465,20 +493,20 @@ function PublishBody({
             </label>
           </div>
 
-          <label className="inline-flex items-center gap-1.5 text-[#e8ebf7]/70">
+          <label className="inline-flex items-center gap-1.5 text-[#F4F4F5]">
             <span>Remote:</span>
             <input
               type="text"
               value={remoteName}
               disabled={pending}
               onChange={(e) => setRemoteName(e.target.value)}
-              className="w-24 rounded border border-white/15 bg-[#06070c] px-1.5 py-0.5 font-mono text-[11px] text-[#e8ebf7]"
+              className="w-24 rounded border border-[#2D2D30] bg-[#181818] px-1.5 py-0.5 font-mono text-[11px] text-[#F4F4F5]"
             />
           </label>
         </div>
 
         {remoteCollision && (
-          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-amber-400/25 bg-amber-500/8 p-2 text-amber-200">
+        <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-amber-400/25 bg-amber-500/8 p-2 text-amber-200">
             <input
               type="checkbox"
               checked={reuseExistingRemote}
@@ -523,37 +551,37 @@ function PullBody({
 }) {
   const { precheck } = dialog;
   return (
-    <div className="space-y-3">
-      <div className="flex items-start gap-3">
+  <div className="space-y-3">
+    <div className="flex items-start gap-3">
         <div
           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${
             precheck.ready
-              ? "border-[#7aa2ff]/35 bg-[#7aa2ff]/12 text-[#7aa2ff]"
+              ? "border-[#7AA2FF]/35 bg-[#7AA2FF]/12 text-[#7AA2FF]"
               : "border-red-400/35 bg-red-500/12 text-red-300"
           }`}
         >
           {precheck.ready ? (
-            <ArrowDownToLine className="h-4 w-4" />
+          <ArrowDownToLine className="h-4 w-4" />
           ) : (
-            <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="h-4 w-4" />
           )}
         </div>
         <div className="min-w-0 flex-1 space-y-1">
-          <h2 id="github-confirm-title" className="text-sm font-semibold text-[#e8ebf7]">
+          <h2 id="github-confirm-title" className="text-sm font-semibold text-[#F4F4F5]">
             Confirm Git Pull
           </h2>
-          <p className="text-xs text-[#e8ebf7]/65">
-            Pull{" "}
-            <span className="font-mono text-[#e8ebf7]">
-              {precheck.target_remote || "(none)"}/{precheck.current_branch || "(detached)"}
-            </span>{" "}
+          <p className="text-xs text-[#E4E4E7]">
+            Pull{""}
+            <span className="font-mono text-[#F4F4F5]">
+              {precheck.target_remote ||"(none)"}/{precheck.current_branch ||"(detached)"}
+            </span>{""}
             into local branch (non-destructive merge; never resets or discards local changes).
           </p>
         </div>
       </div>
 
       {precheck.blockers.length > 0 && (
-        <ul className="space-y-1 rounded-lg border border-red-400/30 bg-red-500/10 p-2.5 text-xs text-red-200">
+      <ul className="space-y-1 rounded-lg border border-red-400/30 bg-red-500/10 p-2.5 text-xs text-red-200">
           {precheck.blockers.map((b, idx) => (
             <li key={idx}>• {b}</li>
           ))}
@@ -561,9 +589,9 @@ function PullBody({
       )}
 
       {precheck.dirty_paths.length > 0 && (
-        <ul className="vega-scroll max-h-28 space-y-1 overflow-y-auto rounded-lg border border-white/10 bg-[#05060b] p-2 font-mono text-[11px] text-[#e8ebf7]/75">
+      <ul className="vega-scroll max-h-28 space-y-1 overflow-y-auto rounded-lg border border-[#2D2D30] bg-[#181818] p-2 font-mono text-[11px] text-[#F4F4F5]">
           {precheck.dirty_paths.map((p) => (
-            <li key={p} className="truncate">
+          <li key={p} className="truncate">
               {p}
             </li>
           ))}
@@ -571,7 +599,7 @@ function PullBody({
       )}
 
       {precheck.warnings.length > 0 && (
-        <ul className="space-y-1 rounded-lg border border-amber-400/30 bg-amber-500/10 p-2.5 text-xs text-amber-200">
+      <ul className="space-y-1 rounded-lg border border-amber-400/30 bg-amber-500/10 p-2.5 text-xs text-amber-200">
           {precheck.warnings.map((w, idx) => (
             <li key={idx}>• {w}</li>
           ))}
@@ -604,37 +632,37 @@ function PushBody({
   const [setUpstream, setSetUpstream] = useState(precheck.needs_upstream_setup);
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-start gap-3">
+  <div className="space-y-3">
+    <div className="flex items-start gap-3">
         <div
           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${
             precheck.ready
-              ? "border-[#7aa2ff]/35 bg-[#7aa2ff]/12 text-[#7aa2ff]"
+              ? "border-[#7AA2FF]/35 bg-[#7AA2FF]/12 text-[#7AA2FF]"
               : "border-red-400/35 bg-red-500/12 text-red-300"
           }`}
         >
-          <ArrowUpFromLine className="h-4 w-4" />
+        <ArrowUpFromLine className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1 space-y-1">
-          <h2 id="github-confirm-title" className="text-sm font-semibold text-[#e8ebf7]">
+          <h2 id="github-confirm-title" className="text-sm font-semibold text-[#F4F4F5]">
             Confirm Git Push
           </h2>
-          <p className="text-xs text-[#e8ebf7]/65">
-            Push committed history on{" "}
-            <span className="font-mono text-[#e8ebf7]">
-              {precheck.current_branch || "(detached)"}
-            </span>{" "}
-            to remote{" "}
-            <span className="font-mono text-[#7aa2ff]">
-              {precheck.target_remote || "(none)"}
-            </span>{" "}
+          <p className="text-xs text-[#E4E4E7]">
+            Push committed history on{""}
+            <span className="font-mono text-[#F4F4F5]">
+              {precheck.current_branch ||"(detached)"}
+            </span>{""}
+            to remote{""}
+            <span className="font-mono text-[#7AA2FF]">
+              {precheck.target_remote ||"(none)"}
+            </span>{""}
             ({precheck.ahead} commit(s) ahead). Never force-pushes.
           </p>
         </div>
       </div>
 
       {precheck.blockers.length > 0 && (
-        <ul className="space-y-1 rounded-lg border border-red-400/30 bg-red-500/10 p-2.5 text-xs text-red-200">
+      <ul className="space-y-1 rounded-lg border border-red-400/30 bg-red-500/10 p-2.5 text-xs text-red-200">
           {precheck.blockers.map((b, idx) => (
             <li key={idx}>• {b}</li>
           ))}
@@ -642,7 +670,7 @@ function PushBody({
       )}
 
       {precheck.warnings.length > 0 && (
-        <ul className="space-y-1 rounded-lg border border-amber-400/30 bg-amber-500/10 p-2.5 text-xs text-amber-200">
+      <ul className="space-y-1 rounded-lg border border-amber-400/30 bg-amber-500/10 p-2.5 text-xs text-amber-200">
           {precheck.warnings.map((w, idx) => (
             <li key={idx}>• {w}</li>
           ))}
@@ -650,7 +678,7 @@ function PushBody({
       )}
 
       {precheck.needs_upstream_setup && precheck.ready && (
-        <label className="flex cursor-pointer items-center gap-2 text-xs text-[#e8ebf7]/80">
+      <label className="flex cursor-pointer items-center gap-2 text-xs text-[#F4F4F5]">
           <input
             type="checkbox"
             checked={setUpstream}
@@ -687,12 +715,12 @@ function DialogFooter({
   onConfirm: () => void;
 }) {
   return (
-    <div className="flex justify-end gap-2 pt-2">
+  <div className="flex justify-end gap-2 pt-2">
       <button
         type="button"
         disabled={pending}
         onClick={onCancel}
-        className="inline-flex h-8 items-center rounded-lg border border-white/15 bg-white/[0.04] px-3 text-xs font-medium text-[#e8ebf7]/80 hover:bg-white/[0.09] disabled:opacity-50"
+        className="inline-flex h-8 items-center rounded-lg border border-[#2D2D30] bg-[#252527] px-3 text-xs font-medium text-[#F4F4F5] hover:bg-[#252527] disabled:opacity-50"
       >
         Cancel
       </button>
@@ -703,10 +731,10 @@ function DialogFooter({
         className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-colors disabled:opacity-45 ${
           danger
             ? "border-red-400/40 bg-red-500/20 text-red-100 hover:bg-red-500/30"
-            : "border-[#7aa2ff]/45 bg-[#7aa2ff]/22 text-[#e8ebf7] hover:bg-[#7aa2ff]/32"
+            : "border-[#7AA2FF]/45 bg-[#7AA2FF]/22 text-[#F4F4F5] hover:bg-[#7AA2FF]/32"
         }`}
       >
-        {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+      {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
         <span>{confirmLabel}</span>
       </button>
     </div>

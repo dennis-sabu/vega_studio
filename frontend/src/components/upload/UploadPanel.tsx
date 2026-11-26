@@ -95,11 +95,11 @@ function formatBytes(bytes: number): string {
 const STATUS_BADGE: Record<UploadStatus, { label: string; cls: string }> = {
   idle: {
     label: "READY",
-    cls: "border-white/15 bg-white/[0.04] text-[#e8ebf7]/60",
+    cls: "border-[#2D2D30] bg-[#252527] text-[#E4E4E7]",
   },
   running: {
     label: "UPLOADING",
-    cls: "border-[#7aa2ff]/40 bg-[#7aa2ff]/18 text-[#7aa2ff]",
+    cls: "border-[#7AA2FF]/40 bg-[#7AA2FF]/18 text-[#7AA2FF]",
   },
   succeeded: {
     label: "SUCCEEDED",
@@ -209,21 +209,21 @@ export function UploadPanel({
       : null;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {/* Top Upload Controls Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] bg-[#06070c]/55 px-3 py-1.5 select-none">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#2D2D30] bg-[#181818] px-2.5 py-1 select-none">
         <div className="flex flex-wrap items-center gap-2">
           <span
-            className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold ${badge.cls}`}
+            className={`inline-flex items-center gap-1.5 rounded-[5px] border px-2 py-0.5 font-mono text-[10px] font-medium ${badge.cls}`}
           >
             {isRunning ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
+            <Loader2 className="h-3 w-3 animate-spin" />
             ) : currentStatus === "succeeded" ? (
-              <CheckCircle2 className="h-3 w-3" />
+            <CheckCircle2 className="h-3 w-3" />
             ) : currentStatus === "failed" || currentStatus === "timed_out" ? (
-              <XCircle className="h-3 w-3" />
+            <XCircle className="h-3 w-3" />
             ) : currentStatus === "cancelled" ? (
-              <AlertTriangle className="h-3 w-3" />
+            <AlertTriangle className="h-3 w-3" />
             ) : null}
             <span>{badge.label}</span>
           </span>
@@ -233,15 +233,15 @@ export function UploadPanel({
             type="button"
             onClick={onOpenBoardManager}
             title="Inspect or change project board in Board Manager"
-            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] transition-colors ${
+            className={`inline-flex items-center gap-1 rounded-[5px] border px-2 py-0.5 font-mono text-[10px] transition-colors ${
               !hasActiveProject
-                ? "border-white/10 bg-white/[0.03] text-[#e8ebf7]/45"
+                ? "border-[#2D2D30] bg-[#252527] text-[#B4B4BC]"
                 : preflight?.board_supported
-                ? "border-white/12 bg-white/[0.04] text-[#e8ebf7]/80 hover:bg-white/[0.08]"
+                ? "border-[#2D2D30] bg-[#252527] text-[#F4F4F5] hover:bg-[#252527]"
                 : "border-amber-400/35 bg-amber-500/12 text-amber-200"
             }`}
           >
-            <Cpu className="h-3 w-3 text-[#7aa2ff]" />
+          <Cpu className="h-3 w-3 text-[#7AA2FF]" />
             <span>
               {preflight?.board_name ?? preflight?.board_id ?? "No Board"}
             </span>
@@ -249,13 +249,13 @@ export function UploadPanel({
 
           {/* Latest upload metrics */}
           {latestUpload && (
-            <div className="flex items-center gap-2 font-mono text-[10.5px] text-[#e8ebf7]/60">
-              <span className="truncate max-w-[140px]">
+          <div className="flex items-center gap-2 font-mono text-[10.5px] text-[#E4E4E7]">
+            <span className="truncate max-w-[140px]">
                 {latestUpload.port}
               </span>
               {latestUpload.duration_ms !== null && (
-                <span className="inline-flex items-center gap-1 text-[#e8ebf7]/50">
-                  <Clock className="h-3 w-3" />
+              <span className="inline-flex items-center gap-1 text-[#B4B4BC]">
+                <Clock className="h-3 w-3" />
                   {formatDuration(latestUpload.duration_ms)}
                 </span>
               )}
@@ -271,7 +271,7 @@ export function UploadPanel({
                 </span>
               )}
               {progressPct !== null && (
-                <span className="text-[#7aa2ff]">{progressPct}%</span>
+              <span className="text-[#7AA2FF]">{progressPct}%</span>
               )}
             </div>
           )}
@@ -281,7 +281,7 @@ export function UploadPanel({
         <div className="flex flex-wrap items-center gap-1.5">
           {/* Artifact Selector / Indicator */}
           {hasActiveProject && (
-            <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1">
               {artifacts.length > 1 ? (
                 <select
                   aria-label="Firmware artifact"
@@ -291,10 +291,10 @@ export function UploadPanel({
                     setAwaitingConfirm(false);
                     onSelectArtifact(e.target.value);
                   }}
-                  className={`h-6 max-w-[190px] rounded border bg-[#0b0e17] px-2 font-mono text-[10.5px] focus:outline-none ${
+                  className={`h-6 max-w-[190px] rounded border bg-[#181818] px-2 font-mono text-[10.5px] focus:outline-none ${
                     !selectedArtifactPath
                       ? "border-amber-400/40 text-amber-200"
-                      : "border-white/10 text-[#e8ebf7]/85"
+                      : "border-[#2D2D30] text-[#F4F4F5]"
                   }`}
                 >
                   <option value="">Choose artifact...</option>
@@ -310,17 +310,17 @@ export function UploadPanel({
                   className={`inline-flex h-6 items-center gap-1.5 rounded border px-2 font-mono text-[10.5px] ${
                     selectedArtifact.stale
                       ? "border-amber-400/35 bg-amber-500/10 text-amber-200"
-                      : "border-white/10 bg-[#0b0e17] text-[#e8ebf7]/80"
+                      : "border-[#2D2D30] bg-[#181818] text-[#F4F4F5]"
                   }`}
                 >
-                  <span className="max-w-[140px] truncate">
+                <span className="max-w-[140px] truncate">
                     {selectedArtifact.relative_path}
                   </span>
-                  <span className="text-[#e8ebf7]/45">
+                  <span className="text-[#B4B4BC]">
                     {formatBytes(selectedArtifact.size_bytes)}
                   </span>
                   {selectedArtifact.stale && (
-                    <span className="text-amber-300 uppercase">stale</span>
+                  <span className="text-amber-300 uppercase">stale</span>
                   )}
                 </span>
               ) : (
@@ -329,7 +329,7 @@ export function UploadPanel({
                   onClick={onTriggerBuild}
                   className="inline-flex h-6 items-center gap-1 rounded border border-amber-400/35 bg-amber-500/12 px-2 font-mono text-[10.5px] text-amber-200 hover:bg-amber-500/20"
                 >
-                  <Hammer className="h-3 w-3" />
+                <Hammer className="h-3 w-3" />
                   <span>Build Required</span>
                 </button>
               )}
@@ -353,7 +353,7 @@ export function UploadPanel({
                     onSelectPort(e.target.value);
                   }
                 }}
-                className="h-6 max-w-[145px] rounded border border-white/10 bg-[#0b0e17] px-1.5 font-mono text-[10.5px] text-[#e8ebf7]/85 focus:outline-none"
+                className="h-6 max-w-[145px] rounded border border-[#2D2D30] bg-[#181818] px-1.5 font-mono text-[10.5px] text-[#F4F4F5] focus:outline-none"
               >
                 <option value="">Detected ports ({devices.length})</option>
                 {devices.map((d) => (
@@ -365,7 +365,7 @@ export function UploadPanel({
             )}
 
             <div className="relative flex items-center">
-              <Usb className="pointer-events-none absolute left-1.5 h-3 w-3 text-[#7aa2ff]/70" />
+              <Usb className="pointer-events-none absolute left-1.5 h-3 w-3 text-[#7AA2FF]" />
               <input
                 type="text"
                 aria-label="Serial port path"
@@ -376,7 +376,7 @@ export function UploadPanel({
                   onSelectPort(e.target.value);
                 }}
                 placeholder="/dev/ttyUSB0 or COM3"
-                className="h-6 w-36 rounded border border-white/10 bg-[#0b0e17] pr-2 pl-6 font-mono text-[10.5px] text-[#e8ebf7] placeholder:text-[#e8ebf7]/30 focus:border-[#7aa2ff]/45 focus:outline-none"
+                className="h-6 w-36 rounded border border-[#2D2D30] bg-[#181818] pr-2 pl-6 font-mono text-[10.5px] text-[#F4F4F5] placeholder:text-[#8E8E98] focus:border-[#7AA2FF]/45 focus:outline-none"
               />
             </div>
 
@@ -386,10 +386,10 @@ export function UploadPanel({
                 aria-label="Refresh serial devices"
                 disabled={!isBackendConnected || refreshingDevices}
                 onClick={onRefreshDevices}
-                className="inline-flex h-6 w-6 items-center justify-center rounded border border-white/10 bg-white/[0.03] text-[#e8ebf7]/70 hover:bg-white/[0.08] hover:text-[#e8ebf7] disabled:opacity-40"
+                className="inline-flex h-6 w-6 items-center justify-center rounded border border-[#2D2D30] bg-[#252527] text-[#F4F4F5] hover:bg-[#252527] hover:text-[#F4F4F5] disabled:opacity-40"
               >
                 <RefreshCw
-                  className={`h-3 w-3 ${refreshingDevices ? "animate-spin text-[#7aa2ff]" : ""}`}
+                  className={`h-3 w-3 ${refreshingDevices ? "animate-spin text-[#7AA2FF]" : ""}`}
                 />
               </button>
             </Tooltip>
@@ -408,7 +408,7 @@ export function UploadPanel({
                 setAwaitingConfirm(false);
                 onSelectMode(e.target.value as UploadInvocationMode);
               }}
-              className="hidden h-6 rounded border border-white/10 bg-[#0b0e17] px-1.5 font-mono text-[10px] text-[#e8ebf7]/75 focus:outline-none xl:block"
+              className="hidden h-6 rounded border border-[#2D2D30] bg-[#181818] px-1.5 font-mono text-[10px] text-[#F4F4F5] focus:outline-none xl:block"
             >
               <option value="auto">CLI: Auto (AST)</option>
               <option value="positional_port_file">CLI: &lt;port&gt; &lt;file&gt;</option>
@@ -425,12 +425,12 @@ export function UploadPanel({
               onRunPreflight();
               setAwaitingConfirm(true);
             }}
-            className="inline-flex h-6 items-center gap-1 rounded border border-[#7aa2ff]/40 bg-[#7aa2ff]/18 px-2.5 font-mono text-[10.5px] font-medium text-[#e8ebf7] hover:bg-[#7aa2ff]/28 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex h-6 items-center gap-1 rounded border border-[#7AA2FF]/40 bg-[#7AA2FF]/18 px-2.5 font-mono text-[10.5px] font-medium text-[#F4F4F5] hover:bg-[#7AA2FF]/28 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {isRunning ? (
-              <Loader2 className="h-3 w-3 animate-spin text-[#7aa2ff]" />
+            <Loader2 className="h-3 w-3 animate-spin text-[#7AA2FF]" />
             ) : (
-              <Upload className="h-3 w-3 text-[#7aa2ff]" />
+            <Upload className="h-3 w-3 text-[#7AA2FF]" />
             )}
             <span>Upload</span>
           </button>
@@ -441,7 +441,7 @@ export function UploadPanel({
               onClick={onCancel}
               className="inline-flex h-6 items-center gap-1 rounded border border-red-400/45 bg-red-500/20 px-2.5 font-mono text-[10.5px] font-medium text-red-100 hover:bg-red-500/30"
             >
-              <Square className="h-2.5 w-2.5 fill-current" />
+            <Square className="h-2.5 w-2.5 fill-current" />
               <span>Cancel</span>
             </button>
           )}
@@ -453,10 +453,10 @@ export function UploadPanel({
               onClick={() => setShowChecks((prev) => !prev)}
               className={`inline-flex h-6 items-center gap-1 rounded border px-1.5 font-mono text-[10px] transition-colors ${
                 showChecks
-                  ? "border-[#7aa2ff]/35 bg-[#7aa2ff]/15 text-[#e8ebf7]"
+                  ? "border-[#7AA2FF]/35 bg-[#7AA2FF]/15 text-[#F4F4F5]"
                   : preflight && !preflight.ready
                   ? "border-amber-400/35 bg-amber-500/12 text-amber-200"
-                  : "border-white/10 bg-white/[0.03] text-[#e8ebf7]/60 hover:text-[#e8ebf7]"
+                  : "border-[#2D2D30] bg-[#252527] text-[#E4E4E7] hover:text-[#F4F4F5]"
               }`}
             >
               <span>Checks</span>
@@ -478,6 +478,7 @@ export function UploadPanel({
           >
             <button
               type="button"
+              aria-label="Follow latest upload output"
               onClick={() => {
                 setFollowOutput(true);
                 const el = scrollContainerRef.current;
@@ -485,11 +486,11 @@ export function UploadPanel({
               }}
               className={`inline-flex h-6 w-6 items-center justify-center rounded border transition-colors ${
                 followOutput
-                  ? "border-[#7aa2ff]/35 bg-[#7aa2ff]/15 text-[#7aa2ff]"
-                  : "border-white/10 bg-white/[0.03] text-[#e8ebf7]/45 hover:text-[#e8ebf7]"
+                  ? "border-[#7AA2FF]/35 bg-[#7AA2FF]/15 text-[#7AA2FF]"
+                  : "border-[#2D2D30] bg-[#252527] text-[#B4B4BC] hover:text-[#F4F4F5]"
               }`}
             >
-              <ArrowDownToLine className="h-3 w-3" />
+            <ArrowDownToLine className="h-3 w-3" />
             </button>
           </Tooltip>
 
@@ -497,14 +498,16 @@ export function UploadPanel({
           <Tooltip label="Toggle Upload History" side="top">
             <button
               type="button"
+              aria-label="Toggle Upload History"
+              aria-pressed={showHistory}
               onClick={() => setShowHistory((prev) => !prev)}
               className={`inline-flex h-6 items-center gap-1 rounded border px-1.5 font-mono text-[10px] transition-colors ${
                 showHistory
-                  ? "border-[#7aa2ff]/35 bg-[#7aa2ff]/15 text-[#e8ebf7]"
-                  : "border-white/10 bg-white/[0.03] text-[#e8ebf7]/55 hover:text-[#e8ebf7]"
+                  ? "border-[#7AA2FF]/35 bg-[#7AA2FF]/15 text-[#F4F4F5]"
+                  : "border-[#2D2D30] bg-[#252527] text-[#E4E4E7] hover:text-[#F4F4F5]"
               }`}
             >
-              <History className="h-3 w-3" />
+            <History className="h-3 w-3" />
               <span>{history.length}</span>
             </button>
           </Tooltip>
@@ -514,7 +517,7 @@ export function UploadPanel({
               type="button"
               onClick={onClearOutput}
               title="Clear upload console"
-              className="inline-flex h-6 items-center rounded border border-white/10 bg-white/[0.03] px-2 font-mono text-[10px] text-[#e8ebf7]/55 hover:bg-white/[0.08] hover:text-[#e8ebf7]"
+              className="inline-flex h-6 items-center rounded border border-[#2D2D30] bg-[#252527] px-2 font-mono text-[10px] text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
             >
               Clear
             </button>
@@ -526,49 +529,49 @@ export function UploadPanel({
       {isRunning && (
         <div
           aria-label="Firmware upload progress"
-          className="h-0.5 w-full overflow-hidden bg-white/[0.05]"
+          className="h-0.5 w-full overflow-hidden bg-[#252527]"
         >
           {progressPct !== null ? (
             <div
-              className="h-full bg-[#7aa2ff] transition-[width] duration-150"
+              className="h-full bg-[#7AA2FF] transition-[width] duration-150"
               style={{ width: `${Math.min(100, Math.max(2, progressPct))}%` }}
             />
           ) : (
-            <div className="h-full w-1/3 animate-pulse rounded-full bg-[#7aa2ff]" />
+          <div className="h-full w-1/3 animate-pulse rounded-full bg-[#7AA2FF]" />
           )}
         </div>
       )}
 
       {/* Explicit Hardware Upload Confirmation Strip */}
       {awaitingConfirm && preflight && !isRunning && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#7aa2ff]/25 bg-[#7aa2ff]/[0.08] px-3 py-2 text-xs">
-          <div className="min-w-0 space-y-0.5">
-            <p className="font-medium text-[#e8ebf7]">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#7AA2FF]/25 bg-[#7AA2FF]/[0.08] px-3 py-2 text-xs">
+        <div className="min-w-0 space-y-0.5">
+          <p className="font-medium text-[#F4F4F5]">
               Confirm Firmware Upload to{" "}
-              <span className="font-mono text-[#7aa2ff]">
+              <span className="font-mono text-[#7AA2FF]">
                 {preflight.board_name ?? preflight.board_id ?? "Board"}
               </span>
               {preflight.selected_port && (
                 <>
                   {" "}
                   on{" "}
-                  <span className="font-mono text-[#7aa2ff]">
+                  <span className="font-mono text-[#7AA2FF]">
                     {preflight.selected_port}
                   </span>
                 </>
               )}
             </p>
-            <p className="truncate font-mono text-[10.5px] text-[#e8ebf7]/65">
+            <p className="truncate font-mono text-[10.5px] text-[#E4E4E7]">
               {preflight.command_preview.join(" ") ||
                 "Complete preflight blockers below before uploading."}
             </p>
             {selectedArtifact?.stale && (
-              <p className="text-[11px] text-amber-200">
+            <p className="text-[11px] text-amber-200">
                 Warning: Selected firmware is older than modified source files. Rebuild recommended before flashing.
               </p>
             )}
             {!preflight.command_convention_verified && preflight.ready && (
-              <p className="text-[11px] text-amber-200/85">
+            <p className="text-[11px] text-amber-200/85">
                 Note: Downstream vega_xmodem.py CLI flags use an adaptable convention; verify preview arguments match your SDK script.
               </p>
             )}
@@ -582,9 +585,9 @@ export function UploadPanel({
                   setAwaitingConfirm(false);
                   onTriggerBuild();
                 }}
-                className="inline-flex h-7 items-center gap-1 rounded border border-white/15 bg-white/[0.06] px-2.5 text-[11px] font-medium text-[#e8ebf7] hover:bg-white/12"
+                className="inline-flex h-7 items-center gap-1 rounded border border-[#2D2D30] bg-[#252527] px-2.5 text-[11px] font-medium text-[#F4F4F5] hover:bg-[#2D2D31]"
               >
-                <Hammer className="h-3 w-3 text-[#7aa2ff]" />
+              <Hammer className="h-3 w-3 text-[#7AA2FF]" />
                 <span>Rebuild First</span>
               </button>
             )}
@@ -595,15 +598,15 @@ export function UploadPanel({
                 setAwaitingConfirm(false);
                 void onStartUpload({ allowStaleArtifact: true });
               }}
-              className="inline-flex h-7 items-center gap-1.5 rounded border border-[#7aa2ff]/50 bg-[#7aa2ff]/25 px-3 text-[11px] font-medium text-[#e8ebf7] hover:bg-[#7aa2ff]/35 disabled:opacity-40"
+              className="inline-flex h-7 items-center gap-1.5 rounded border border-[#7AA2FF]/50 bg-[#7AA2FF]/25 px-3 text-[11px] font-medium text-[#F4F4F5] hover:bg-[#7AA2FF]/35 disabled:opacity-40"
             >
-              <Upload className="h-3 w-3 text-[#7aa2ff]" />
+            <Upload className="h-3 w-3 text-[#7AA2FF]" />
               <span>Confirm &amp; Upload</span>
             </button>
             <button
               type="button"
               onClick={() => setAwaitingConfirm(false)}
-              className="inline-flex h-7 items-center rounded border border-white/10 bg-transparent px-2.5 text-[11px] text-[#e8ebf7]/70 hover:bg-white/[0.06]"
+              className="inline-flex h-7 items-center rounded border border-[#2D2D30] bg-transparent px-2.5 text-[11px] text-[#F4F4F5] hover:bg-[#252527]"
             >
               Cancel
             </button>
@@ -613,12 +616,12 @@ export function UploadPanel({
 
       {/* Blocking Error / Preflight Remediation Strip */}
       {(error || (hasActiveProject && preflight && !preflight.ready)) && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-red-400/25 bg-red-500/10 px-3 py-2 text-xs text-red-100">
-          <div className="flex min-w-0 items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-red-400/25 bg-red-500/10 px-3 py-2 text-xs text-red-100">
+        <div className="flex min-w-0 items-center gap-2">
             {error ? (
-              <AlertCircle className="h-4 w-4 shrink-0 text-red-300" />
+            <AlertCircle className="h-4 w-4 shrink-0 text-red-300" />
             ) : (
-              <ShieldAlert className="h-4 w-4 shrink-0 text-amber-300" />
+            <ShieldAlert className="h-4 w-4 shrink-0 text-amber-300" />
             )}
             <span className="truncate font-sans">
               {error ??
@@ -632,9 +635,9 @@ export function UploadPanel({
               <button
                 type="button"
                 onClick={onTriggerBuild}
-                className="inline-flex h-6 items-center gap-1 rounded border border-[#7aa2ff]/35 bg-[#7aa2ff]/18 px-2 font-sans text-[11px] font-medium text-[#e8ebf7] hover:bg-[#7aa2ff]/28"
+                className="inline-flex h-6 items-center gap-1 rounded border border-[#7AA2FF]/35 bg-[#7AA2FF]/18 px-2 font-sans text-[11px] font-medium text-[#F4F4F5] hover:bg-[#7AA2FF]/28"
               >
-                <Hammer className="h-3 w-3 text-[#7aa2ff]" />
+              <Hammer className="h-3 w-3 text-[#7AA2FF]" />
                 <span>Build Project</span>
               </button>
             )}
@@ -642,9 +645,9 @@ export function UploadPanel({
               <button
                 type="button"
                 onClick={onOpenBoardManager}
-                className="inline-flex h-6 items-center gap-1 rounded border border-[#7aa2ff]/35 bg-[#7aa2ff]/18 px-2 font-sans text-[11px] font-medium text-[#e8ebf7] hover:bg-[#7aa2ff]/28"
+                className="inline-flex h-6 items-center gap-1 rounded border border-[#7AA2FF]/35 bg-[#7AA2FF]/18 px-2 font-sans text-[11px] font-medium text-[#F4F4F5] hover:bg-[#7AA2FF]/28"
               >
-                <Cpu className="h-3 w-3 text-[#7aa2ff]" />
+              <Cpu className="h-3 w-3 text-[#7AA2FF]" />
                 <span>Open Board Manager</span>
               </button>
             )}
@@ -652,9 +655,9 @@ export function UploadPanel({
               <button
                 type="button"
                 onClick={onOpenSdkDoctor}
-                className="inline-flex h-6 items-center gap-1 rounded border border-white/15 bg-white/[0.08] px-2 font-sans text-[11px] font-medium text-[#e8ebf7] hover:bg-white/15"
+                className="inline-flex h-6 items-center gap-1 rounded border border-[#2D2D30] bg-[#252527] px-2 font-sans text-[11px] font-medium text-[#F4F4F5] hover:bg-[#2D2D31]"
               >
-                <Stethoscope className="h-3 w-3 text-[#7aa2ff]" />
+              <Stethoscope className="h-3 w-3 text-[#7AA2FF]" />
                 <span>Open SDK Doctor</span>
               </button>
             )}
@@ -663,9 +666,9 @@ export function UploadPanel({
                 type="button"
                 aria-label="Dismiss upload error"
                 onClick={onClearError}
-                className="inline-flex h-5 w-5 items-center justify-center rounded hover:bg-white/10"
+                className="inline-flex h-5 w-5 items-center justify-center rounded hover:bg-[#2D2D31]"
               >
-                <X className="h-3 w-3" />
+              <X className="h-3 w-3" />
               </button>
             )}
           </div>
@@ -674,8 +677,8 @@ export function UploadPanel({
 
       {/* Optional Preflight Checks Breakdown Drawer */}
       {showChecks && preflight && (
-        <div className="border-b border-white/[0.08] bg-[#070910]/90 px-3 py-2 text-[11px]">
-          <div className="mb-1.5 flex items-center justify-between font-mono text-[10px] text-[#e8ebf7]/55 uppercase">
+      <div className="border-b border-[#2D2D30] bg-[#181818] px-3 py-2 text-[11px]">
+        <div className="mb-1.5 flex items-center justify-between font-mono text-[10px] text-[#E4E4E7] uppercase">
             <span>
               Upload Preflight ({preflight.contract_source} ·{" "}
               {runningPreflight ? "refreshing..." : preflight.resolved_invocation_mode})
@@ -690,18 +693,18 @@ export function UploadPanel({
             {preflight.checks.map((chk) => (
               <div
                 key={chk.id}
-                className="flex items-start gap-2 rounded-lg border border-white/[0.06] bg-black/25 px-2.5 py-1.5"
+                className="flex items-start gap-2 rounded-lg border border-[#2D2D30] bg-[#141414] px-2.5 py-1.5"
               >
                 {chk.status === "pass" ? (
-                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
                 ) : chk.status === "warning" ? (
-                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" />
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-300" />
                 ) : (
-                  <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-400" />
+                <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-400" />
                 )}
                 <div className="min-w-0">
-                  <p className="font-medium text-[#e8ebf7]/90">{chk.label}</p>
-                  <p className="text-[10.5px] text-[#e8ebf7]/60">{chk.detail}</p>
+                  <p className="font-medium text-[#F4F4F5]">{chk.label}</p>
+                  <p className="text-[10.5px] text-[#E4E4E7]">{chk.detail}</p>
                 </div>
               </div>
             ))}
@@ -714,23 +717,24 @@ export function UploadPanel({
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="vega-scroll min-h-0 flex-1 overflow-y-auto p-3 font-mono text-[11.5px] leading-relaxed"
+          className="vega-scroll min-h-0 flex-1 overflow-y-auto bg-[#181818] p-2.5 text-[12px] leading-relaxed"
+          style={{ fontFamily: "var(--font-terminal)" }}
         >
           {logs.length === 0 ? (
-            <div className="flex h-full min-h-[72px] items-center justify-center font-sans">
-              <div className="flex max-w-xl items-start gap-3 rounded-xl border border-white/8 bg-[#08090f] px-4 py-3">
-                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-[#7aa2ff]">
-                  <Upload className="h-3.5 w-3.5" />
+          <div className="flex h-full min-h-[72px] items-center justify-center font-sans">
+            <div className="flex max-w-xl items-start gap-2.5 rounded-[8px] border border-[#2D2D30] bg-[#181818] px-3.5 py-2.5">
+              <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[5px] border border-[#2D2D30] bg-[#252527] text-[#7AA2FF]">
+                <Upload className="h-3.5 w-3.5" />
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-[#e8ebf7]">
+                  <p className="text-xs font-medium text-[#F4F4F5]">
                     {hasActiveProject
                       ? preflightReady
                         ? "Ready for Explicit Firmware Upload"
                         : "Upload Prerequisites Need Attention"
                       : "No Active VEGA Project"}
                   </p>
-                  <p className="text-[11px] leading-relaxed text-[#e8ebf7]/55">
+                  <p className="text-[11px] leading-relaxed text-[#E4E4E7]">
                     {hasActiveProject
                       ? preflightReady
                         ? `Select or confirm the serial device (${preflight?.selected_port}) and click Upload to flash ${preflight?.selected_artifact?.relative_path} to ${preflight?.board_name}.`
@@ -738,7 +742,7 @@ export function UploadPanel({
                       : "Create or open a VEGA project and build firmware before uploading to hardware."}
                   </p>
                   {deviceInfo && deviceInfo.notes.length > 0 && (
-                    <p className="text-[10.5px] text-[#e8ebf7]/45">
+                  <p className="text-[10.5px] text-[#B4B4BC]">
                       {deviceInfo.notes[0]}
                     </p>
                   )}
@@ -746,19 +750,19 @@ export function UploadPanel({
               </div>
             </div>
           ) : (
-            <div className="space-y-0.5">
+          <div className="space-y-0.5">
               {logs.map((line) => (
                 <div
                   key={line.seq}
-                  className={`flex items-baseline gap-2.5 rounded px-1.5 py-0.5 hover:bg-white/[0.03] ${
+                  className={`flex items-baseline gap-2.5 rounded px-1.5 py-0.5 hover:bg-[#252527] ${
                     line.stream === "stderr"
                       ? "text-red-300"
                       : line.stream === "system"
-                      ? "text-[#7aa2ff]"
-                      : "text-[#e8ebf7]/88"
+                      ? "text-[#7AA2FF]"
+                      : "text-[#F4F4F5]"
                   }`}
                 >
-                  <span className="shrink-0 text-[10px] text-[#e8ebf7]/30 select-none">
+                <span className="shrink-0 text-[10px] text-[#A1A1AA] select-none">
                     {formatTime(line.timestamp)}
                   </span>
                   <span className="min-w-0 whitespace-pre-wrap break-all">
@@ -772,38 +776,38 @@ export function UploadPanel({
 
         {/* Bounded Upload History Drawer */}
         {showHistory && (
-          <aside className="vega-scroll w-68 shrink-0 overflow-y-auto border-l border-white/[0.08] bg-[#070910]/85 p-2.5 font-mono text-[11px]">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-[10px] font-semibold tracking-wider text-[#e8ebf7]/50 uppercase">
+        <aside className="vega-scroll w-68 shrink-0 overflow-y-auto border-l border-[#2D2D30] bg-[#181818] p-2.5 font-mono text-[11px]">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[10px] font-semibold tracking-wider text-[#B4B4BC] uppercase">
                 Upload History ({history.length})
               </span>
               {history.length > 0 && (
                 <button
                   type="button"
                   onClick={onClearHistory}
-                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-[#e8ebf7]/45 hover:bg-white/[0.06] hover:text-[#e8ebf7]"
+                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-[#B4B4BC] hover:bg-[#252527] hover:text-[#F4F4F5]"
                 >
-                  <Trash2 className="h-2.5 w-2.5" />
+                <Trash2 className="h-2.5 w-2.5" />
                   <span>Clear</span>
                 </button>
               )}
             </div>
 
             {history.length === 0 ? (
-              <p className="py-4 text-center font-sans text-[11px] text-[#e8ebf7]/40">
+            <p className="py-4 text-center font-sans text-[11px] text-[#A1A1AA]">
                 No firmware uploads recorded this session.
               </p>
             ) : (
-              <ul className="space-y-1.5">
+            <ul className="space-y-1.5">
                 {history.map((item) => {
                   const st = STATUS_BADGE[item.status];
                   return (
                     <li
                       key={item.upload_id}
-                      className="rounded-lg border border-white/[0.07] bg-white/[0.02] p-2"
+                      className="rounded-lg border border-[#2D2D30] bg-[#252527] p-2"
                     >
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="truncate font-medium text-[#e8ebf7]/90">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="truncate font-medium text-[#F4F4F5]">
                           {item.board_id}
                         </span>
                         <span
@@ -812,10 +816,10 @@ export function UploadPanel({
                           {st.label}
                         </span>
                       </div>
-                      <p className="mt-1 truncate text-[10px] text-[#e8ebf7]/60">
+                      <p className="mt-1 truncate text-[10px] text-[#E4E4E7]">
                         {item.artifact_path} → {item.port}
                       </p>
-                      <div className="mt-0.5 flex items-center justify-between text-[10px] text-[#e8ebf7]/45">
+                      <div className="mt-0.5 flex items-center justify-between text-[10px] text-[#B4B4BC]">
                         <span>{formatTime(item.started_at)}</span>
                         <span>{formatDuration(item.duration_ms)}</span>
                       </div>

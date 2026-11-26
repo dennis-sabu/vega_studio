@@ -86,67 +86,107 @@ export function useNativeAi({
     setNotice(null);
   }, []);
 
-  const refreshState = useCallback(async () => {
-    if (!isBackendConnected) return;
-    setLoading(true);
-    try {
-      const [provRes, convRes] = await Promise.all([
-        fetchAiProvidersState(),
-        fetchAiConversations(projectDir),
-      ]);
-      setProvidersState(provRes);
-      setConversations(convRes.conversations);
-      setActiveConversationId((prev) => {
-        if (prev && convRes.conversations.some((c) => c.conversation_id === prev)) {
-          return prev;
+  const refreshState = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!isBackendConnected) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      try {
+        const [provRes, convRes] = await Promise.all([
+          fetchAiProvidersState(signal),
+          fetchAiConversations(projectDir, signal),
+        ]);
+        if (signal?.aborted) return;
+        setProvidersState(provRes);
+        setConversations(convRes.conversations);
+        setActiveConversationId((prev) => {
+          const match = convRes.conversations.find(
+            (c) =>
+              c.project_dir &&
+              projectDir &&
+              normalizeFsPath(c.project_dir) === normalizeFsPath(projectDir)
+          );
+          if (prev && projectDir) {
+            const prevRec = convRes.conversations.find((c) => c.conversation_id === prev);
+            if (prevRec && (!prevRec.project_dir || normalizeFsPath(prevRec.project_dir) === normalizeFsPath(projectDir))) {
+              return prev;
+            }
+          } else if (prev && !projectDir && convRes.conversations.some((c) => c.conversation_id === prev)) {
+            return prev;
+          }
+          return match?.conversation_id ?? (projectDir ? null : convRes.conversations[0]?.conversation_id ?? null);
+        });
+      } catch (err) {
+        if (signal?.aborted || (err instanceof Error && err.name === "AbortError")) {
+          return;
         }
-        const match = convRes.conversations.find(
-          (c) =>
-            c.project_dir &&
-            projectDir &&
-            normalizeFsPath(c.project_dir) === normalizeFsPath(projectDir)
-        );
-        return match?.conversation_id ?? convRes.conversations[0]?.conversation_id ?? null;
-      });
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Failed to load Native AI state.";
-      setError(msg);
-      onLogRef.current?.("warn", msg);
-    } finally {
-      setLoading(false);
-    }
-  }, [isBackendConnected, projectDir]);
+        const msg =
+          err instanceof Error ? err.message : "Failed to load Native AI state.";
+        setError(msg);
+        onLogRef.current?.("warn", msg);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [isBackendConnected, projectDir]
+  );
 
   useEffect(() => {
-    if (!isBackendConnected) return;
-    let active = true;
     queueMicrotask(() => {
-      if (active) {
-        void refreshState();
+      setDraftPrompt("");
+      setPendingAttachments([]);
+      setContextPreview(null);
+      setError(null);
+      setNotice(null);
+      setConversationDetail(null);
+      if (!isBackendConnected) {
+        setLoading(false);
+        setWsState("disconnected");
+      }
+    });
+    if (!isBackendConnected) return;
+    const ctrl = new AbortController();
+    queueMicrotask(() => {
+      if (!ctrl.signal.aborted) {
+        void refreshState(ctrl.signal);
       }
     });
     return () => {
-      active = false;
+      ctrl.abort();
     };
   }, [isBackendConnected, projectDir, refreshState]);
 
   // WebSocket live streaming subscription for active conversation
   useEffect(() => {
     if (!isBackendConnected || !activeConversationId) {
+      queueMicrotask(() => {
+        setWsState("disconnected");
+        if (!activeConversationId) {
+          setConversationDetail(null);
+        }
+      });
       return;
     }
 
     let cancelled = false;
     let ws: WebSocket | null = null;
     let reconnectTimer: number | null = null;
+    let retryCount = 0;
     const ctrl = new AbortController();
 
     fetchAiConversation(activeConversationId, ctrl.signal)
       .then((detail) => {
         if (!cancelled) setConversationDetail(detail);
       })
-      .catch(() => {});
+      .catch((err: unknown) => {
+        if (cancelled || (err instanceof Error && err.name === "AbortError")) return;
+        setConversationDetail(null);
+        setError(
+          err instanceof Error ? err.message : "Failed to load conversation history."
+        );
+      });
 
     const connectWs = () => {
       if (cancelled) return;
@@ -154,7 +194,10 @@ export function useNativeAi({
       ws = new WebSocket(getNativeAiWsUrl(activeConversationId));
 
       ws.onopen = () => {
-        if (!cancelled) setWsState("connected");
+        if (!cancelled) {
+          retryCount = 0;
+          setWsState("connected");
+        }
       };
 
       ws.onmessage = (event) => {
@@ -290,12 +333,41 @@ export function useNativeAi({
         }
       };
 
+      ws.onerror = () => {
+        if (cancelled) return;
+        setWsState("disconnected");
+        fetchAiConversation(activeConversationId, ctrl.signal)
+          .then((detail) => {
+            if (!cancelled) setConversationDetail(detail);
+          })
+          .catch(() => {});
+      };
+
       ws.onclose = () => {
         if (cancelled) return;
         setWsState("disconnected");
+        // Reconcile state cleanly in case socket dropped mid-stream
+        fetchAiConversation(activeConversationId, ctrl.signal)
+          .then((detail) => {
+            if (!cancelled) setConversationDetail(detail);
+          })
+          .catch(() => {});
+        if (retryCount >= 8) return;
+        const delayMs = Math.min(1800 * Math.pow(2, retryCount), 15000);
+        retryCount += 1;
         reconnectTimer = window.setTimeout(() => {
-          if (!cancelled) connectWs();
-        }, 1800);
+          if (!cancelled && document.visibilityState !== "hidden") {
+            connectWs();
+          } else if (!cancelled) {
+            const onVis = () => {
+              if (document.visibilityState !== "hidden") {
+                document.removeEventListener("visibilitychange", onVis);
+                if (!cancelled) connectWs();
+              }
+            };
+            document.addEventListener("visibilitychange", onVis);
+          }
+        }, delayMs);
       };
     };
 

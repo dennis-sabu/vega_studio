@@ -1,32 +1,42 @@
 "use client";
 
-import type { ComponentProps } from "react";
-import { useEffect, useState } from "react";
+import type { ComponentProps } from"react";
+import { useEffect, useState } from"react";
 import {
   Bot,
-  Cpu,
   SlidersHorizontal,
   Sparkles,
   Stethoscope,
+  Terminal as TerminalIcon,
   Type,
   X,
-} from "lucide-react";
-import { AiProviderSettingsPanel } from "@/components/ai/AiProviderSettingsPanel";
-import { OpenCodeSettingsPanel } from "@/components/opencode/OpenCodeSettingsPanel";
-import { SdkConfigForm } from "@/components/sdk/SdkConfigForm";
+} from"lucide-react";
+import { AiProviderSettingsPanel } from"@/components/ai/AiProviderSettingsPanel";
+import { OpenCodeSettingsPanel } from"@/components/opencode/OpenCodeSettingsPanel";
+import { SdkConfigForm } from"@/components/sdk/SdkConfigForm";
 import {
   SegmentedPill,
   type SegmentedPillOption,
-} from "@/components/shell/SegmentedPill";
+} from"@/components/shell/SegmentedPill";
 import {
   SPECIES_LIST,
   SPECIES_MAP,
   type AtmosphereTweaks,
   type SpeciesKey,
-} from "@/lib/glyphAnimalsEngine";
-import type { EditorSettings } from "@/types/editor";
+} from"@/lib/glyphAnimalsEngine";
+import type { EditorSettings } from"@/types/editor";
+import {
+  DEFAULT_TERMINAL_SETTINGS,
+  type TerminalSettings,
+} from"@/types/terminal";
 
-export type SettingsCategory = "appearance" | "editor" | "sdk" | "ai" | "opencode";
+export type SettingsCategory =
+  |"appearance"
+  |"editor"
+  |"terminal"
+  |"sdk"
+  |"ai"
+  |"opencode";
 
 interface SettingsModalProps {
   open: boolean;
@@ -34,6 +44,7 @@ interface SettingsModalProps {
   species: SpeciesKey;
   tweaks: AtmosphereTweaks;
   editorSettings: EditorSettings;
+  terminalSettings?: TerminalSettings;
   sdkConfigProps: ComponentProps<typeof SdkConfigForm>;
   aiConfigProps: ComponentProps<typeof AiProviderSettingsPanel>;
   opencodeConfigProps: ComponentProps<typeof OpenCodeSettingsPanel>;
@@ -43,6 +54,8 @@ interface SettingsModalProps {
   onResetTweaks: () => void;
   onEditorSettingsChange: (partial: Partial<EditorSettings>) => void;
   onResetEditorSettings: () => void;
+  onTerminalSettingsChange?: (partial: Partial<TerminalSettings>) => void;
+  onResetTerminalSettings?: () => void;
   onOpenSdkDoctor: () => void;
 }
 
@@ -205,16 +218,13 @@ const GLASS_SLIDERS: SliderSpec[] = [
   },
 ];
 
-const FUTURE_SETTINGS_SECTIONS = [
-  { label: "Board & Serial", phase: "Phases 7–9", icon: Cpu },
-];
-
 export function SettingsModal({
   open,
-  initialCategory = "appearance",
+  initialCategory ="appearance",
   species,
   tweaks,
   editorSettings,
+  terminalSettings = DEFAULT_TERMINAL_SETTINGS,
   sdkConfigProps,
   aiConfigProps,
   opencodeConfigProps,
@@ -224,6 +234,8 @@ export function SettingsModal({
   onResetTweaks,
   onEditorSettingsChange,
   onResetEditorSettings,
+  onTerminalSettingsChange,
+  onResetTerminalSettings,
   onOpenSdkDoctor,
 }: SettingsModalProps) {
   const [activeCategory, setActiveCategory] =
@@ -234,10 +246,19 @@ export function SettingsModal({
 
   useEffect(() => {
     if (!open) return;
+    const prev =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     queueMicrotask(() => {
       setConfirmReset(false);
       setActiveCategory(initialCategory);
     });
+    return () => {
+      queueMicrotask(() => {
+        if (prev && prev.isConnected) prev.focus();
+      });
+    };
   }, [initialCategory, open]);
 
   useEffect(() => {
@@ -251,6 +272,7 @@ export function SettingsModal({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
+        event.stopPropagation();
         onClose();
       }
     };
@@ -261,8 +283,8 @@ export function SettingsModal({
   if (!open) return null;
 
   const renderSliderGroup = (title: string, specs: SliderSpec[]) => (
-    <div className="space-y-2.5 rounded-2xl border border-white/[0.08] bg-[#06070c]/60 p-4">
-      <div className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/45 uppercase">
+  <div className="space-y-2.5 rounded-2xl border border-[#2D2D30] bg-[#181818] p-4">
+    <div className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#B4B4BC] uppercase">
         {title}
       </div>
       <div className="grid grid-cols-1 gap-x-5 gap-y-2.5 sm:grid-cols-2">
@@ -280,7 +302,7 @@ export function SettingsModal({
                 isDisabled ? "opacity-40" : "opacity-100"
               }`}
             >
-              <div className="flex items-center justify-between text-[12px]">
+            <div className="flex items-center justify-between text-[12px]">
                 <button
                   type="button"
                   disabled={isDisabled}
@@ -288,11 +310,11 @@ export function SettingsModal({
                     onTweaksChange({ [spec.key]: defaults[spec.key] })
                   }
                   title="Double-click to reset"
-                  className="cursor-default text-left text-[#e8ebf7]/80 hover:text-[#e8ebf7] disabled:cursor-not-allowed"
+                  className="cursor-default text-left text-[#F4F4F5] hover:text-[#F4F4F5] disabled:cursor-not-allowed"
                 >
                   {spec.label}
                 </button>
-                <span className="font-mono text-[11px] font-semibold text-[#e8ebf7]/65">
+                <span className="font-mono text-[11px] font-semibold text-[#E4E4E7]">
                   {val.toFixed(spec.decimals)}
                   {spec.unit ?? ""}
                 </span>
@@ -322,33 +344,36 @@ export function SettingsModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="VEGA Studio Settings"
+      aria-labelledby="settings-modal-title"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="vega-view-enter fixed inset-0 z-50 flex items-center justify-center bg-[#06070c]/65 p-4 backdrop-blur-sm"
+      className="vega-view-enter fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md"
     >
       <div
-        className="vega-glass flex max-h-[min(86vh,760px)] w-full max-w-3xl flex-col overflow-hidden rounded-[24px] bg-[#090b13]/92 shadow-2xl"
-        style={{ ["--blur" as string]: "18px", ["--tint" as string]: "0.7" }}
+        className="vega-glass flex h-[min(84vh,740px)] max-h-[calc(100vh-32px)] w-[min(896px,calc(100vw-32px))] flex-col overflow-hidden rounded-[14px] shadow-2xl"
+        style={{ ["--blur" as string]: "14px", ["--tint" as string]: "0.7" }}
       >
         {/* Header */}
-        <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-3.5">
+        <div className="flex shrink-0 items-center justify-between border-b border-[#2D2D30] px-4 py-3">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/[0.05] text-[#7aa2ff]">
+            <div className="flex h-7 w-7 items-center justify-center rounded-[6px] border border-[#2D2D30] bg-[#252527] text-[#7AA2FF]">
               <SlidersHorizontal className="h-3.5 w-3.5" />
             </div>
             <div>
-              <h2 className="text-sm font-medium text-[#e8ebf7]">
-                Shell &amp; Appearance Settings
+              <h2
+                id="settings-modal-title"
+                className="text-sm font-medium text-[#F4F4F5]"
+              >
+                IDE &amp; Appearance Settings
               </h2>
-              <p className="text-[11px] text-[#e8ebf7]/50">
-                Customize the ambient ASCII canvas, species, and glass surfaces
+              <p className="text-[11px] text-[#B4B4BC]">
+                Configure appearance, editor, terminal font, toolchain SDK, and AI providers
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={() => {
@@ -359,6 +384,8 @@ export function SettingsModal({
                 setConfirmReset(false);
                 if (activeCategory === "editor") {
                   onResetEditorSettings();
+                } else if (activeCategory === "terminal") {
+                  onResetTerminalSettings?.();
                 } else if (activeCategory === "sdk") {
                   void sdkConfigProps.onReset();
                 } else if (activeCategory === "ai") {
@@ -369,21 +396,21 @@ export function SettingsModal({
                   onResetTweaks();
                 }
               }}
-              className={`inline-flex h-7 items-center rounded-full border px-3 text-[11px] font-medium transition-colors ${
+              className={`inline-flex h-7 items-center rounded-[6px] border px-2.5 text-[11px] font-medium transition-colors ${
                 confirmReset
                   ? "border-red-400/45 bg-red-500/20 text-red-200"
-                  : "border-white/10 bg-white/[0.05] text-[#e8ebf7]/75 hover:bg-white/12 hover:text-[#e8ebf7]"
+                  : "border-[#2D2D30] bg-[#252527] text-[#F4F4F5] hover:bg-[#2D2D31] hover:text-[#F4F4F5]"
               }`}
             >
-              {confirmReset ? "Reset all?" : "Reset defaults"}
+              {confirmReset ? "Reset all? " : "Reset defaults"}
             </button>
             <button
               type="button"
               aria-label="Close Settings"
               onClick={onClose}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-[#e8ebf7]/70 hover:bg-white/12 hover:text-[#e8ebf7]"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] border border-[#2D2D30] bg-[#252527] text-[#F4F4F5] hover:bg-[#2D2D31] hover:text-[#F4F4F5]"
             >
-              <X className="h-4 w-4" />
+            <X className="h-4 w-4" />
             </button>
           </div>
         </div>
@@ -393,22 +420,22 @@ export function SettingsModal({
           {/* Left Category Rail */}
           <nav
             aria-label="Settings categories"
-            className="hidden w-48 shrink-0 flex-col justify-between border-r border-white/[0.08] bg-[#070910]/60 p-3 sm:flex"
+            className="hidden w-48 shrink-0 flex-col justify-between border-r border-[#2D2D30] bg-[#181818] p-2.5 sm:flex"
           >
-            <div className="space-y-1">
+          <div className="space-y-0.5">
               <button
                 type="button"
                 onClick={() => {
                   setConfirmReset(false);
                   setActiveCategory("appearance");
                 }}
-                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+                className={`flex w-full items-center gap-2 rounded-[6px] px-2.5 py-2 text-left text-xs font-medium transition-colors ${
                   activeCategory === "appearance"
-                    ? "bg-white/10 text-[#e8ebf7]"
-                    : "text-[#e8ebf7]/60 hover:bg-white/[0.05] hover:text-[#e8ebf7]"
+                    ? "bg-[#2C2C30] text-[#F4F4F5]"
+                    : "text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
                 }`}
               >
-                <SlidersHorizontal className="h-3.5 w-3.5 text-[#7aa2ff]" />
+              <SlidersHorizontal className="h-3.5 w-3.5 text-[#7AA2FF]" />
                 <span>Appearance &amp; Canvas</span>
               </button>
 
@@ -418,14 +445,30 @@ export function SettingsModal({
                   setConfirmReset(false);
                   setActiveCategory("editor");
                 }}
-                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+                className={`flex w-full items-center gap-2 rounded-[6px] px-2.5 py-2 text-left text-xs font-medium transition-colors ${
                   activeCategory === "editor"
-                    ? "bg-white/10 text-[#e8ebf7]"
-                    : "text-[#e8ebf7]/60 hover:bg-white/[0.05] hover:text-[#e8ebf7]"
+                    ? "bg-[#2C2C30] text-[#F4F4F5]"
+                    : "text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
                 }`}
               >
-                <Type className="h-3.5 w-3.5 text-[#7aa2ff]" />
+              <Type className="h-3.5 w-3.5 text-[#7AA2FF]" />
                 <span>Monaco Editor</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmReset(false);
+                  setActiveCategory("terminal");
+                }}
+                className={`flex w-full items-center gap-2 rounded-[6px] px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+                  activeCategory === "terminal"
+                    ? "bg-[#2C2C30] text-[#F4F4F5]"
+                    : "text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
+                }`}
+              >
+              <TerminalIcon className="h-3.5 w-3.5 text-[#7AA2FF]" />
+                <span>Integrated Terminal</span>
               </button>
 
               <button
@@ -434,13 +477,13 @@ export function SettingsModal({
                   setConfirmReset(false);
                   setActiveCategory("sdk");
                 }}
-                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+                className={`flex w-full items-center gap-2 rounded-[6px] px-2.5 py-2 text-left text-xs font-medium transition-colors ${
                   activeCategory === "sdk"
-                    ? "bg-white/10 text-[#e8ebf7]"
-                    : "text-[#e8ebf7]/60 hover:bg-white/[0.05] hover:text-[#e8ebf7]"
+                    ? "bg-[#2C2C30] text-[#F4F4F5]"
+                    : "text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
                 }`}
               >
-                <Stethoscope className="h-3.5 w-3.5 text-[#7aa2ff]" />
+              <Stethoscope className="h-3.5 w-3.5 text-[#7AA2FF]" />
                 <span>SDK &amp; Toolchain</span>
               </button>
 
@@ -450,14 +493,14 @@ export function SettingsModal({
                   setConfirmReset(false);
                   setActiveCategory("ai");
                 }}
-                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+                className={`flex w-full items-center gap-2 rounded-[6px] px-2.5 py-2 text-left text-xs font-medium transition-colors ${
                   activeCategory === "ai"
-                    ? "bg-white/10 text-[#e8ebf7]"
-                    : "text-[#e8ebf7]/60 hover:bg-white/[0.05] hover:text-[#e8ebf7]"
+                    ? "bg-[#2C2C30] text-[#F4F4F5]"
+                    : "text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
                 }`}
               >
-                <Bot className="h-3.5 w-3.5 text-[#7aa2ff]" />
-                <span>Native VEGA AI</span>
+              <Bot className="h-3.5 w-3.5 text-[#7AA2FF]" />
+                <span>VEGA Assistant</span>
               </button>
 
               <button
@@ -466,58 +509,276 @@ export function SettingsModal({
                   setConfirmReset(false);
                   setActiveCategory("opencode");
                 }}
-                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+                className={`flex w-full items-center gap-2 rounded-[6px] px-2.5 py-2 text-left text-xs font-medium transition-colors ${
                   activeCategory === "opencode"
-                    ? "bg-white/10 text-[#e8ebf7]"
-                    : "text-[#e8ebf7]/60 hover:bg-white/[0.05] hover:text-[#e8ebf7]"
+                    ? "bg-[#2C2C30] text-[#F4F4F5]"
+                    : "text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
                 }`}
               >
-                <Sparkles className="h-3.5 w-3.5 text-[#7aa2ff]" />
-                <span>AI &amp; OpenCode</span>
+              <Sparkles className="h-3.5 w-3.5 text-[#7AA2FF]" />
+                <span>OpenCode CLI</span>
               </button>
-
-              {FUTURE_SETTINGS_SECTIONS.map(({ label, phase, icon: Icon }) => (
-                <button
-                  key={label}
-                  type="button"
-                  disabled
-                  title={`${label} settings arrive in ${phase}`}
-                  className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs text-[#e8ebf7]/40 opacity-55 disabled:cursor-not-allowed"
-                >
-                  <span className="flex items-center gap-2">
-                    <Icon className="h-3.5 w-3.5" />
-                    <span>{label}</span>
-                  </span>
-                  <span className="font-mono text-[9px] uppercase">
-                    {phase}
-                  </span>
-                </button>
-              ))}
             </div>
 
-            <p className="px-2 font-mono text-[10px] leading-relaxed text-[#e8ebf7]/35">
+            <p className="px-2 font-mono text-[10px] leading-relaxed text-[#A1A1AA]">
               {activeCategory === "editor"
                 ? "Applies immediately to all open code editor tabs."
-                : activeCategory === "sdk" || activeCategory === "ai" || activeCategory === "opencode"
-                ? "Persisted in local app storage across IDE restarts."
-                : "Double-click any slider name to reset it."}
+                : activeCategory === "terminal"
+                  ? "Updates active xterm.js surfaces immediately."
+                  : activeCategory === "sdk" ||
+                      activeCategory === "ai" ||
+                      activeCategory === "opencode"
+                    ? "Persisted in local app storage across IDE restarts."
+                    : "Double-click any slider name to reset it."}
             </p>
           </nav>
 
           {/* Right Customization Content */}
-          <div className="vega-scroll flex-1 space-y-4 overflow-y-auto p-5">
+          <div
+            className="vega-scroll min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto bg-[#1F1F1F] p-4"
+            style={{ scrollbarGutter: "stable" }}
+          >
+            {/* Compact Category Bar (< 640px) */}
+            <div
+              role="tablist"
+              aria-label="Settings categories compact"
+              className="vega-no-scrollbar flex items-center gap-1 overflow-x-auto pb-1 sm:hidden"
+            >
+              {(
+                [
+                  { id: "appearance", label: "Appearance" },
+                  { id: "editor", label: "Editor" },
+                  { id: "terminal", label: "Terminal" },
+                  { id: "sdk", label: "SDK" },
+                  { id: "ai", label: "VEGA AI" },
+                  { id: "opencode", label: "OpenCode" },
+                ] as const
+              ).map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeCategory === cat.id}
+                  onClick={() => {
+                    setConfirmReset(false);
+                    setActiveCategory(cat.id);
+                  }}
+                  className={`shrink-0 rounded-[5px] border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                    activeCategory === cat.id
+                      ? "border-[#7AA2FF]/45 bg-[#7AA2FF]/18 text-[#F4F4F5]"
+                      : "border-[#2D2D30] bg-[#252527] text-[#E4E4E7]"
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
             {activeCategory === "ai" ? (
               <AiProviderSettingsPanel {...aiConfigProps} />
             ) : activeCategory === "opencode" ? (
               <OpenCodeSettingsPanel {...opencodeConfigProps} />
+            ) : activeCategory === "terminal" ? (
+            <div className="space-y-4">
+              <div className="space-y-3.5 rounded-[8px] border border-[#2D2D30] bg-[#181818] p-4">
+                <div className="font-mono text-[10px] font-medium tracking-[0.06em] text-[#B4B4BC] uppercase">
+                    Terminal Typography
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className="block text-xs text-[#F4F4F5]">
+                      Font Family (Local Static Fonts)
+                    </span>
+                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+                      {(
+                        [
+                          { id: "jetbrains-mono", label: "JetBrains Mono" },
+                          { id: "geist-mono", label: "Geist Mono" },
+                          { id: "system", label: "System Mono" },
+                        ] as const
+                      ).map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() =>
+                            onTerminalSettingsChange?.({ fontFamily: opt.id })
+                          }
+                          className={`h-7.5 rounded-[6px] border px-2.5 font-mono text-[11px] font-medium transition-colors ${
+                            terminalSettings.fontFamily === opt.id
+                              ? "border-[#7AA2FF]/45 bg-[#7AA2FF]/18 text-[#F4F4F5]"
+                              : "border-[#2D2D30] bg-[#252527] text-[#E4E4E7] hover:bg-[#252527]"
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[#F4F4F5]">Font Size</span>
+                        <span className="font-mono text-[11px] font-semibold text-[#7AA2FF]">
+                          {terminalSettings.fontSize}px
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        aria-label="Terminal font size"
+                        min={11}
+                        max={20}
+                        step={1}
+                        value={terminalSettings.fontSize}
+                        onChange={(e) =>
+                          onTerminalSettingsChange?.({
+                            fontSize: parseInt(e.target.value, 10),
+                          })
+                        }
+                        style={{
+                          ["--fill" as string]: `${(((terminalSettings.fontSize - 11) / (20 - 11)) * 100).toFixed(1)}%`,
+                        }}
+                        className="vega-slider"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[#F4F4F5]">Line Height</span>
+                        <span className="font-mono text-[11px] font-semibold text-[#7AA2FF]">
+                          {terminalSettings.lineHeight.toFixed(2)}
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        aria-label="Terminal line height"
+                        min={1.15}
+                        max={1.8}
+                        step={0.05}
+                        value={terminalSettings.lineHeight}
+                        onChange={(e) =>
+                          onTerminalSettingsChange?.({
+                            lineHeight: parseFloat(e.target.value),
+                          })
+                        }
+                        style={{
+                          ["--fill" as string]: `${(((terminalSettings.lineHeight - 1.15) / (1.8 - 1.15)) * 100).toFixed(1)}%`,
+                        }}
+                        className="vega-slider"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3.5 rounded-[8px] border border-[#2D2D30] bg-[#181818] p-4">
+                  <div className="font-mono text-[10px] font-medium tracking-[0.06em] text-[#B4B4BC] uppercase">
+                    Cursor &amp; Launch Behavior
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className="block text-xs text-[#F4F4F5]">
+                      Cursor Style
+                    </span>
+                    <div className="flex gap-1.5">
+                      {(["block","underline","bar"] as const).map((st) => (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() =>
+                            onTerminalSettingsChange?.({ cursorStyle: st })
+                          }
+                          className={`h-7 flex-1 rounded-[6px] border font-mono text-[11px] font-medium capitalize transition-colors ${
+                            terminalSettings.cursorStyle === st
+                              ? "border-[#7AA2FF]/45 bg-[#7AA2FF]/18 text-[#F4F4F5]"
+                              : "border-[#2D2D30] bg-[#252527] text-[#E4E4E7] hover:bg-[#252527]"
+                          }`}
+                        >
+                          {st}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="flex items-center justify-between rounded-[6px] border border-[#2D2D30] bg-[#181818] px-3 py-2.5">
+                      <div>
+                        <p className="text-xs font-medium text-[#F4F4F5]">
+                          Cursor Blink
+                        </p>
+                        <p className="text-[10.5px] text-[#B4B4BC]">
+                          Animate terminal prompt cursor
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={terminalSettings.cursorBlink}
+                        aria-label="Toggle terminal cursor blink"
+                        onClick={() =>
+                          onTerminalSettingsChange?.({
+                            cursorBlink: !terminalSettings.cursorBlink,
+                          })
+                        }
+                        className={`relative h-[18px] w-[30px] shrink-0 rounded-full transition-colors ${
+                          terminalSettings.cursorBlink
+                            ? "bg-[#7AA2FF]"
+                            : "bg-[#2C2C30]"
+                        }`}
+                      >
+                        <span
+                          className={`block h-[14px] w-[14px] rounded-full bg-white shadow transition-transform ${
+                            terminalSettings.cursorBlink
+                              ? "translate-x-[14px]"
+                              : "translate-x-[2px]"
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-[6px] border border-[#2D2D30] bg-[#181818] px-3 py-2.5">
+                      <div>
+                        <p className="text-xs font-medium text-[#F4F4F5]">
+                          Auto-Launch Shell
+                        </p>
+                        <p className="text-[10.5px] text-[#B4B4BC]">
+                          Start default shell when opening Terminal tab
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={terminalSettings.autoLaunch}
+                        aria-label="Toggle terminal auto-launch"
+                        onClick={() =>
+                          onTerminalSettingsChange?.({
+                            autoLaunch: !terminalSettings.autoLaunch,
+                          })
+                        }
+                        className={`relative h-[18px] w-[30px] shrink-0 rounded-full transition-colors ${
+                          terminalSettings.autoLaunch
+                            ? "bg-[#7AA2FF]"
+                            : "bg-[#2C2C30]"
+                        }`}
+                      >
+                        <span
+                          className={`block h-[14px] w-[14px] rounded-full bg-white shadow transition-transform ${
+                            terminalSettings.autoLaunch
+                              ? "translate-x-[14px]"
+                              : "translate-x-[2px]"
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             ) : activeCategory === "sdk" ? (
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#7aa2ff]/20 bg-[#7aa2ff]/[0.07] px-4 py-3">
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-[8px] border border-[#7AA2FF]/20 bg-[#7AA2FF]/[0.06] px-4 py-3">
                   <div>
-                    <p className="text-xs font-medium text-[#e8ebf7]">
+                    <p className="text-xs font-medium text-[#F4F4F5]">
                       Need full toolchain validation?
                     </p>
-                    <p className="text-[11px] text-[#e8ebf7]/60">
+                    <p className="text-[11px] text-[#E4E4E7]">
                       Use SDK Doctor to verify compiler execution, Make, Python,
                       target triple, and XMODEM uploader checks.
                     </p>
@@ -525,9 +786,9 @@ export function SettingsModal({
                   <button
                     type="button"
                     onClick={onOpenSdkDoctor}
-                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-[#7aa2ff]/40 bg-[#7aa2ff]/18 px-3.5 text-xs font-medium text-[#e8ebf7] hover:bg-[#7aa2ff]/28"
+                    className="inline-flex h-7.5 shrink-0 items-center gap-1.5 rounded-[6px] border border-[#7AA2FF]/40 bg-[#7AA2FF]/18 px-3 text-xs font-medium text-[#F4F4F5] hover:bg-[#7AA2FF]/28"
                   >
-                    <Stethoscope className="h-3.5 w-3.5 text-[#7aa2ff]" />
+                  <Stethoscope className="h-3.5 w-3.5 text-[#7AA2FF]" />
                     <span>Open SDK Doctor</span>
                   </button>
                 </div>
@@ -535,17 +796,17 @@ export function SettingsModal({
                 <SdkConfigForm {...sdkConfigProps} />
               </div>
             ) : activeCategory === "editor" ? (
-              <div className="space-y-4">
-                <div className="space-y-3 rounded-2xl border border-white/[0.08] bg-[#06070c]/60 p-4">
-                  <div className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/45 uppercase">
+            <div className="space-y-4">
+              <div className="space-y-3 rounded-[8px] border border-[#2D2D30] bg-[#181818] p-4">
+                <div className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#B4B4BC] uppercase">
                     Typography &amp; Wrapping
                   </div>
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-1">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-[#e8ebf7]/80">Font Size</span>
-                        <span className="font-mono text-[11px] font-semibold text-[#7aa2ff]">
+                        <span className="text-[#F4F4F5]">Font Size</span>
+                        <span className="font-mono text-[11px] font-semibold text-[#7AA2FF]">
                           {editorSettings.fontSize}px
                         </span>
                       </div>
@@ -569,11 +830,11 @@ export function SettingsModal({
                     </div>
 
                     <div className="space-y-1.5">
-                      <span className="block text-xs text-[#e8ebf7]/80">
+                      <span className="block text-xs text-[#F4F4F5]">
                         Word Wrap
                       </span>
                       <div className="flex gap-1.5">
-                        {(["off", "on"] as const).map((mode) => (
+                        {(["off","on"] as const).map((mode) => (
                           <button
                             key={mode}
                             type="button"
@@ -582,8 +843,8 @@ export function SettingsModal({
                             }
                             className={`h-7 flex-1 rounded-lg border font-mono text-[11px] font-medium transition-colors ${
                               editorSettings.wordWrap === mode
-                                ? "border-[#7aa2ff]/45 bg-[#7aa2ff]/20 text-[#e8ebf7]"
-                                : "border-white/10 bg-white/[0.03] text-[#e8ebf7]/60 hover:bg-white/[0.07]"
+                                ? "border-[#7AA2FF]/45 bg-[#7AA2FF]/20 text-[#F4F4F5]"
+                                : "border-[#2D2D30] bg-[#252527] text-[#E4E4E7] hover:bg-[#252527]"
                             }`}
                           >
                             {mode === "on" ? "Wrap On" : "No Wrap"}
@@ -594,14 +855,14 @@ export function SettingsModal({
                   </div>
                 </div>
 
-                <div className="space-y-3 rounded-2xl border border-white/[0.08] bg-[#06070c]/60 p-4">
-                  <div className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/45 uppercase">
+                <div className="space-y-3 rounded-2xl border border-[#2D2D30] bg-[#181818] p-4">
+                  <div className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#B4B4BC] uppercase">
                     Indentation &amp; Chrome
                   </div>
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
-                      <span className="block text-xs text-[#e8ebf7]/80">
+                      <span className="block text-xs text-[#F4F4F5]">
                         Tab Size
                       </span>
                       <div className="flex gap-1.5">
@@ -614,8 +875,8 @@ export function SettingsModal({
                             }
                             className={`h-7 flex-1 rounded-lg border font-mono text-[11px] font-medium transition-colors ${
                               editorSettings.tabSize === size
-                                ? "border-[#7aa2ff]/45 bg-[#7aa2ff]/20 text-[#e8ebf7]"
-                                : "border-white/10 bg-white/[0.03] text-[#e8ebf7]/60 hover:bg-white/[0.07]"
+                                ? "border-[#7AA2FF]/45 bg-[#7AA2FF]/20 text-[#F4F4F5]"
+                                : "border-[#2D2D30] bg-[#252527] text-[#E4E4E7] hover:bg-[#252527]"
                             }`}
                           >
                             {size}
@@ -625,7 +886,7 @@ export function SettingsModal({
                     </div>
 
                     <div className="space-y-1.5">
-                      <span className="block text-xs text-[#e8ebf7]/80">
+                      <span className="block text-xs text-[#F4F4F5]">
                         Indentation Character
                       </span>
                       <div className="flex gap-1.5">
@@ -643,8 +904,8 @@ export function SettingsModal({
                             }
                             className={`h-7 flex-1 rounded-lg border font-mono text-[11px] font-medium transition-colors ${
                               editorSettings.insertSpaces === opt.value
-                                ? "border-[#7aa2ff]/45 bg-[#7aa2ff]/20 text-[#e8ebf7]"
-                                : "border-white/10 bg-white/[0.03] text-[#e8ebf7]/60 hover:bg-white/[0.07]"
+                                ? "border-[#7AA2FF]/45 bg-[#7AA2FF]/20 text-[#F4F4F5]"
+                                : "border-[#2D2D30] bg-[#252527] text-[#E4E4E7] hover:bg-[#252527]"
                             }`}
                           >
                             {opt.label}
@@ -654,11 +915,11 @@ export function SettingsModal({
                     </div>
 
                     <div className="space-y-1.5">
-                      <span className="block text-xs text-[#e8ebf7]/80">
+                      <span className="block text-xs text-[#F4F4F5]">
                         Line Numbers
                       </span>
                       <div className="flex gap-1.5">
-                        {(["on", "relative", "off"] as const).map((ln) => (
+                        {(["on","relative","off"] as const).map((ln) => (
                           <button
                             key={ln}
                             type="button"
@@ -667,8 +928,8 @@ export function SettingsModal({
                             }
                             className={`h-7 flex-1 rounded-lg border font-mono text-[11px] font-medium capitalize transition-colors ${
                               editorSettings.lineNumbers === ln
-                                ? "border-[#7aa2ff]/45 bg-[#7aa2ff]/20 text-[#e8ebf7]"
-                                : "border-white/10 bg-white/[0.03] text-[#e8ebf7]/60 hover:bg-white/[0.07]"
+                                ? "border-[#7AA2FF]/45 bg-[#7AA2FF]/20 text-[#F4F4F5]"
+                                : "border-[#2D2D30] bg-[#252527] text-[#E4E4E7] hover:bg-[#252527]"
                             }`}
                           >
                             {ln}
@@ -677,12 +938,12 @@ export function SettingsModal({
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between rounded-xl border border-white/8 bg-[#090b13]/70 px-3 py-2.5">
+                    <div className="flex items-center justify-between rounded-xl border border-[#2D2D30] bg-[#181818] px-3 py-2.5">
                       <div>
-                        <p className="text-xs font-medium text-[#e8ebf7]">
+                        <p className="text-xs font-medium text-[#F4F4F5]">
                           Code Minimap
                         </p>
-                        <p className="text-[10px] text-[#e8ebf7]/45">
+                        <p className="text-[10px] text-[#B4B4BC]">
                           Compact overview strip on the right edge
                         </p>
                       </div>
@@ -697,7 +958,7 @@ export function SettingsModal({
                           })
                         }
                         className={`relative h-[18px] w-[30px] shrink-0 rounded-full transition-colors ${
-                          editorSettings.minimap ? "bg-[#7aa2ff]" : "bg-white/15"
+                          editorSettings.minimap ? "bg-[#7AA2FF]" : "bg-[#2C2C30]"
                         }`}
                       >
                         <span
@@ -715,19 +976,19 @@ export function SettingsModal({
             ) : (
               <>
             {/* Ambient Animal Species Switcher */}
-            <div className="space-y-3 rounded-2xl border border-white/[0.08] bg-[#06070c]/60 p-4">
+            <div className="space-y-3 rounded-2xl border border-[#2D2D30] bg-[#181818] p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <span className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/45 uppercase">
+                  <span className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#B4B4BC] uppercase">
                     Ambient Animal Species
                   </span>
-                  <p className="mt-0.5 text-xs text-[#e8ebf7]/60">
+                  <p className="mt-0.5 text-xs text-[#E4E4E7]">
                     Choose the procedural ASCII creature populating the
                     background grid.
                   </p>
                 </div>
 
-                <label className="flex items-center gap-2 text-xs text-[#e8ebf7]/75">
+                <label className="flex items-center gap-2 text-xs text-[#F4F4F5]">
                   <span>Corner to corner</span>
                   <button
                     type="button"
@@ -738,7 +999,7 @@ export function SettingsModal({
                       onTweaksChange({ cornerToCorner: !tweaks.cornerToCorner })
                     }
                     className={`relative h-[18px] w-[30px] rounded-full transition-colors ${
-                      tweaks.cornerToCorner ? "bg-[#7aa2ff]" : "bg-white/15"
+                      tweaks.cornerToCorner ? "bg-[#7AA2FF]" : "bg-[#2C2C30]"
                     }`}
                   >
                     <span
@@ -759,7 +1020,7 @@ export function SettingsModal({
                 onChange={onSpeciesChange}
                 wrapOnSmall
                 liquid={false}
-                className="w-full justify-center bg-[#0b0d16]/75"
+                className="w-full justify-center bg-[#181818]"
               />
             </div>
 
@@ -772,18 +1033,20 @@ export function SettingsModal({
         </div>
 
         {/* Footer Hint */}
-        <div className="flex h-9 shrink-0 items-center justify-between border-t border-white/[0.08] bg-[#070910]/75 px-5 font-mono text-[11px] text-[#e8ebf7]/45">
+        <div className="flex h-9 shrink-0 items-center justify-between border-t border-[#2D2D30] bg-[#181818] px-5 font-mono text-[11px] text-[#B4B4BC]">
           <span>
             {activeCategory === "editor"
               ? "Editor preferences save locally and apply immediately"
-              : activeCategory === "sdk"
-              ? "VEGA SDK settings persist in application data directory"
-              : activeCategory === "ai"
-              ? "API keys are stored securely in OS Credential Store — never SQLite"
-              : activeCategory === "opencode"
-              ? "OpenCode configuration persists in application data directory"
-              : hoveredHint ??
-                "Hover a slider for details · Double-click a label to reset"}
+              : activeCategory === "terminal"
+                ? "Terminal typography uses local static fonts and saves locally"
+                : activeCategory === "sdk"
+                  ? "VEGA SDK settings persist in application data directory"
+                  : activeCategory === "ai"
+                    ? "API keys are stored securely in OS Credential Store — never SQLite"
+                    : activeCategory === "opencode"
+                      ? "OpenCode configuration persists in application data directory"
+                      : hoveredHint ??
+                        "Hover a slider for details · Double-click a label to reset"}
           </span>
           <span>Saved locally</span>
         </div>

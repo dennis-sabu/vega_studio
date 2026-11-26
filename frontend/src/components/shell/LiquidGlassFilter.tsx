@@ -8,9 +8,9 @@ interface LiquidGlassFilterProps {
 }
 
 /**
- * Enables the Chromium-only SVG liquid-glass displacement filter on
- * `html.liquid` while falling back cleanly to plain frosted blur elsewhere.
- */
+  * Enables the Chromium-only SVG liquid-glass displacement filter on
+  * `html.liquid` while falling back cleanly to plain frosted blur elsewhere.
+  */
 export function LiquidGlassFilter({
   refraction = 40,
   ripple = 0.007,

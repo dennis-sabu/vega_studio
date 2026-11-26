@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import List, Optional
 from urllib.parse import urlparse
@@ -10,9 +11,23 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def is_frozen_backend() -> bool:
+    """Return True when running from a frozen PyInstaller bundle."""
+    return bool(getattr(sys, "frozen", False))
+
+
+def get_backend_package_root() -> Path:
+    """Return root of the `app` package for source runs and frozen bundles."""
+    if is_frozen_backend() and hasattr(sys, "_MEIPASS"):
+        candidate = Path(getattr(sys, "_MEIPASS")).resolve() / "app"
+        if candidate.exists():
+            return candidate
+    return Path(__file__).resolve().parent
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=None if getattr(sys, "frozen", False) else ".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -22,12 +37,13 @@ class Settings(BaseSettings):
     HOST: str = "127.0.0.1"
     PORT: int = 8765
 
-    # CORS – list of allowed localhost origins; never wildcard
+    # CORS – list of allowed localhost or packaged Electron app origins; never wildcard
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "app://vega-studio",
     ]
 
     # Logging
@@ -94,10 +110,12 @@ class Settings(BaseSettings):
     @field_validator("CORS_ORIGINS")
     @classmethod
     def _validate_cors_localhost_only(cls, v: List[str]) -> List[str]:
-        """Ensure CORS origins are localhost/127.0.0.1 only and never wildcard."""
+        """Ensure CORS origins are localhost/127.0.0.1 or packaged Electron app origin only."""
         for origin in v:
             if origin == "*":
                 raise ValueError("Wildcard '*' is not allowed in CORS_ORIGINS.")
+            if origin == "app://vega-studio":
+                continue
             parsed = urlparse(origin)
             if parsed.hostname not in ("localhost", "127.0.0.1"):
                 raise ValueError(
@@ -121,11 +139,9 @@ def is_allowed_ws_origin(origin: Optional[str]) -> bool:
     cleaned = origin.strip()
     if cleaned.lower() == "null":
         return False
-    if cleaned in settings.CORS_ORIGINS:
+    if cleaned == "app://vega-studio" or cleaned in settings.CORS_ORIGINS:
         return True
     parsed = urlparse(cleaned)
-    if parsed.scheme in ("app", "vega"):
-        return True
     if parsed.scheme in ("http", "https") and parsed.hostname in ("localhost", "127.0.0.1", "::1"):
         return True
     return False

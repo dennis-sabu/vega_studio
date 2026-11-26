@@ -314,11 +314,24 @@ class BuildService:
     def _emit_event(self, record: BuildRunRecord, payload: Dict[str, Any]) -> None:
         with record.lock:
             subs = list(record.subscribers)
+        is_critical = payload.get("type") in ("completed", "cleared", "snapshot")
+
+        def _deliver(q: "asyncio.Queue[Dict[str, Any]]") -> None:
+            try:
+                q.put_nowait(payload)
+            except asyncio.QueueFull:
+                if is_critical:
+                    try:
+                        q.get_nowait()
+                        q.put_nowait(payload)
+                    except (asyncio.QueueEmpty, asyncio.QueueFull):
+                        pass
+
         for queue, loop in subs:
             if loop.is_closed():
                 continue
             try:
-                loop.call_soon_threadsafe(queue.put_nowait, payload)
+                loop.call_soon_threadsafe(_deliver, queue)
             except RuntimeError:
                 pass
 
@@ -441,6 +454,8 @@ class BuildService:
                     try:
                         for line in iter(pipe.readline, ""):
                             self._append_log(record, project_root, stream_name, line)
+                    except (OSError, ValueError):
+                        pass
                     finally:
                         try:
                             pipe.close()
@@ -684,12 +699,20 @@ class BuildService:
             record = self._runs.get(target_id) if target_id else None
         if record is not None:
             with record.lock:
+                if record.summary.status == "running":
+                    raise BuildServiceError(
+                        "Cannot clear build output while a build is still running.",
+                        409,
+                    )
                 record.logs.clear()
                 record.diagnostics.clear()
+                record.seq_counter = 0
+                record.diag_counter = 0
                 record.summary.error_count = 0
                 record.summary.warning_count = 0
                 record.summary.log_line_count = 0
                 record.summary.truncated_logs = False
+            self._emit_event(record, {"type": "cleared", "build_id": record.summary.build_id})
         return self.get_build_state()
 
     def list_history(self) -> BuildHistoryResponse:
@@ -728,8 +751,11 @@ class BuildService:
             with active_rec.lock:
                 active_rec.cancel_event.set()
                 proc = active_rec.active_proc
+                worker = active_rec.worker_thread
             if proc:
                 terminate_process_tree(proc)
+            if worker and worker.is_alive():
+                worker.join(timeout=1.5)
 
 
 _build_service_singleton = BuildService(settings)

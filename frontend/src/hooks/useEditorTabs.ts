@@ -574,6 +574,8 @@ export function useEditorTabs({ projectDir, onLog }: UseEditorTabsOptions) {
     disposeAllTabModels();
     setOpenFileTabs([]);
     setActiveFileTabPath(null);
+    setCursorPosition({ lineNumber: 1, column: 1, selectionLength: 0 });
+    setPendingReveal(null);
   }, []);
 
   const handleEntryRenamed = useCallback((oldPath: string, newPath: string) => {

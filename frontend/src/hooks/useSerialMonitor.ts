@@ -289,17 +289,21 @@ export function useSerialMonitor({
       } else if (msg.type === "log") {
         if (typeof msg.rx_count === "number") setRxCount(msg.rx_count);
         if (typeof msg.tx_count === "number") setTxCount(msg.tx_count);
+        let overflowed = false;
         setLogs((prev) => {
           if (prev.length > 0 && prev[prev.length - 1].seq >= msg.line.seq) {
             return prev;
           }
           const next = [...prev, msg.line];
           if (next.length > MAX_CLIENT_SERIAL_LOGS) {
-            setTruncatedLogs(true);
+            overflowed = true;
             return next.slice(-MAX_CLIENT_SERIAL_LOGS);
           }
           return next;
         });
+        if (overflowed) {
+          setTruncatedLogs(true);
+        }
       } else if (msg.type === "status") {
         setStatus(msg.status);
         setError(msg.error_message);
@@ -359,9 +363,7 @@ export function useSerialMonitor({
           return;
         }
       } finally {
-        if (!signal?.aborted) {
-          setRefreshingDevices(false);
-        }
+        setRefreshingDevices(false);
       }
     },
     [isBackendConnected]
@@ -371,6 +373,11 @@ export function useSerialMonitor({
   useEffect(() => {
     if (!isBackendConnected) {
       closeSocket();
+      queueMicrotask(() => {
+        setStatus("disconnected");
+        setActivePort(null);
+        setRefreshingDevices(false);
+      });
       return;
     }
 

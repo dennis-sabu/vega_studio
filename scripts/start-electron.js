@@ -13,21 +13,41 @@ let build = null;
 let shuttingDown = false;
 
 function killProcessTree(proc) {
-  if (!proc || proc.killed || proc.exitCode !== null) return;
+  if (!proc || proc.exitCode !== null || proc.signalCode !== null) return;
   if (IS_WIN && proc.pid) {
     spawnSync('taskkill', ['/PID', String(proc.pid), '/T', '/F'], {
       stdio: 'ignore',
     });
   } else {
-    proc.kill('SIGTERM');
+    try {
+      proc.kill('SIGTERM');
+    } catch {
+      // ignore
+    }
   }
 }
 
 function shutdown(code) {
   if (shuttingDown) return;
   shuttingDown = true;
-  killProcessTree(child);
   killProcessTree(build);
+  if (child && child.exitCode === null && child.signalCode === null) {
+    // Allow Electron's shutdownAndQuit handler to cleanly stop the backend before forced teardown
+    try {
+      child.kill('SIGTERM');
+    } catch {
+      // ignore
+    }
+    const timer = setTimeout(() => {
+      killProcessTree(child);
+      process.exit(code);
+    }, 3500);
+    child.once('exit', () => {
+      clearTimeout(timer);
+      process.exit(code);
+    });
+    return;
+  }
   process.exit(code);
 }
 

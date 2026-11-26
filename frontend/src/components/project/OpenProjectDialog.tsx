@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from"react";
 import {
   AlertCircle,
   Clock,
@@ -8,9 +8,9 @@ import {
   Loader2,
   Trash2,
   X,
-} from "lucide-react";
-import type { DirectoryPickerOutcome } from "@/hooks/useWorkspace";
-import type { RecentProjectEntry } from "@/types/project";
+} from"lucide-react";
+import type { DirectoryPickerOutcome } from"@/hooks/useWorkspace";
+import type { RecentProjectEntry } from"@/types/project";
 
 interface OpenProjectDialogProps {
   open: boolean;
@@ -45,10 +45,24 @@ export function OpenProjectDialog({
 
   useEffect(() => {
     if (!open) return;
+    const prev =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     queueMicrotask(() => setLocalError(null));
+    return () => {
+      queueMicrotask(() => {
+        if (prev && prev.isConnected) prev.focus();
+      });
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !pending) {
         event.preventDefault();
+        event.stopPropagation();
         onClose();
       }
     };
@@ -113,27 +127,30 @@ export function OpenProjectDialog({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Open VEGA Studio Project"
+      aria-labelledby="open-project-title"
       onClick={(e) => {
         if (e.target === e.currentTarget && !pending) onClose();
       }}
-      className="vega-view-enter fixed inset-0 z-50 flex items-center justify-center bg-[#06070c]/70 p-4 backdrop-blur-sm"
+      className="vega-view-enter fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md"
     >
       <div
-        className="vega-glass flex max-h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-[24px] bg-[#090b13]/92 shadow-2xl"
+        className="vega-glass flex max-h-[88vh] w-full max-w-xl flex-col overflow-hidden rounded-[24px] shadow-2xl"
         style={{ ["--blur" as string]: "18px", ["--tint" as string]: "0.7" }}
       >
         {/* Header */}
-        <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-5 py-3.5">
+        <div className="flex shrink-0 items-center justify-between border-b border-[#2D2D30] px-5 py-3.5">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-[#7aa2ff]">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#2D2D30] bg-[#252527] text-[#7AA2FF]">
               <FolderOpen className="h-4 w-4" />
             </div>
             <div>
-              <h2 className="text-sm font-medium text-[#e8ebf7]">
+              <h2
+                id="open-project-title"
+                className="text-sm font-medium text-[#F4F4F5]"
+              >
                 Open VEGA Project
               </h2>
-              <p className="text-[11px] text-[#e8ebf7]/50">
+              <p className="text-[11px] text-[#B4B4BC]">
                 Select a directory containing a valid vega-project.json file
               </p>
             </div>
@@ -144,17 +161,17 @@ export function OpenProjectDialog({
             disabled={pending}
             aria-label="Close Open Project dialog"
             onClick={onClose}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-[#e8ebf7]/70 hover:bg-white/12 hover:text-[#e8ebf7] disabled:opacity-40"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#2D2D30] bg-[#252527] text-[#F4F4F5] hover:bg-[#2D2D31] hover:text-[#F4F4F5] disabled:opacity-40"
           >
-            <X className="h-4 w-4" />
+          <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Body */}
         <div className="vega-scroll space-y-4 overflow-y-auto p-5">
           {!isBackendConnected && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-amber-400/25 bg-amber-500/10 p-3 text-xs text-amber-200">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex items-start gap-2.5 rounded-xl border border-amber-400/25 bg-amber-500/10 p-3 text-xs text-amber-200">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>
                 Backend service is disconnected. Start the backend to validate
                 and open project folders.
@@ -163,8 +180,8 @@ export function OpenProjectDialog({
           )}
 
           {displayedError && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-red-400/30 bg-red-500/12 p-3 text-xs text-red-200">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex items-start gap-2.5 rounded-xl border border-red-400/30 bg-red-500/12 p-3 text-xs text-red-200">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>{displayedError}</span>
             </div>
           )}
@@ -173,7 +190,7 @@ export function OpenProjectDialog({
           <form onSubmit={handleSubmit} className="space-y-2">
             <label
               htmlFor="vega-open-project-path"
-              className="block font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/55 uppercase"
+              className="block font-mono text-[10px] font-semibold tracking-[0.08em] text-[#E4E4E7] uppercase"
             >
               Project Folder Path
             </label>
@@ -188,7 +205,7 @@ export function OpenProjectDialog({
                   setManualPath(e.target.value);
                 }}
                 placeholder="Select or paste project directory path..."
-                className="h-10 min-w-0 flex-1 rounded-xl border border-white/12 bg-[#06070c]/85 px-3 font-mono text-xs text-[#e8ebf7] placeholder:text-[#e8ebf7]/30 focus:border-[#7aa2ff]/50 focus:outline-none focus:ring-2 focus:ring-[#7aa2ff]/20"
+                className="h-10 min-w-0 flex-1 rounded-xl border border-[#2D2D30] bg-[#181818] px-3 font-mono text-xs text-[#F4F4F5] placeholder:text-[#8E8E98] focus:border-[#7AA2FF]/50 focus:outline-none focus:ring-2 focus:ring-[#7AA2FF]/20"
               />
               <button
                 type="button"
@@ -199,9 +216,9 @@ export function OpenProjectDialog({
                     ? "Browse for a VEGA Studio project folder"
                     : "Native dialog available in Electron desktop mode"
                 }
-                className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-white/12 bg-white/[0.05] px-3.5 text-xs font-medium text-[#e8ebf7]/85 transition-colors hover:bg-white/12 hover:text-[#e8ebf7] disabled:opacity-50"
+                className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-[#2D2D30] bg-[#252527] px-3.5 text-xs font-medium text-[#F4F4F5] transition-colors hover:bg-[#2D2D31] hover:text-[#F4F4F5] disabled:opacity-50"
               >
-                <FolderOpen className="h-3.5 w-3.5 text-[#7aa2ff]" />
+              <FolderOpen className="h-3.5 w-3.5 text-[#7AA2FF]" />
                 <span>{browsing ? "Opening..." : "Browse..."}</span>
               </button>
             </div>
@@ -209,37 +226,37 @@ export function OpenProjectDialog({
               <button
                 type="submit"
                 disabled={pending || !isBackendConnected || !manualPath.trim()}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#e8ebf7] px-4 text-xs font-semibold text-[#06070c] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#e8ebf7] px-4 text-xs font-semibold text-[#0D0D0F] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 <span>{pending ? "Opening..." : "Open Project"}</span>
               </button>
             </div>
           </form>
 
           {/* Recent Projects */}
-          <div className="space-y-2 border-t border-white/[0.08] pt-4">
+          <div className="space-y-2 border-t border-[#2D2D30] pt-4">
             <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 font-mono text-[10px] font-semibold tracking-[0.08em] text-[#e8ebf7]/50 uppercase">
+              <span className="flex items-center gap-1.5 font-mono text-[10px] font-semibold tracking-[0.08em] text-[#B4B4BC] uppercase">
                 <Clock className="h-3 w-3" />
                 <span>Recent Projects</span>
               </span>
-              <span className="font-mono text-[10px] text-[#e8ebf7]/35">
+              <span className="font-mono text-[10px] text-[#A1A1AA]">
                 {recentProjects.length} saved
               </span>
             </div>
 
             {recentProjects.length === 0 ? (
-              <div className="rounded-xl border border-white/8 bg-[#06070c]/55 px-4 py-4 text-center text-xs text-[#e8ebf7]/45">
+            <div className="rounded-xl border border-[#2D2D30] bg-[#181818] px-4 py-4 text-center text-xs text-[#B4B4BC]">
                 No recent VEGA projects yet. Create a new project or browse to an
                 existing folder.
               </div>
             ) : (
-              <ul className="space-y-1.5">
+            <ul className="space-y-1.5">
                 {recentProjects.map((item) => (
                   <li
                     key={item.project_dir}
-                    className="flex items-center justify-between gap-2 rounded-xl border border-white/8 bg-[#06070c]/65 px-3 py-2.5"
+                    className="flex items-center justify-between gap-2 rounded-xl border border-[#2D2D30] bg-[#181818] px-3 py-2.5"
                   >
                     <button
                       type="button"
@@ -247,20 +264,20 @@ export function OpenProjectDialog({
                       onClick={() => void tryOpenPath(item.project_dir)}
                       className="min-w-0 flex-1 text-left transition-opacity hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-xs font-medium text-[#e8ebf7]">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-xs font-medium text-[#F4F4F5]">
                           {item.name}
                         </span>
-                        <span className="rounded border border-white/10 bg-white/[0.04] px-1.5 py-0.5 font-mono text-[9px] text-[#e8ebf7]/50">
+                        <span className="rounded border border-[#2D2D30] bg-[#252527] px-1.5 py-0.5 font-mono text-[9px] text-[#B4B4BC]">
                           {item.board}
                         </span>
                         {!item.exists && (
-                          <span className="rounded border border-red-400/30 bg-red-500/15 px-1.5 py-0.5 font-mono text-[9px] text-red-300">
+                        <span className="rounded border border-red-400/30 bg-red-500/15 px-1.5 py-0.5 font-mono text-[9px] text-red-300">
                             Missing
                           </span>
                         )}
                       </div>
-                      <p className="mt-0.5 truncate font-mono text-[10px] text-[#e8ebf7]/45">
+                      <p className="mt-0.5 truncate font-mono text-[10px] text-[#B4B4BC]">
                         {item.project_dir}
                       </p>
                     </button>
@@ -270,9 +287,9 @@ export function OpenProjectDialog({
                       aria-label={`Remove ${item.name} from recent projects`}
                       title="Remove from recent projects"
                       onClick={() => void onForgetRecent(item.project_dir)}
-                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[#e8ebf7]/40 transition-colors hover:bg-white/[0.08] hover:text-red-300"
+                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[#A1A1AA] transition-colors hover:bg-[#252527] hover:text-red-300"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                    <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </li>
                 ))}
@@ -282,12 +299,12 @@ export function OpenProjectDialog({
         </div>
 
         {/* Footer */}
-        <div className="flex shrink-0 items-center justify-end border-t border-white/[0.08] bg-[#070910]/75 px-5 py-3">
+        <div className="flex shrink-0 items-center justify-end border-t border-[#2D2D30] bg-[#181818] px-5 py-3">
           <button
             type="button"
             disabled={pending}
             onClick={onClose}
-            className="inline-flex h-8 items-center rounded-full border border-white/10 bg-white/[0.04] px-4 text-xs font-medium text-[#e8ebf7]/75 hover:bg-white/10 hover:text-[#e8ebf7] disabled:opacity-45"
+            className="inline-flex h-8 items-center rounded-full border border-[#2D2D30] bg-[#252527] px-4 text-xs font-medium text-[#F4F4F5] hover:bg-[#2D2D31] hover:text-[#F4F4F5] disabled:opacity-45"
           >
             Cancel
           </button>

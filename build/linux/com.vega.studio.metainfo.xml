@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.vega.studio</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>VEGA Studio</name>
+  <summary>Desktop Firmware IDE for C-DAC VEGA ARIES V3 RISC-V</summary>
+  <description>
+    <p>
+      VEGA Studio is a dedicated desktop embedded firmware IDE tailored for C-DAC
+      VEGA ARIES V3 RISC-V development boards. It integrates a live project explorer,
+      Monaco editor, Make build orchestration, XMODEM flashing, USB-UART serial
+      monitor, POSIX PTY terminal, Git/GitHub integration, AI assistance, and
+      guided examples &amp; documentation.
+    </p>
+  </description>
+  <launchable type="desktop-id">vega-studio.desktop</launchable>
+</component>

@@ -111,8 +111,8 @@ export function ResizeHandle({
             : "inset-x-0 top-1/2 h-px -translate-y-1/2"
         } ${
           dragging
-            ? "bg-[#7aa2ff]"
-            : "bg-white/8 group-hover:bg-[#7aa2ff]/70 group-focus-visible:bg-[#7aa2ff]"
+            ? "bg-[#7AA2FF]"
+            : "bg-[#2E2E32] group-hover:bg-[#7AA2FF] group-focus-visible:bg-[#7AA2FF]"
         }`}
       />
     </div>

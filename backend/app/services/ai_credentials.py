@@ -449,6 +449,10 @@ class AICredentialManager:
         except CredentialStorageUnavailableError:
             return None
 
+    def get_session_secrets(self) -> list[str]:
+        with self._lock:
+            return list(self._session_keys.values())
+
     def get_all_known_secrets(self) -> list[str]:
         secrets: list[str] = []
         with self._lock:

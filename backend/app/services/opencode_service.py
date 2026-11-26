@@ -14,6 +14,7 @@ import asyncio
 import base64
 from collections import deque
 from dataclasses import dataclass, field
+from http.client import HTTPException as HttpClientException
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -52,6 +53,7 @@ from app.models.opencode import (
     validate_opencode_executable_path,
     validate_opencode_session_id,
 )
+from app.services.ai_context import is_sensitive_relative_path
 from app.services.persistence import AppPersistence
 from app.services.process_utils import terminate_process_tree, utc_now_iso
 from app.services.project_service import ProjectService, ProjectServiceError, validate_directory_input
@@ -191,6 +193,7 @@ class OpenCodeService:
         self._persistence = self._projects.persistence
 
         self._lock = threading.RLock()
+        self._startup_lock = threading.Lock()
         self._server_proc: Optional[subprocess.Popen[str]] = None
         self._server_port: Optional[int] = None
         self._server_password: Optional[str] = None
@@ -289,12 +292,16 @@ class OpenCodeService:
         with self._lock:
             self._stop_event.set()
             proc = self._server_proc
+            sse_t = self._sse_thread
             self._server_proc = None
             self._server_port = None
             self._server_password = None
             self._server_exec = None
+            self._sse_thread = None
         if proc is not None and proc.poll() is None:
             terminate_process_tree(proc)
+        if sse_t is not None and sse_t.is_alive() and sse_t is not threading.current_thread():
+            sse_t.join(timeout=2.0)
 
     # ── Executable Discovery & Configuration ─────────────────────────────────────
 
@@ -531,9 +538,10 @@ class OpenCodeService:
             except Exception:
                 pass
             raise OpenCodeServiceError(msg, status_code=int(exc.code)) from exc
-        except URLError as exc:
+        except (URLError, TimeoutError, HttpClientException, OSError, json.JSONDecodeError, ValueError) as exc:
+            reason = getattr(exc, "reason", None) or str(exc)
             raise OpenCodeServiceError(
-                scrub_opencode_secrets(f"Failed to communicate with local OpenCode server: {exc.reason}"),
+                scrub_opencode_secrets(f"Failed to communicate with local OpenCode server: {reason}"),
                 status_code=503,
             ) from exc
 
@@ -546,84 +554,85 @@ class OpenCodeService:
                 status_code=503,
             )
 
-        with self._lock:
-            if (
-                self._server_proc is not None
-                and self._server_proc.poll() is None
-                and self._server_port is not None
-                and self._server_exec == info.executable_path
-            ):
-                return self._server_port
+        with self._startup_lock:
+            with self._lock:
+                if (
+                    self._server_proc is not None
+                    and self._server_proc.poll() is None
+                    and self._server_port is not None
+                    and self._server_exec == info.executable_path
+                ):
+                    return self._server_port
 
-            # Stop stale process if any
-            if self._server_proc is not None:
-                terminate_process_tree(self._server_proc)
-                self._server_proc = None
-                self._server_port = None
-                self._server_password = None
+                # Stop stale process if any
+                if self._server_proc is not None:
+                    terminate_process_tree(self._server_proc)
+                    self._server_proc = None
+                    self._server_port = None
+                    self._server_password = None
 
-            cfg, _ = self._load_config()
-            port = self._allocate_loopback_port()
-            password = secrets.token_urlsafe(24)
-            exe = info.executable_path
+                cfg, _ = self._load_config()
+                port = self._allocate_loopback_port()
+                password = secrets.token_urlsafe(24)
+                exe = info.executable_path
 
-            self._stop_event.clear()
-            try:
-                kwargs: Dict[str, Any] = {
-                    "shell": False,
-                    "stdin": subprocess.DEVNULL,
-                    "stdout": subprocess.PIPE,
-                    "stderr": subprocess.STDOUT,
-                    "text": True,
-                    "encoding": "utf-8",
-                    "errors": "replace",
-                    "env": self._safe_env(server_password=password),
-                    "creationflags": self._creation_flags(),
-                }
-                if _host_os_name() != "windows":
-                    kwargs["start_new_session"] = True
-                proc = subprocess.Popen(
-                    [exe, "serve", "--hostname", "127.0.0.1", "--port", str(port)],
-                    **kwargs,
-                )
-            except OSError as exc:
-                raise OpenCodeServiceError(
-                    scrub_opencode_secrets(f"Failed to start OpenCode runtime: {exc}"),
-                    status_code=500,
-                ) from exc
+                self._stop_event.clear()
+                try:
+                    kwargs: Dict[str, Any] = {
+                        "shell": False,
+                        "stdin": subprocess.DEVNULL,
+                        "stdout": subprocess.PIPE,
+                        "stderr": subprocess.STDOUT,
+                        "text": True,
+                        "encoding": "utf-8",
+                        "errors": "replace",
+                        "env": self._safe_env(server_password=password),
+                        "creationflags": self._creation_flags(),
+                    }
+                    if _host_os_name() != "windows":
+                        kwargs["start_new_session"] = True
+                    proc = subprocess.Popen(
+                        [exe, "serve", "--hostname", "127.0.0.1", "--port", str(port)],
+                        **kwargs,
+                    )
+                except OSError as exc:
+                    raise OpenCodeServiceError(
+                        scrub_opencode_secrets(f"Failed to start OpenCode runtime: {exc}"),
+                        status_code=500,
+                    ) from exc
 
-            self._server_proc = proc
-            self._server_port = port
-            self._server_password = password
-            self._server_exec = exe
+                self._server_proc = proc
+                self._server_port = port
+                self._server_password = password
+                self._server_exec = exe
 
-            # Drain stdout asynchronously so pipe never blocks
-            threading.Thread(target=self._drain_server_logs, args=(proc,), daemon=True).start()
+                # Drain stdout asynchronously so pipe never blocks
+                threading.Thread(target=self._drain_server_logs, args=(proc,), daemon=True).start()
 
-        deadline = time.monotonic() + float(cfg.startup_timeout_seconds)
-        last_err: str = "Server did not respond."
-        while time.monotonic() < deadline:
-            if proc.poll() is not None:
-                rc = proc.returncode
-                self._stop_server()
-                raise OpenCodeServiceError(
-                    f"OpenCode server exited unexpectedly during startup (code {rc}).",
-                    status_code=503,
-                )
-            try:
-                status_code, _ = self._http_json("GET", "/api/info", timeout=1.5)
-                if 200 <= status_code < 300:
-                    self._start_sse_listener_if_needed()
-                    return port
-            except OpenCodeServiceError as exc:
-                last_err = exc.message
-            time.sleep(0.15)
+            deadline = time.monotonic() + float(cfg.startup_timeout_seconds)
+            last_err: str = "Server did not respond."
+            while time.monotonic() < deadline and not self._stop_event.is_set():
+                if proc.poll() is not None:
+                    rc = proc.returncode
+                    self._stop_server()
+                    raise OpenCodeServiceError(
+                        f"OpenCode server exited unexpectedly during startup (code {rc}).",
+                        status_code=503,
+                    )
+                try:
+                    status_code, _ = self._http_json("GET", "/api/info", timeout=1.5)
+                    if 200 <= status_code < 300:
+                        self._start_sse_listener_if_needed()
+                        return port
+                except OpenCodeServiceError as exc:
+                    last_err = exc.message
+                time.sleep(0.15)
 
-        self._stop_server()
-        raise OpenCodeServiceError(
-            f"Timed out waiting {cfg.startup_timeout_seconds:.0f}s for OpenCode server startup ({last_err}).",
-            status_code=504,
-        )
+            self._stop_server()
+            raise OpenCodeServiceError(
+                f"Timed out waiting {cfg.startup_timeout_seconds:.0f}s for OpenCode server startup ({last_err}).",
+                status_code=504,
+            )
 
     def _drain_server_logs(self, proc: subprocess.Popen[str]) -> None:
         if proc.stdout is None:
@@ -633,6 +642,11 @@ class OpenCodeService:
                 _ = scrub_opencode_secrets(line)
         except Exception:
             pass
+        finally:
+            try:
+                proc.stdout.close()
+            except OSError:
+                pass
 
     def _fetch_server_models(self) -> List[OpenCodeModelOption]:
         try:
@@ -831,6 +845,9 @@ class OpenCodeService:
             if any(frag in low for frag in _SENSITIVE_PATH_FRAGMENTS):
                 reasons.append(f"Touches potentially sensitive path: {res}")
                 continue
+            if ".." in [seg for seg in low.split("/") if seg]:
+                reasons.append(f"Targets relative traversal outside workspace: {res}")
+                continue
             # Detect paths that look filesystem-rooted outside workspace
             if res.startswith("/") or (len(res) >= 3 and res[1] == ":"):
                 try:
@@ -963,13 +980,21 @@ class OpenCodeService:
             )
 
         if expected_project_dir and expected_project_dir.strip():
-            expected_path = str(
-                validate_directory_input(expected_project_dir, label="Project directory").resolve(
-                    strict=False
+            try:
+                expected_path = str(
+                    validate_directory_input(expected_project_dir, label="Project directory").resolve(
+                        strict=False
+                    )
                 )
-            )
+            except ProjectServiceError as exc:
+                raise OpenCodeServiceError(exc.message, status_code=exc.status_code) from exc
             actual_path = str(Path(rec.project_dir).resolve(strict=False))
-            if expected_path.lower() != actual_path.lower():
+            same = (
+                expected_path.lower() == actual_path.lower()
+                if _host_os_name() == "windows"
+                else expected_path == actual_path
+            )
+            if not same:
                 raise OpenCodeServiceError(
                     f"Session '{cleaned_id}' is bound to '{rec.project_name}' and cannot execute against a different workspace.",
                     status_code=409,
@@ -1180,10 +1205,19 @@ class OpenCodeService:
         with self._lock:
             items = list(self._sessions.values())
             if project_dir and project_dir.strip():
-                resolved = str(Path(project_dir.strip()).resolve(strict=False)).lower()
-                items = [
-                    r for r in items if str(Path(r.project_dir).resolve(strict=False)).lower() == resolved
-                ]
+                try:
+                    resolved = str(validate_directory_input(project_dir, label="Project directory").resolve(strict=False))
+                except ProjectServiceError as exc:
+                    raise OpenCodeServiceError(exc.message, status_code=exc.status_code) from exc
+                if _host_os_name() == "windows":
+                    resolved_cmp = resolved.lower()
+                    items = [
+                        r for r in items if str(Path(r.project_dir).resolve(strict=False)).lower() == resolved_cmp
+                    ]
+                else:
+                    items = [
+                        r for r in items if str(Path(r.project_dir).resolve(strict=False)) == resolved
+                    ]
             items.sort(key=lambda r: r.updated_at, reverse=True)
             return OpenCodeSessionListResponse(
                 sessions=[r.to_summary() for r in items],
@@ -1314,14 +1348,16 @@ class OpenCodeService:
         for ctx in contexts:
             loc = ""
             if ctx.relative_path:
-                # Never allow path traversal metadata in context header
-                safe_rel = ctx.relative_path.replace("\\", "/").lstrip("/")
-                if ".." in PurePosixPath(safe_rel).parts:
+                raw_rel = ctx.relative_path.replace("\\", "/").strip()
+                if raw_rel.startswith("/") or (len(raw_rel) >= 2 and raw_rel[1] == ":") or ".." in PurePosixPath(raw_rel).parts:
                     raise OpenCodeServiceError(
                         "Invalid relative path in attached IDE context.",
                         status_code=400,
                     )
-                loc = f" ({safe_rel}"
+                sens_reason = is_sensitive_relative_path(raw_rel)
+                if sens_reason:
+                    raise OpenCodeServiceError(sens_reason, status_code=403)
+                loc = f" ({raw_rel}"
                 if ctx.start_line:
                     loc += f":L{ctx.start_line}"
                     if ctx.end_line and ctx.end_line >= ctx.start_line:
@@ -1330,7 +1366,8 @@ class OpenCodeService:
             header = f"[IDE Context · {ctx.kind}: {ctx.title}{loc}]"
             if ctx.snippet:
                 lang = ctx.language or ""
-                blocks.append(f"{header}\n```{lang}\n{ctx.snippet}\n```")
+                safe_snip = scrub_opencode_secrets(ctx.snippet)
+                blocks.append(f"{header}\n```{lang}\n{safe_snip}\n```")
             else:
                 blocks.append(header)
         return "\n\n".join(blocks) + "\n\n" + prompt
@@ -1444,19 +1481,39 @@ class OpenCodeService:
                         self._broadcast_session_state(local_sid, critical=True)
                         break
                 time.sleep(0.35)
-        except OpenCodeServiceError as exc:
+            # If poll deadline expired without completion, clear in-flight so session never wedges
+            with self._lock:
+                rec = self._sessions.get(local_sid)
+                if rec and rec.prompt_in_flight:
+                    rec.prompt_in_flight = False
+                    if rec.status == "running":
+                        rec.status = "error"
+                        rec.last_error = "OpenCode prompt timed out waiting for runtime completion."
+                    rec.updated_at = utc_now_iso()
+                    timed_out = True
+                else:
+                    timed_out = False
+            if timed_out:
+                self._persist_sessions()
+                self._broadcast_session_state(local_sid, critical=True)
+        except Exception as exc:
+            err_msg = (
+                exc.message
+                if isinstance(exc, OpenCodeServiceError)
+                else scrub_opencode_secrets(f"OpenCode runtime execution failed: {exc}")
+            )
             with self._lock:
                 rec = self._sessions.get(local_sid)
                 if rec:
                     rec.prompt_in_flight = False
                     if rec.status != "interrupted":
                         rec.status = "error"
-                        rec.last_error = exc.message
+                        rec.last_error = err_msg
                     rec.updated_at = utc_now_iso()
             self._persist_sessions()
             self._broadcast(
                 local_sid,
-                {"type": "error", "session_id": local_sid, "message": exc.message},
+                {"type": "error", "session_id": local_sid, "message": err_msg},
                 critical=True,
             )
             self._broadcast_session_state(local_sid, critical=True)
@@ -1484,7 +1541,8 @@ class OpenCodeService:
 
         self._persist_sessions()
         self._broadcast_session_state(session_id, critical=True)
-        return rec.to_summary()
+        with self._lock:
+            return rec.to_summary()
 
     def reply_permission(
         self,
@@ -1538,12 +1596,14 @@ class OpenCodeService:
                     pass
 
         self._persist_sessions()
+        with self._lock:
+            summary_snap = rec.to_summary()
         self._broadcast(
             session_id,
-            {"type": "session_closed", "session_id": session_id, "session": rec.to_summary().model_dump()},
+            {"type": "session_closed", "session_id": session_id, "session": summary_snap.model_dump()},
             critical=True,
         )
-        return rec.to_summary()
+        return summary_snap
 
     # ── WebSocket Subscriber Registry ────────────────────────────────────────────
 

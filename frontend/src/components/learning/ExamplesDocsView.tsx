@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState } from"react";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -16,13 +16,15 @@ import {
   FileCode2,
   FolderPlus,
   GraduationCap,
+  Loader2,
   RefreshCw,
   Search,
   ShieldCheck,
   Sparkles,
-} from "lucide-react";
-import { SafeDocMarkdownView } from "@/components/learning/SafeDocMarkdownView";
-import type { LearningSubTab } from "@/hooks/useLearning";
+  X,
+} from"lucide-react";
+import { SafeDocMarkdownView } from"@/components/learning/SafeDocMarkdownView";
+import type { LearningSubTab } from"@/hooks/useLearning";
 import type {
   DocCatalogResponse,
   DocPageDetailResponse,
@@ -34,7 +36,7 @@ import type {
   ExampleSummary,
   ExampleVerificationStatus,
   IdeActionId,
-} from "@/types/learning";
+} from"@/types/learning";
 
 interface ExamplesDocsViewProps {
   subTab: LearningSubTab;
@@ -70,6 +72,8 @@ interface ExamplesDocsViewProps {
   selectedDocDetail: DocPageDetailResponse | null;
   loadingDocDetail: boolean;
   onSelectDoc: (slug: string) => void;
+  error?: string | null;
+  onClearError?: () => void;
   onRefresh: () => void;
   onRunIdeAction: (actionId: IdeActionId) => void;
   onAskAiAboutExample: (
@@ -80,7 +84,7 @@ interface ExamplesDocsViewProps {
   onAskAiAboutSnippet: (snippet: string, title: string, language?: string) => void;
 }
 
-const GUIDE_CHECKLIST_STORAGE_KEY = "vega.learning.guideSteps.v1";
+const GUIDE_CHECKLIST_STORAGE_KEY ="vega.learning.guideSteps.v1";
 
 function loadCompletedGuideSteps(): Record<string, boolean> {
   if (typeof window === "undefined") return {};
@@ -142,7 +146,7 @@ function docBadgeMeta(badge: DocPageSummary["badge"]): {
   }
   return {
     label: "IDE Verified",
-    classes: "border-[#7aa2ff]/35 bg-[#7aa2ff]/12 text-[#a8c4ff]",
+    classes: "border-[#7AA2FF]/35 bg-[#7AA2FF]/12 text-[#a8c4ff]",
   };
 }
 
@@ -180,6 +184,8 @@ export function ExamplesDocsView({
   selectedDocDetail,
   loadingDocDetail,
   onSelectDoc,
+  error,
+  onClearError,
   onRefresh,
   onRunIdeAction,
   onAskAiAboutExample,
@@ -221,18 +227,18 @@ export function ExamplesDocsView({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#06070c]/75">
+  <div className="flex h-full min-h-0 flex-col bg-[#181818]">
       {/* Top Hero Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 bg-[#090c16]/85 px-5 py-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#2D2D30] bg-[#181818] px-5 py-3.5">
         <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#7aa2ff]/30 bg-[#7aa2ff]/12 text-[#9ec0ff]">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#7AA2FF]/30 bg-[#7AA2FF]/12 text-[#9ec0ff]">
             <GraduationCap className="h-4.5 w-4.5" />
           </span>
           <div>
-            <h1 className="text-sm font-semibold tracking-tight text-[#f0f3ff]">
+            <h1 className="text-sm font-semibold tracking-tight text-[#F4F4F5]">
               VEGA ARIES V3 Examples, Offline Docs &amp; Guided Learning
             </h1>
-            <p className="text-xs text-[#e8ebf7]/55">
+            <p className="text-xs text-[#E4E4E7]">
               Verified project starters, local SDK example discovery, offline firmware documentation, and workflow guides
             </p>
           </div>
@@ -243,17 +249,17 @@ export function ExamplesDocsView({
             className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[10.5px] ${
               exampleCatalog?.sdk_root_configured
                 ? "border-sky-500/35 bg-sky-500/10 text-sky-300"
-                : "border-white/12 bg-white/[0.04] text-[#e8ebf7]/65"
+                : "border-[#2D2D30] bg-[#252527] text-[#E4E4E7]"
             }`}
           >
-            <ShieldCheck className="h-3.5 w-3.5" />
+          <ShieldCheck className="h-3.5 w-3.5" />
             {exampleCatalog?.sdk_root_configured
               ? `Local SDK (${exampleCatalog.sdk_examples_count} discovered)`
               : "Offline Bundled Catalog"}
           </span>
 
           {/* Sub-tab Segmented Switcher */}
-          <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-[#05060b] p-0.5">
+          <div className="flex items-center gap-1 rounded-xl border border-[#2D2D30] bg-[#181818] p-0.5">
             {(
               [
                 { id: "examples", label: "Examples Library", icon: Code2 },
@@ -270,11 +276,11 @@ export function ExamplesDocsView({
                   onClick={() => onChangeSubTab(tab.id)}
                   className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
                     active
-                      ? "bg-[#7aa2ff]/18 text-[#edf2ff]"
-                      : "text-[#e8ebf7]/55 hover:text-[#e8ebf7]"
+                      ? "bg-[#7AA2FF]/18 text-[#F4F4F5]"
+                      : "text-[#E4E4E7] hover:text-[#F4F4F5]"
                   }`}
                 >
-                  <Icon className="h-3.5 w-3.5" />
+                <Icon className="h-3.5 w-3.5" />
                   <span>{tab.label}</span>
                 </button>
               );
@@ -287,27 +293,49 @@ export function ExamplesDocsView({
             disabled={!isBackendConnected}
             title="Reload examples & docs"
             aria-label="Reload examples and docs"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-[#e8ebf7]/70 transition-colors hover:bg-white/[0.1] hover:text-[#e8ebf7] disabled:opacity-40"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#2D2D30] bg-[#252527] text-[#F4F4F5] transition-colors hover:bg-[#2D2D31] hover:text-[#F4F4F5] disabled:opacity-40"
           >
-            <RefreshCw className="h-3.5 w-3.5" />
+          <RefreshCw className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
 
+      {error && (
+        <div
+          role="alert"
+          className="mx-5 mt-3 flex items-center justify-between gap-2 rounded-xl border border-red-400/30 bg-red-500/12 px-3.5 py-2.5 text-xs text-red-200"
+        >
+        <div className="flex min-w-0 items-center gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span className="truncate">{error}</span>
+          </div>
+          {onClearError && (
+            <button
+              type="button"
+              onClick={onClearError}
+              aria-label="Dismiss error banner"
+              className="rounded p-1 hover:bg-[#2D2D31]"
+            >
+            <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Main Content Area */}
       {subTab === "examples" && (
-        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[340px_1fr]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[340px_1fr]">
           {/* Left Example Catalog Column */}
-          <div className="flex min-h-0 flex-col border-b border-white/8 bg-[#070911]/60 lg:border-r lg:border-b-0">
-            <div className="space-y-2.5 border-b border-white/8 p-3.5">
+          <div className="flex min-h-0 flex-col border-b border-[#2D2D30] bg-[#181818] lg:border-r lg:border-b-0">
+            <div className="space-y-2.5 border-b border-[#2D2D30] p-3.5">
               <div className="relative">
-                <Search className="pointer-events-none absolute top-2.5 left-3 h-3.5 w-3.5 text-[#e8ebf7]/40" />
+                <Search className="pointer-events-none absolute top-2.5 left-3 h-3.5 w-3.5 text-[#A1A1AA]" />
                 <input
                   type="text"
                   value={exampleSearch}
                   onChange={(e) => onExampleSearchChange(e.target.value)}
                   placeholder="Search examples, tags, topics..."
-                  className="w-full rounded-xl border border-white/10 bg-[#05060b]/85 py-2 pr-3 pl-9 text-xs text-[#e8ebf7] placeholder:text-[#e8ebf7]/35 focus:border-[#7aa2ff]/55 focus:outline-none"
+                  className="w-full rounded-xl border border-[#2D2D30] bg-[#181818] py-2 pr-3 pl-9 text-xs text-[#F4F4F5] placeholder:text-[#8E8E98] focus:border-[#7AA2FF]/55 focus:outline-none"
                 />
               </div>
 
@@ -317,8 +345,8 @@ export function ExamplesDocsView({
                   onClick={() => onExampleCategoryChange("")}
                   className={`rounded-full border px-2.5 py-0.5 text-[11px] transition-colors ${
                     exampleCategory === ""
-                      ? "border-[#7aa2ff]/45 bg-[#7aa2ff]/18 text-[#eef3ff]"
-                      : "border-white/10 bg-white/[0.03] text-[#e8ebf7]/60 hover:text-[#e8ebf7]"
+                      ? "border-[#7AA2FF]/45 bg-[#7AA2FF]/18 text-[#F4F4F5]"
+                      : "border-[#2D2D30] bg-[#252527] text-[#E4E4E7] hover:text-[#F4F4F5]"
                   }`}
                 >
                   All
@@ -332,8 +360,8 @@ export function ExamplesDocsView({
                     }
                     className={`rounded-full border px-2.5 py-0.5 text-[11px] transition-colors ${
                       exampleCategory === cat
-                        ? "border-[#7aa2ff]/45 bg-[#7aa2ff]/18 text-[#eef3ff]"
-                        : "border-white/10 bg-white/[0.03] text-[#e8ebf7]/60 hover:text-[#e8ebf7]"
+                        ? "border-[#7AA2FF]/45 bg-[#7AA2FF]/18 text-[#F4F4F5]"
+                        : "border-[#2D2D30] bg-[#252527] text-[#E4E4E7] hover:text-[#F4F4F5]"
                     }`}
                   >
                     {cat}
@@ -342,12 +370,12 @@ export function ExamplesDocsView({
               </div>
 
               {activeBoardId && (
-                <label className="flex cursor-pointer items-center gap-2 text-[11px] text-[#e8ebf7]/65 select-none">
+              <label className="flex cursor-pointer items-center gap-2 text-[11px] text-[#E4E4E7] select-none">
                   <input
                     type="checkbox"
                     checked={boardFilterOnly}
                     onChange={(e) => onBoardFilterOnlyChange(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-white/20 bg-[#05060b]"
+                    className="h-3.5 w-3.5 rounded border-[#2D2D30] bg-[#181818]"
                   />
                   <span>Compatible with active board ({activeBoardId})</span>
                 </label>
@@ -356,7 +384,7 @@ export function ExamplesDocsView({
 
             <div className="vega-scroll min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
               {filteredExamples.length === 0 ? (
-                <div className="rounded-xl border border-white/8 bg-[#0b0e18]/60 p-4 text-center text-xs text-[#e8ebf7]/50">
+              <div className="rounded-xl border border-[#2D2D30] bg-[#181818] p-4 text-center text-xs text-[#B4B4BC]">
                   No examples matched your filter. Clear search or configure local VEGA SDK paths in SDK Doctor.
                 </div>
               ) : (
@@ -370,12 +398,12 @@ export function ExamplesDocsView({
                       onClick={() => onSelectExample(ex.id)}
                       className={`w-full rounded-xl border p-3 text-left transition-colors ${
                         selected
-                          ? "border-[#7aa2ff]/50 bg-[#7aa2ff]/[0.1]"
-                          : "border-white/8 bg-[#0b0e18]/65 hover:border-white/18 hover:bg-[#0e1220]"
+                          ? "border-[#7AA2FF]/50 bg-[#7AA2FF]/[0.1]"
+                          : "border-[#2D2D30] bg-[#181818] hover:border-[#3F3F46] hover:bg-[#7AA2FF]/[0.11]"
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-xs font-semibold text-[#eff3ff]">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-xs font-semibold text-[#eff3ff]">
                           {ex.title}
                         </span>
                         <span
@@ -384,14 +412,14 @@ export function ExamplesDocsView({
                           {badge.label}
                         </span>
                       </div>
-                      <p className="mt-1.5 line-clamp-2 text-[11.5px] leading-relaxed text-[#e8ebf7]/62">
+                      <p className="mt-1.5 line-clamp-2 text-[11.5px] leading-relaxed text-[#E4E4E7]">
                         {ex.short_description}
                       </p>
-                      <div className="mt-2.5 flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-[#e8ebf7]/45">
-                        <span className="rounded bg-white/[0.05] px-1.5 py-0.5 capitalize">
+                      <div className="mt-2.5 flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-[#B4B4BC]">
+                        <span className="rounded bg-[#252527] px-1.5 py-0.5 capitalize">
                           {ex.difficulty}
                         </span>
-                        <span className="rounded bg-white/[0.05] px-1.5 py-0.5">
+                        <span className="rounded bg-[#252527] px-1.5 py-0.5">
                           {ex.file_count} files
                         </span>
                         <span>{ex.category}</span>
@@ -406,17 +434,18 @@ export function ExamplesDocsView({
           {/* Right Example Inspector & Source Preview */}
           <div className="vega-scroll min-h-0 overflow-y-auto p-5">
             {loadingExampleDetail ? (
-              <div className="py-12 text-center text-xs text-[#e8ebf7]/55">
-                Loading example metadata and files...
+            <div className="flex items-center justify-center gap-2 py-12 text-xs text-[#E4E4E7]">
+              <Loader2 className="h-4 w-4 animate-spin text-[#7AA2FF]" />
+                <span>Loading example metadata and files...</span>
               </div>
             ) : !selectedExampleDetail ? (
-              <div className="rounded-2xl border border-white/10 bg-[#0b0e18]/60 p-8 text-center text-xs text-[#e8ebf7]/55">
+            <div className="rounded-2xl border border-[#2D2D30] bg-[#181818] p-8 text-center text-xs text-[#E4E4E7]">
                 Select an example on the left to inspect its architecture, source files, and create a new firmware project.
               </div>
             ) : (
-              <div className="space-y-4">
+            <div className="space-y-4">
                 {/* Example Title + CTAs */}
-                <div className="rounded-2xl border border-white/10 bg-[#0b0e18]/75 p-4">
+                <div className="rounded-2xl border border-[#2D2D30] bg-[#181818] p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -433,20 +462,20 @@ export function ExamplesDocsView({
                             ).label
                           }
                         </span>
-                        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 font-mono text-[10px] capitalize text-[#e8ebf7]/70">
+                        <span className="rounded-full border border-[#2D2D30] bg-[#252527] px-2.5 py-0.5 font-mono text-[10px] capitalize text-[#F4F4F5]">
                           {selectedExampleDetail.example.difficulty}
                         </span>
-                        <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 font-mono text-[10px] text-[#9ec0ff]">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-[#2D2D30] bg-[#252527] px-2.5 py-0.5 font-mono text-[10px] text-[#9ec0ff]">
                           <Cpu className="h-3 w-3" />
                           {selectedExampleDetail.example.compatible_boards.join(
-                            ", "
+                            ","
                           )}
                         </span>
                       </div>
-                      <h2 className="mt-2 text-lg font-semibold tracking-tight text-[#f3f6ff]">
+                      <h2 className="mt-2 text-lg font-semibold tracking-tight text-[#F4F4F5]">
                         {selectedExampleDetail.example.title}
                       </h2>
-                      <p className="mt-1 text-xs leading-relaxed text-[#e8ebf7]/72">
+                      <p className="mt-1 text-xs leading-relaxed text-[#F4F4F5]">
                         {selectedExampleDetail.long_description}
                       </p>
                     </div>
@@ -457,9 +486,9 @@ export function ExamplesDocsView({
                         onClick={() =>
                           onOpenCreateModal(selectedExampleDetail.example)
                         }
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-[#7aa2ff]/45 bg-[#7aa2ff]/20 px-3.5 py-2 text-xs font-semibold text-[#f1f5ff] transition-colors hover:bg-[#7aa2ff]/30"
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-[#7AA2FF]/45 bg-[#7AA2FF]/20 px-3.5 py-2 text-xs font-semibold text-[#F4F4F5] transition-colors hover:bg-[#7AA2FF]/30"
                       >
-                        <FolderPlus className="h-3.5 w-3.5 text-[#a8c4ff]" />
+                      <FolderPlus className="h-3.5 w-3.5 text-[#a8c4ff]" />
                         <span>Create Project from Example</span>
                       </button>
 
@@ -471,9 +500,9 @@ export function ExamplesDocsView({
                             selectedFileContent
                           )
                         }
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-white/14 bg-white/[0.05] px-3 py-2 text-xs font-medium text-[#e8ebf7]/85 transition-colors hover:bg-white/[0.1]"
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-white/14 bg-[#252527] px-3 py-2 text-xs font-medium text-[#F4F4F5] transition-colors hover:bg-[#2D2D31]"
                       >
-                        <Sparkles className="h-3.5 w-3.5 text-[#7aa2ff]" />
+                      <Sparkles className="h-3.5 w-3.5 text-[#7AA2FF]" />
                         <span>Ask Native AI</span>
                       </button>
                     </div>
@@ -490,7 +519,7 @@ export function ExamplesDocsView({
                   >
                     <p>{selectedExampleDetail.example.verification_note}</p>
                     <p className="mt-1 font-mono text-[10.5px] opacity-80">
-                      Toolchain / SDK note:{" "}
+                      Toolchain / SDK note:{""}
                       {selectedExampleDetail.example.required_sdk}
                     </p>
                   </div>
@@ -498,17 +527,17 @@ export function ExamplesDocsView({
                   {/* Objectives + Related Docs */}
                   {(selectedExampleDetail.learning_objectives.length > 0 ||
                     selectedExampleDetail.related_doc_slugs.length > 0) && (
-                    <div className="mt-3 grid grid-cols-1 gap-3 border-t border-white/8 pt-3 md:grid-cols-2">
+                    <div className="mt-3 grid grid-cols-1 gap-3 border-t border-[#2D2D30] pt-3 md:grid-cols-2">
                       {selectedExampleDetail.learning_objectives.length > 0 && (
                         <div>
-                          <span className="font-mono text-[10px] font-semibold tracking-[0.06em] text-[#e8ebf7]/50 uppercase">
+                          <span className="font-mono text-[10px] font-semibold tracking-[0.06em] text-[#B4B4BC] uppercase">
                             What you will learn
                           </span>
-                          <ul className="mt-1.5 space-y-1 text-xs text-[#e8ebf7]/75">
+                          <ul className="mt-1.5 space-y-1 text-xs text-[#F4F4F5]">
                             {selectedExampleDetail.learning_objectives.map(
                               (obj, i) => (
-                                <li key={i} className="flex items-start gap-1.5">
-                                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#7aa2ff]" />
+                              <li key={i} className="flex items-start gap-1.5">
+                                <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#7AA2FF]" />
                                   <span>{obj}</span>
                                 </li>
                               )
@@ -519,7 +548,7 @@ export function ExamplesDocsView({
 
                       {selectedExampleDetail.related_doc_slugs.length > 0 && (
                         <div>
-                          <span className="font-mono text-[10px] font-semibold tracking-[0.06em] text-[#e8ebf7]/50 uppercase">
+                          <span className="font-mono text-[10px] font-semibold tracking-[0.06em] text-[#B4B4BC] uppercase">
                             Related Offline Documentation
                           </span>
                           <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -529,9 +558,9 @@ export function ExamplesDocsView({
                                   key={slug}
                                   type="button"
                                   onClick={() => onSelectDoc(slug)}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-[#7aa2ff]/30 bg-[#7aa2ff]/10 px-2.5 py-1 text-[11px] font-medium text-[#b9d0ff] transition-colors hover:bg-[#7aa2ff]/20"
+                                  className="inline-flex items-center gap-1 rounded-lg border border-[#7AA2FF]/30 bg-[#7AA2FF]/10 px-2.5 py-1 text-[11px] font-medium text-[#b9d0ff] transition-colors hover:bg-[#7AA2FF]/20"
                                 >
-                                  <BookOpen className="h-3 w-3" />
+                                <BookOpen className="h-3 w-3" />
                                   <span>{slug}</span>
                                 </button>
                               )
@@ -544,8 +573,8 @@ export function ExamplesDocsView({
                 </div>
 
                 {/* Source File Explorer + Bounded Code Preview */}
-                <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#05060b]">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/8 bg-[#0b0e18] px-3 py-2">
+                <div className="overflow-hidden rounded-2xl border border-[#2D2D30] bg-[#181818]">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#2D2D30] bg-[#181818] px-3 py-2">
                     <div className="flex flex-wrap items-center gap-1.5">
                       {selectedExampleDetail.files.map((file) => {
                         const active =
@@ -563,11 +592,11 @@ export function ExamplesDocsView({
                             }
                             className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 font-mono text-[11px] transition-colors ${
                               active
-                                ? "border-[#7aa2ff]/45 bg-[#7aa2ff]/18 text-[#eef3ff]"
-                                : "border-white/8 bg-white/[0.03] text-[#e8ebf7]/65 hover:bg-white/[0.08] hover:text-[#e8ebf7]"
+                                ? "border-[#7AA2FF]/45 bg-[#7AA2FF]/18 text-[#F4F4F5]"
+                                : "border-[#2D2D30] bg-[#252527] text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
                             } disabled:opacity-40`}
                           >
-                            <FileCode2 className="h-3 w-3" />
+                          <FileCode2 className="h-3 w-3" />
                             <span>{file.relative_path}</span>
                           </button>
                         );
@@ -575,9 +604,9 @@ export function ExamplesDocsView({
                     </div>
 
                     {selectedFileContent && (
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-[10px] text-[#e8ebf7]/45">
-                          {selectedFileContent.language} ·{" "}
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-[10px] text-[#B4B4BC]">
+                          {selectedFileContent.language} ·{""}
                           {selectedFileContent.size_bytes} B
                         </span>
                         <button
@@ -585,16 +614,16 @@ export function ExamplesDocsView({
                           onClick={() =>
                             void handleCopyPreview(selectedFileContent.content)
                           }
-                          className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 font-mono text-[10px] text-[#e8ebf7]/75 hover:bg-white/[0.1]"
+                          className="inline-flex items-center gap-1 rounded-md border border-[#2D2D30] bg-[#252527] px-2 py-1 font-mono text-[10px] text-[#F4F4F5] hover:bg-[#2D2D31]"
                         >
                           {copiedCode ? (
                             <>
-                              <Check className="h-3 w-3 text-emerald-400" />
-                              <span className="text-emerald-300">Copied</span>
+                            <Check className="h-3 w-3 text-emerald-400" />
+                            <span className="text-emerald-300">Copied</span>
                             </>
                           ) : (
                             <>
-                              <Copy className="h-3 w-3" />
+                            <Copy className="h-3 w-3" />
                               <span>Copy</span>
                             </>
                           )}
@@ -604,25 +633,26 @@ export function ExamplesDocsView({
                   </div>
 
                   {loadingFilePreview ? (
-                    <div className="p-6 text-center text-xs text-[#e8ebf7]/50">
-                      Loading source file preview...
+                  <div className="flex items-center justify-center gap-2 p-6 text-xs text-[#B4B4BC]">
+                    <Loader2 className="h-4 w-4 animate-spin text-[#7AA2FF]" />
+                      <span>Loading source file preview...</span>
                     </div>
                   ) : selectedFileContent ? (
-                    <div className="vega-scroll max-h-[420px] overflow-auto p-4">
+                  <div className="vega-scroll max-h-[420px] overflow-auto p-4">
                       {selectedFileContent.truncated && (
-                        <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-400/25 bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-200">
-                          <AlertTriangle className="h-3.5 w-3.5" />
+                      <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-400/25 bg-amber-500/10 px-3 py-1.5 text-[11px] text-amber-200">
+                        <AlertTriangle className="h-3.5 w-3.5" />
                           <span>
                             File preview truncated for safety at 32 KB. Create a project from this example to open the complete file in Monaco.
                           </span>
                         </div>
                       )}
-                      <pre className="font-mono text-[12px] leading-[1.6] text-[#dde4fb]">
+                      <pre className="font-mono text-[12px] leading-[1.6] text-[#E4E4E7]">
                         <code>{selectedFileContent.content}</code>
                       </pre>
                     </div>
                   ) : (
-                    <div className="p-6 text-center text-xs text-[#e8ebf7]/45">
+                  <div className="p-6 text-center text-xs text-[#B4B4BC]">
                       Select a file tab above to preview its source code.
                     </div>
                   )}
@@ -634,18 +664,18 @@ export function ExamplesDocsView({
       )}
 
       {subTab === "docs" && (
-        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[320px_1fr]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[320px_1fr]">
           {/* Left Doc Search + TOC Column */}
-          <div className="flex min-h-0 flex-col border-b border-white/8 bg-[#070911]/60 lg:border-r lg:border-b-0">
-            <div className="space-y-2.5 border-b border-white/8 p-3.5">
+          <div className="flex min-h-0 flex-col border-b border-[#2D2D30] bg-[#181818] lg:border-r lg:border-b-0">
+            <div className="space-y-2.5 border-b border-[#2D2D30] p-3.5">
               <div className="relative">
-                <Search className="pointer-events-none absolute top-2.5 left-3 h-3.5 w-3.5 text-[#e8ebf7]/40" />
+                <Search className="pointer-events-none absolute top-2.5 left-3 h-3.5 w-3.5 text-[#A1A1AA]" />
                 <input
                   type="text"
                   value={docSearch}
                   onChange={(e) => onDocSearchChange(e.target.value)}
                   placeholder="Full-text search offline docs..."
-                  className="w-full rounded-xl border border-white/10 bg-[#05060b]/85 py-2 pr-3 pl-9 text-xs text-[#e8ebf7] placeholder:text-[#e8ebf7]/35 focus:border-[#7aa2ff]/55 focus:outline-none"
+                  className="w-full rounded-xl border border-[#2D2D30] bg-[#181818] py-2 pr-3 pl-9 text-xs text-[#F4F4F5] placeholder:text-[#8E8E98] focus:border-[#7AA2FF]/55 focus:outline-none"
                 />
               </div>
               <div className="flex flex-wrap gap-1.5">
@@ -654,8 +684,8 @@ export function ExamplesDocsView({
                   onClick={() => onDocCategoryChange("")}
                   className={`rounded-full border px-2.5 py-0.5 text-[11px] transition-colors ${
                     docCategory === ""
-                      ? "border-[#7aa2ff]/45 bg-[#7aa2ff]/18 text-[#eef3ff]"
-                      : "border-white/10 bg-white/[0.03] text-[#e8ebf7]/60 hover:text-[#e8ebf7]"
+                      ? "border-[#7AA2FF]/45 bg-[#7AA2FF]/18 text-[#F4F4F5]"
+                      : "border-[#2D2D30] bg-[#252527] text-[#E4E4E7] hover:text-[#F4F4F5]"
                   }`}
                 >
                   All
@@ -669,8 +699,8 @@ export function ExamplesDocsView({
                     }
                     className={`rounded-full border px-2.5 py-0.5 text-[11px] transition-colors ${
                       docCategory === cat
-                        ? "border-[#7aa2ff]/45 bg-[#7aa2ff]/18 text-[#eef3ff]"
-                        : "border-white/10 bg-white/[0.03] text-[#e8ebf7]/60 hover:text-[#e8ebf7]"
+                        ? "border-[#7AA2FF]/45 bg-[#7AA2FF]/18 text-[#F4F4F5]"
+                        : "border-[#2D2D30] bg-[#252527] text-[#E4E4E7] hover:text-[#F4F4F5]"
                     }`}
                   >
                     {cat}
@@ -682,11 +712,11 @@ export function ExamplesDocsView({
             <div className="vega-scroll min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
               {docSearch.trim() ? (
                 searchingDocs ? (
-                  <p className="py-4 text-center text-xs text-[#e8ebf7]/50">
+                <p className="py-4 text-center text-xs text-[#B4B4BC]">
                     Searching offline docs...
                   </p>
                 ) : (docSearchResults?.results ?? []).length === 0 ? (
-                  <p className="py-4 text-center text-xs text-[#e8ebf7]/50">
+                <p className="py-4 text-center text-xs text-[#B4B4BC]">
                     No matching sections found for &ldquo;{docSearch}&rdquo;.
                   </p>
                 ) : (
@@ -697,19 +727,19 @@ export function ExamplesDocsView({
                       onClick={() => onSelectDoc(res.slug)}
                       className={`w-full rounded-xl border p-3 text-left transition-colors ${
                         res.slug === selectedDocSlug
-                          ? "border-[#7aa2ff]/50 bg-[#7aa2ff]/[0.1]"
-                          : "border-white/8 bg-[#0b0e18]/65 hover:border-white/18"
+                          ? "border-[#7AA2FF]/50 bg-[#7AA2FF]/[0.1]"
+                          : "border-[#2D2D30] bg-[#181818] hover:border-[#3F3F46]"
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="text-xs font-semibold text-[#eef3ff]">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-xs font-semibold text-[#F4F4F5]">
                           {res.title}
                         </span>
-                        <span className="shrink-0 font-mono text-[10px] text-[#7aa2ff]">
+                        <span className="shrink-0 font-mono text-[10px] text-[#7AA2FF]">
                           {res.category}
                         </span>
                       </div>
-                      <p className="mt-1 line-clamp-2 text-[11px] text-[#e8ebf7]/60">
+                      <p className="mt-1 line-clamp-2 text-[11px] text-[#E4E4E7]">
                         {res.snippet || res.summary}
                       </p>
                     </button>
@@ -723,23 +753,23 @@ export function ExamplesDocsView({
                     onClick={() => onSelectDoc(doc.slug)}
                     className={`w-full rounded-xl border p-3 text-left transition-colors ${
                       doc.slug === selectedDocSlug
-                        ? "border-[#7aa2ff]/50 bg-[#7aa2ff]/[0.1]"
-                        : "border-white/8 bg-[#0b0e18]/65 hover:border-white/18"
+                        ? "border-[#7AA2FF]/50 bg-[#7AA2FF]/[0.1]"
+                        : "border-[#2D2D30] bg-[#181818] hover:border-[#3F3F46]"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="text-xs font-semibold text-[#eef3ff]">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-xs font-semibold text-[#F4F4F5]">
                         {doc.title}
                       </span>
-                      <span className="inline-flex shrink-0 items-center gap-1 font-mono text-[10px] text-[#e8ebf7]/45">
+                      <span className="inline-flex shrink-0 items-center gap-1 font-mono text-[10px] text-[#B4B4BC]">
                         <Clock className="h-3 w-3" />
                         {doc.estimated_minutes}m
                       </span>
                     </div>
-                    <p className="mt-1 line-clamp-2 text-[11px] text-[#e8ebf7]/58">
+                    <p className="mt-1 line-clamp-2 text-[11px] text-[#E4E4E7]">
                       {doc.summary}
                     </p>
-                    <div className="mt-2 font-mono text-[10px] text-[#7aa2ff]/75">
+                    <div className="mt-2 font-mono text-[10px] text-[#7AA2FF]">
                       {doc.category}
                     </div>
                   </button>
@@ -751,17 +781,18 @@ export function ExamplesDocsView({
           {/* Right Documentation Reader */}
           <div className="vega-scroll min-h-0 overflow-y-auto p-6">
             {loadingDocDetail ? (
-              <div className="py-12 text-center text-xs text-[#e8ebf7]/55">
-                Loading documentation page...
+            <div className="flex items-center justify-center gap-2 py-12 text-xs text-[#E4E4E7]">
+              <Loader2 className="h-4 w-4 animate-spin text-[#7AA2FF]" />
+                <span>Loading documentation page...</span>
               </div>
             ) : !selectedDocDetail ? (
-              <div className="rounded-2xl border border-white/10 bg-[#0b0e18]/60 p-8 text-center text-xs text-[#e8ebf7]/55">
+            <div className="rounded-2xl border border-[#2D2D30] bg-[#181818] p-8 text-center text-xs text-[#E4E4E7]">
                 Choose a documentation topic on the left or run a full-text search above.
               </div>
             ) : (
-              <div className="mx-auto max-w-3xl space-y-5">
+            <div className="mx-auto max-w-3xl space-y-5">
                 {/* Metadata & Action Bar */}
-                <div className="rounded-2xl border border-white/10 bg-[#0b0e18]/75 p-4">
+                <div className="rounded-2xl border border-[#2D2D30] bg-[#181818] p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <span
@@ -771,7 +802,7 @@ export function ExamplesDocsView({
                       >
                         {docBadgeMeta(selectedDocDetail.doc.badge).label}
                       </span>
-                      <span className="font-mono text-[11px] text-[#e8ebf7]/55">
+                      <span className="font-mono text-[11px] text-[#E4E4E7]">
                         {selectedDocDetail.doc.category} · ~
                         {selectedDocDetail.doc.estimated_minutes} min read
                       </span>
@@ -780,17 +811,17 @@ export function ExamplesDocsView({
                     <button
                       type="button"
                       onClick={() => onAskAiAboutDoc(selectedDocDetail)}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-[#7aa2ff]/35 bg-[#7aa2ff]/12 px-3 py-1.5 text-xs font-medium text-[#c5d8ff] transition-colors hover:bg-[#7aa2ff]/22"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-[#7AA2FF]/35 bg-[#7AA2FF]/12 px-3 py-1.5 text-xs font-medium text-[#c5d8ff] transition-colors hover:bg-[#7AA2FF]/22"
                     >
-                      <Sparkles className="h-3.5 w-3.5" />
+                    <Sparkles className="h-3.5 w-3.5" />
                       <span>Ask Native AI about Doc</span>
                     </button>
                   </div>
 
                   {/* Direct IDE Tool Actions */}
                   {selectedDocDetail.ide_actions.length > 0 && (
-                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/8 pt-3">
-                      <span className="font-mono text-[10px] tracking-[0.06em] text-[#e8ebf7]/45 uppercase">
+                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#2D2D30] pt-3">
+                    <span className="font-mono text-[10px] tracking-[0.06em] text-[#B4B4BC] uppercase">
                         IDE Actions:
                       </span>
                       {selectedDocDetail.ide_actions.map((act) => (
@@ -798,10 +829,10 @@ export function ExamplesDocsView({
                           key={`${act.action_id}-${act.label}`}
                           type="button"
                           onClick={() => onRunIdeAction(act.action_id)}
-                          className="inline-flex items-center gap-1 rounded-lg border border-white/12 bg-white/[0.05] px-2.5 py-1 text-[11.5px] font-medium text-[#e8ebf7]/88 transition-colors hover:border-[#7aa2ff]/40 hover:bg-[#7aa2ff]/15"
+                          className="inline-flex items-center gap-1 rounded-lg border border-[#2D2D30] bg-[#252527] px-2.5 py-1 text-[11.5px] font-medium text-[#F4F4F5] transition-colors hover:border-[#7AA2FF]/40 hover:bg-[#7AA2FF]/15"
                         >
                           <span>{act.label}</span>
-                          <ArrowUpRight className="h-3 w-3 text-[#7aa2ff]" />
+                          <ArrowUpRight className="h-3 w-3 text-[#7AA2FF]" />
                         </button>
                       ))}
                     </div>
@@ -819,10 +850,10 @@ export function ExamplesDocsView({
                 {(selectedDocDetail.doc.related_example_ids.length > 0 ||
                   selectedDocDetail.related_slugs.length > 0 ||
                   selectedDocDetail.external_links.length > 0) && (
-                  <div className="space-y-3 rounded-2xl border border-white/10 bg-[#0b0e18]/65 p-4">
+                  <div className="space-y-3 rounded-2xl border border-[#2D2D30] bg-[#181818] p-4">
                     {selectedDocDetail.doc.related_example_ids.length > 0 && (
                       <div>
-                        <span className="font-mono text-[10px] font-semibold tracking-[0.06em] text-[#e8ebf7]/50 uppercase">
+                        <span className="font-mono text-[10px] font-semibold tracking-[0.06em] text-[#B4B4BC] uppercase">
                           Related Firmware Examples
                         </span>
                         <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -837,7 +868,7 @@ export function ExamplesDocsView({
                                 }}
                                 className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 font-mono text-[11px] text-emerald-200 hover:bg-emerald-500/20"
                               >
-                                <Code2 className="h-3 w-3" />
+                              <Code2 className="h-3 w-3" />
                                 <span>{exId}</span>
                               </button>
                             )
@@ -848,7 +879,7 @@ export function ExamplesDocsView({
 
                     {selectedDocDetail.related_slugs.length > 0 && (
                       <div>
-                        <span className="font-mono text-[10px] font-semibold tracking-[0.06em] text-[#e8ebf7]/50 uppercase">
+                        <span className="font-mono text-[10px] font-semibold tracking-[0.06em] text-[#B4B4BC] uppercase">
                           Next Documentation Topics
                         </span>
                         <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -857,9 +888,9 @@ export function ExamplesDocsView({
                               key={slug}
                               type="button"
                               onClick={() => onSelectDoc(slug)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-[#e8ebf7]/80 hover:bg-white/[0.1]"
+                              className="inline-flex items-center gap-1 rounded-lg border border-[#2D2D30] bg-[#252527] px-2.5 py-1 text-[11px] text-[#F4F4F5] hover:bg-[#2D2D31]"
                             >
-                              <BookOpen className="h-3 w-3 text-[#7aa2ff]" />
+                            <BookOpen className="h-3 w-3 text-[#7AA2FF]" />
                               <span>{slug}</span>
                             </button>
                           ))}
@@ -869,7 +900,7 @@ export function ExamplesDocsView({
 
                     {selectedDocDetail.external_links.length > 0 && (
                       <div>
-                        <span className="font-mono text-[10px] font-semibold tracking-[0.06em] text-[#e8ebf7]/50 uppercase">
+                        <span className="font-mono text-[10px] font-semibold tracking-[0.06em] text-[#B4B4BC] uppercase">
                           Official External Resources (Opens in System Browser)
                         </span>
                         <div className="mt-1.5 flex flex-wrap gap-2">
@@ -879,7 +910,7 @@ export function ExamplesDocsView({
                               href={link.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-[#7aa2ff]/30 bg-[#7aa2ff]/10 px-3 py-1.5 text-xs font-medium text-[#b9d0ff] hover:bg-[#7aa2ff]/20"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-[#7AA2FF]/30 bg-[#7AA2FF]/10 px-3 py-1.5 text-xs font-medium text-[#b9d0ff] hover:bg-[#7AA2FF]/20"
                             >
                               <span>{link.label}</span>
                               <ExternalLink className="h-3.5 w-3.5" />
@@ -897,8 +928,8 @@ export function ExamplesDocsView({
       )}
 
       {subTab === "guides" && (
-        <div className="vega-scroll min-h-0 flex-1 overflow-y-auto p-6">
-          <div className="mx-auto max-w-4xl space-y-5">
+      <div className="vega-scroll min-h-0 flex-1 overflow-y-auto p-6">
+        <div className="mx-auto max-w-4xl space-y-5">
             {(docCatalog?.guides ?? []).map((guide) => {
               const doneCount = guide.steps.filter(
                 (st) => completedSteps[`${guide.id}:${st.step_number}`]
@@ -906,25 +937,25 @@ export function ExamplesDocsView({
               return (
                 <section
                   key={guide.id}
-                  className="rounded-2xl border border-white/10 bg-[#0b0e18]/75 p-5"
+                  className="rounded-2xl border border-[#2D2D30] bg-[#181818] p-5"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/8 pb-3.5">
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#2D2D30] pb-3.5">
                     <div>
                       <div className="flex items-center gap-2">
-                        <Compass className="h-4 w-4 text-[#7aa2ff]" />
-                        <h2 className="text-base font-semibold text-[#f1f5ff]">
+                        <Compass className="h-4 w-4 text-[#7AA2FF]" />
+                        <h2 className="text-base font-semibold text-[#F4F4F5]">
                           {guide.title}
                         </h2>
                       </div>
-                      <p className="mt-1 text-xs text-[#e8ebf7]/65">
+                      <p className="mt-1 text-xs text-[#E4E4E7]">
                         {guide.description}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 font-mono text-[11px] text-[#e8ebf7]/60">
-                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 capitalize">
+                    <div className="flex items-center gap-2 font-mono text-[11px] text-[#E4E4E7]">
+                      <span className="rounded-full border border-[#2D2D30] bg-[#252527] px-2.5 py-0.5 capitalize">
                         {guide.difficulty}
                       </span>
-                      <span className="rounded-full border border-[#7aa2ff]/30 bg-[#7aa2ff]/12 px-2.5 py-0.5 text-[#b9d0ff]">
+                      <span className="rounded-full border border-[#7AA2FF]/30 bg-[#7AA2FF]/12 px-2.5 py-0.5 text-[#b9d0ff]">
                         {doneCount}/{guide.steps.length} checked
                       </span>
                     </div>
@@ -941,29 +972,29 @@ export function ExamplesDocsView({
                           className={`flex flex-wrap items-start justify-between gap-3 rounded-xl border p-3 transition-colors ${
                             checked
                               ? "border-emerald-500/25 bg-emerald-500/[0.05]"
-                              : "border-white/8 bg-[#06080f]/80"
+                              : "border-[#2D2D30] bg-[#181818]"
                           }`}
                         >
-                          <label className="flex flex-1 cursor-pointer items-start gap-3">
+                        <label className="flex flex-1 cursor-pointer items-start gap-3">
                             <input
                               type="checkbox"
                               checked={checked}
                               onChange={() =>
                                 toggleGuideStep(guide.id, step.step_number)
                               }
-                              className="mt-0.5 h-4 w-4 rounded border-white/25 bg-[#05060b]"
+                              className="mt-0.5 h-4 w-4 rounded border-[#2D2D30] bg-[#181818]"
                             />
                             <div>
                               <div
                                 className={`text-xs font-semibold ${
                                   checked
                                     ? "text-emerald-200 line-through opacity-80"
-                                    : "text-[#edf1ff]"
+                                    : "text-[#F4F4F5]"
                                 }`}
                               >
                                 Step {step.step_number}: {step.title}
                               </div>
-                              <p className="mt-1 text-[11.5px] leading-relaxed text-[#e8ebf7]/65">
+                              <p className="mt-1 text-[11.5px] leading-relaxed text-[#E4E4E7]">
                                 {step.detail}
                               </p>
                             </div>
@@ -974,9 +1005,9 @@ export function ExamplesDocsView({
                               <button
                                 type="button"
                                 onClick={() => onSelectDoc(step.doc_slug!)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-white/12 bg-white/[0.05] px-2.5 py-1 text-[11px] font-medium text-[#e8ebf7]/80 hover:bg-white/[0.1]"
+                                className="inline-flex items-center gap-1 rounded-lg border border-[#2D2D30] bg-[#252527] px-2.5 py-1 text-[11px] font-medium text-[#F4F4F5] hover:bg-[#2D2D31]"
                               >
-                                <BookOpen className="h-3 w-3 text-[#7aa2ff]" />
+                              <BookOpen className="h-3 w-3 text-[#7AA2FF]" />
                                 <span>Read Doc</span>
                               </button>
                             )}
@@ -986,7 +1017,7 @@ export function ExamplesDocsView({
                                 onClick={() =>
                                   onRunIdeAction(step.ide_action!.action_id)
                                 }
-                                className="inline-flex items-center gap-1 rounded-lg border border-[#7aa2ff]/35 bg-[#7aa2ff]/14 px-2.5 py-1 text-[11px] font-medium text-[#c5d8ff] hover:bg-[#7aa2ff]/24"
+                                className="inline-flex items-center gap-1 rounded-lg border border-[#7AA2FF]/35 bg-[#7AA2FF]/14 px-2.5 py-1 text-[11px] font-medium text-[#c5d8ff] hover:bg-[#7AA2FF]/24"
                               >
                                 <span>{step.ide_action.label}</span>
                                 <ArrowUpRight className="h-3 w-3" />

@@ -74,3 +74,31 @@ export interface SelectProjectBoardResponse {
   board_status: ProjectBoardStatusResponse;
   message: string;
 }
+
+/**
+ * Formats hardware board identifiers consistently for IDE headers, badges, and status bars.
+ * Prefers human-readable board names (e.g. "VEGA ARIES V3" -> "ARIES V3") and falls back
+ * cleanly when only raw target IDs like "VEGA_ARIES_V3" are available.
+ */
+export function formatBoardDisplayLabel(
+  boardName: string | null | undefined,
+  boardId: string | null | undefined,
+  options?: { short?: boolean }
+): string {
+  const short = options?.short ?? false;
+  const rawName = boardName?.trim() || "";
+  if (rawName) {
+    if (short && rawName.toUpperCase().startsWith("VEGA ")) {
+      return rawName.slice(5);
+    }
+    return rawName;
+  }
+
+  const rawId = boardId?.trim() || "";
+  if (!rawId) return "No Board";
+  const normalized = rawId.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  if (short && normalized.toUpperCase().startsWith("VEGA ")) {
+    return normalized.slice(5);
+  }
+  return normalized;
+}

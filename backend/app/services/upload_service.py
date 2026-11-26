@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Deque, Dict, List, Optional, Sequence, Set, Tuple
 
-from app.config import Settings, settings
+from app.config import Settings, is_frozen_backend, settings
 from app.models.board import BoardProfile
 from app.models.sdk import SdkConfig
 from app.models.upload import (
@@ -225,30 +225,52 @@ class UploadService:
 
         # Prefer running probe under configured Python when pyserial exists there
         target_py: Optional[Path] = py_exe if (py_exe and py_exe.is_file()) else None
-        if target_py is None and importlib.util.find_spec("serial") is not None:
+        if target_py is None and not is_frozen_backend() and importlib.util.find_spec("serial") is not None:
             target_py = Path(sys.executable)
 
+        # In frozen packaging mode (without explicit external python_path), query bundled pyserial directly
         if target_py is None:
-            return None, None
-
-        try:
-            proc = subprocess.run(
-                [str(target_py), "-c", probe_script],
-                shell=False,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=3.5,
-                encoding="utf-8",
-                errors="replace",
-            )
-            if proc.returncode != 0:
+            if importlib.util.find_spec("serial") is None:
                 return None, None
-            raw_list = json.loads(proc.stdout.strip() or "[]")
-            if not isinstance(raw_list, list):
-                return None, "Unexpected pyserial port enumeration format."
-        except (subprocess.TimeoutExpired, OSError, json.JSONDecodeError):
-            return None, None
+            try:
+                import serial.tools.list_ports as lp  # type: ignore[import-untyped]
+
+                raw_list = []
+                for p in lp.comports():
+                    vid_val = getattr(p, "vid", None)
+                    pid_val = getattr(p, "pid", None)
+                    raw_list.append(
+                        {
+                            "port": getattr(p, "device", "") or "",
+                            "description": getattr(p, "description", "") or "",
+                            "hardware_id": getattr(p, "hwid", None),
+                            "manufacturer": getattr(p, "manufacturer", None),
+                            "serial_number": getattr(p, "serial_number", None),
+                            "vid": f"{vid_val:04X}" if vid_val is not None else None,
+                            "pid": f"{pid_val:04X}" if pid_val is not None else None,
+                        }
+                    )
+            except Exception:
+                return None, None
+        else:
+            try:
+                proc = subprocess.run(
+                    [str(target_py), "-c", probe_script],
+                    shell=False,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=3.5,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+                if proc.returncode != 0:
+                    return None, None
+                raw_list = json.loads(proc.stdout.strip() or "[]")
+                if not isinstance(raw_list, list):
+                    return None, "Unexpected pyserial port enumeration format."
+            except (subprocess.TimeoutExpired, OSError, json.JSONDecodeError):
+                return None, None
 
         devices: List[SerialDeviceInfo] = []
         for entry in raw_list:
@@ -283,7 +305,8 @@ class UploadService:
             )
         return devices, None
 
-    def _discover_linux_devfs_ports(self) -> Tuple[List[SerialDeviceInfo], List[str]]:
+    @staticmethod
+    def _discover_linux_devfs_ports() -> Tuple[List[SerialDeviceInfo], List[str]]:
         """Enumerate Linux /dev/serial/by-id, /dev/ttyUSB*, and /dev/ttyACM* without pyserial."""
         devices: List[SerialDeviceInfo] = []
         warnings: List[str] = []
@@ -373,7 +396,7 @@ class UploadService:
                     devices.append(
                         SerialDeviceInfo(
                             port=com_port,
-                            display_name=f"{com_port} ({name.split('\\\\')[-1]})",
+                            display_name=f"{com_port} ({name.split('\\')[-1]})",
                             description=str(name),
                             transport="serial",
                         )
@@ -1198,9 +1221,24 @@ class UploadService:
     def _emit_event(self, record: UploadRunRecord, payload: Dict[str, Any]) -> None:
         with record.lock:
             subs = list(record.subscribers)
-        for queue, loop in subs:
+        is_critical = payload.get("type") in ("completed", "cleared", "snapshot", "progress")
+
+        def _deliver(q: "asyncio.Queue[Dict[str, Any]]") -> None:
             try:
-                loop.call_soon_threadsafe(queue.put_nowait, payload)
+                q.put_nowait(payload)
+            except asyncio.QueueFull:
+                if is_critical:
+                    try:
+                        q.get_nowait()
+                        q.put_nowait(payload)
+                    except (asyncio.QueueEmpty, asyncio.QueueFull):
+                        pass
+
+        for queue, loop in subs:
+            if loop.is_closed():
+                continue
+            try:
+                loop.call_soon_threadsafe(_deliver, queue)
             except RuntimeError:
                 pass
 
@@ -1440,6 +1478,24 @@ class UploadService:
 
         assert report.selected_port is not None
 
+        # Coordinate port ownership with live Serial Monitor session
+        try:
+            from app.services.serial_service import get_serial_service
+
+            serial_state = get_serial_service().get_state(include_logs=False)
+            if serial_state.status in ("connected", "connecting") and serial_state.port:
+                sel_norm = report.selected_port.strip().lower()
+                ser_norm = serial_state.port.strip().lower()
+                if sel_norm == ser_norm:
+                    raise UploadServiceError(
+                        f"Serial Monitor is currently connected to '{serial_state.port}'. Disconnect Serial Monitor before flashing firmware.",
+                        409,
+                    )
+        except UploadServiceError:
+            raise
+        except Exception:
+            pass
+
         # Minimal restricted environment (no host secret leakage)
         env = _build_safe_subprocess_env(eff)
         env["PYTHONUNBUFFERED"] = "1"
@@ -1447,9 +1503,14 @@ class UploadService:
         env["VEGA_MACHINE"] = board.machine
         env["RISCV_ARCH"] = board.isa
         env["VEGA_UPLOAD_PORT"] = report.selected_port
-        env["VEGA_FIRMWARE"] = str(
-            (project_root / selected_artifact.relative_path).resolve()
-        )
+        try:
+            env["VEGA_FIRMWARE"] = str(
+                (project_root / selected_artifact.relative_path).resolve()
+            )
+        except OSError as exc:
+            raise UploadServiceError(
+                f"Unable to resolve firmware artifact path: {exc}", 400
+            ) from exc
         sdk_root = _resolve_existing_path(eff.sdk_root)
         if sdk_root and sdk_root.is_dir():
             env["VEGA_SDK"] = str(sdk_root)
@@ -1475,6 +1536,13 @@ class UploadService:
         record = UploadRunRecord(summary=summary)
 
         with self._state_lock:
+            if self._active_upload_id is not None:
+                active = self._runs.get(self._active_upload_id)
+                if active and active.summary.status == "running":
+                    raise UploadServiceError(
+                        f"A firmware upload ({active.summary.project_name} -> {active.summary.port}) is already running. Cancel or wait for it to finish.",
+                        409,
+                    )
             if len(self._history) == self._history.maxlen:
                 oldest = self._history.pop()
                 if oldest != self._active_upload_id:
@@ -1568,9 +1636,16 @@ class UploadService:
             record = self._runs.get(target_id) if target_id else None
         if record is not None:
             with record.lock:
+                if record.summary.status == "running":
+                    raise UploadServiceError(
+                        "Cannot clear upload output while a firmware upload is running.",
+                        409,
+                    )
                 record.logs.clear()
+                record.seq_counter = 0
                 record.summary.log_line_count = 0
                 record.summary.truncated_logs = False
+            self._emit_event(record, {"type": "cleared", "upload_id": record.summary.upload_id})
         return self.get_upload_state()
 
     def list_history(self) -> UploadHistoryResponse:
@@ -1608,8 +1683,11 @@ class UploadService:
             with active_rec.lock:
                 active_rec.cancel_event.set()
                 proc = active_rec.active_proc
+                worker = active_rec.worker_thread
             if proc:
                 terminate_process_tree(proc)
+            if worker and worker.is_alive():
+                worker.join(timeout=1.5)
 
 
 _upload_service_singleton = UploadService(settings)

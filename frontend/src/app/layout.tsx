@@ -8,13 +8,13 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   colorScheme: "dark",
-  themeColor: "#06070c",
+  themeColor: "#181818",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" data-theme="dark" className="dark h-full antialiased">
-      <body className="flex h-full min-h-0 flex-col bg-[#06070c] text-[#e8ebf7]">
+      <body className="flex h-full min-h-0 flex-col bg-[#181818] text-[#F4F4F5]">
         {children}
       </body>
     </html>
