@@ -766,7 +766,9 @@ class TerminalService:
 
         # Safe fallback without creating or modifying directories
         try:
-            default_projects = self._settings.get_default_projects_dir()
+            default_projects = ProjectService(
+                self._settings
+            ).get_default_projects_dir()
             if default_projects.is_dir():
                 return str(default_projects.resolve(strict=False)), None
         except OSError:

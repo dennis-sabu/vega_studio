@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 from datetime import datetime, timezone
@@ -195,6 +196,72 @@ def _render_makefile(name: str) -> str:
     )
 
 
+_SOURCE_EXTENSIONS = frozenset({".c", ".cpp", ".cc", ".h", ".hpp", ".s", ".S", ".ld"})
+
+
+def _scan_workspace_indicators(
+    project_path: Path, children: List[Path]
+) -> Tuple[List[str], str, str, str]:
+    """Inspect an existing directory read-only to detect firmware/project indicators."""
+    indicators: List[str] = []
+    child_names: dict[str, Path] = {}
+    has_root_sources = False
+    has_root_headers = False
+
+    for child in children:
+        child_names[child.name] = child
+        try:
+            if child.is_file():
+                ext = child.suffix
+                if ext in {".c", ".cpp", ".cc", ".s", ".S"}:
+                    has_root_sources = True
+                elif ext in {".h", ".hpp"}:
+                    has_root_headers = True
+        except OSError:
+            continue
+
+    makefile_name = "Makefile"
+    if (project_path / "Makefile").is_file():
+        indicators.append("Makefile")
+    elif (project_path / "GNUmakefile").is_file():
+        makefile_name = "GNUmakefile"
+        indicators.append("GNUmakefile")
+
+    src_dir = "src"
+    has_nested_sources = False
+    if "src" in child_names and child_names["src"].is_dir():
+        indicators.append("src/")
+        try:
+            for item in list(child_names["src"].iterdir())[:60]:
+                if item.is_file() and item.suffix in _SOURCE_EXTENSIONS:
+                    has_nested_sources = True
+                    break
+        except OSError:
+            pass
+    elif has_root_sources:
+        src_dir = "."
+
+    inc_dir = "include"
+    if "include" in child_names and child_names["include"].is_dir():
+        indicators.append("include/")
+    elif "inc" in child_names and child_names["inc"].is_dir():
+        inc_dir = "inc"
+        indicators.append("inc/")
+    elif has_root_headers:
+        inc_dir = "."
+
+    if has_root_sources or has_nested_sources:
+        indicators.append("C/RISC-V sources")
+    if (project_path / "CMakeLists.txt").is_file() or (project_path / "prj.conf").is_file():
+        indicators.append("CMake/Zephyr config")
+    if (project_path / ".git").exists():
+        indicators.append("Git repository")
+    if (project_path / PROJECT_METADATA_FILENAME).is_file():
+        indicators.append("vega-project.json")
+
+    return indicators, makefile_name, src_dir, inc_dir
+
+
 class ProjectService:
     """Service coordinating VEGA Studio project lifecycle and local persistence."""
 
@@ -203,16 +270,160 @@ class ProjectService:
         db_path = self._settings.get_data_dir() / "vega_studio.db"
         self.persistence = AppPersistence(db_path)
 
+    def get_default_projects_dir(self) -> Path:
+        """Return configured default parent directory for new projects, falling back to OS default."""
+        override = self.persistence.get_default_projects_dir_override()
+        if override:
+            try:
+                return validate_directory_input(override, label="Default projects location")
+            except ProjectServiceError:
+                pass
+        return self._settings.get_default_projects_dir()
+
+    def update_default_projects_dir(
+        self, raw_dir: Optional[str]
+    ) -> WorkspaceStateResponse:
+        """Set or reset the user's preferred default parent directory for creating projects."""
+        cleaned = (raw_dir or "").strip()
+        if not cleaned:
+            self.persistence.set_default_projects_dir_override(None)
+            return self.get_workspace_state()
+
+        resolved = validate_directory_input(
+            cleaned, label="Default projects location"
+        )
+        try:
+            if resolved.exists() and not resolved.is_dir():
+                raise ProjectServiceError(
+                    f"Default projects location '{resolved}' is not a directory.",
+                    400,
+                )
+            if not resolved.exists():
+                resolved.mkdir(parents=True, exist_ok=True)
+            if not os.access(resolved, os.R_OK | os.W_OK):
+                raise ProjectServiceError(
+                    f"Permission denied accessing '{resolved}' for writing.",
+                    403,
+                )
+        except ProjectServiceError:
+            raise
+        except PermissionError as exc:
+            raise ProjectServiceError(
+                f"Permission denied setting default projects directory '{resolved}': {exc}",
+                403,
+            ) from exc
+        except OSError as exc:
+            raise ProjectServiceError(
+                f"Unable to configure default projects directory '{resolved}': {exc}",
+                400,
+            ) from exc
+
+        self.persistence.set_default_projects_dir_override(str(resolved))
+        return self.get_workspace_state()
+
     def _inspect_project_directory(
         self, project_path: Path
     ) -> Tuple[VegaProjectMetadata, bool, List[str], List[ProjectEntrySummary]]:
-        """Read and validate a VEGA project directory without modifying any files."""
-        meta_path = project_path / PROJECT_METADATA_FILENAME
-        if not meta_path.exists():
+        """Read and inspect a workspace or VEGA project directory (4-tuple helper)."""
+        metadata, structure_valid, warnings, entries, _, _ = (
+            self._inspect_workspace_directory(project_path)
+        )
+        return metadata, structure_valid, warnings, entries
+
+    def _inspect_workspace_directory(
+        self, project_path: Path
+    ) -> Tuple[
+        VegaProjectMetadata,
+        bool,
+        List[str],
+        List[ProjectEntrySummary],
+        bool,
+        List[str],
+    ]:
+        """Read and inspect any accessible VEGA project or external workspace without modifying files."""
+        try:
+            if not os.access(project_path, os.R_OK):
+                raise ProjectServiceError(
+                    f"Permission denied reading directory '{project_path}'.",
+                    403,
+                )
+            raw_children = list(project_path.iterdir())
+        except ProjectServiceError:
+            raise
+        except PermissionError as exc:
             raise ProjectServiceError(
-                f"Not a VEGA Studio project: missing '{PROJECT_METADATA_FILENAME}' in '{project_path}'.",
+                f"Permission denied reading directory '{project_path}': {exc}",
+                403,
+            ) from exc
+        except OSError as exc:
+            raise ProjectServiceError(
+                f"Unable to access directory '{project_path}': {exc}",
                 400,
+            ) from exc
+
+        def _entry_sort_key(p: Path) -> Tuple[bool, str]:
+            try:
+                is_dir = p.is_dir()
+            except OSError:
+                is_dir = False
+            return (not is_dir, p.name.lower())
+
+        children = sorted(raw_children, key=_entry_sort_key)
+        indicators, detected_makefile, detected_src, detected_inc = (
+            _scan_workspace_indicators(project_path, children)
+        )
+
+        entries: List[ProjectEntrySummary] = []
+        for child in children[:30]:
+            try:
+                kind = "dir" if child.is_dir() else "file"
+            except OSError:
+                kind = "file"
+            entries.append(ProjectEntrySummary(name=child.name, kind=kind))
+
+        meta_path = project_path / PROJECT_METADATA_FILENAME
+        if not os.path.lexists(meta_path):
+            # External workspace / pre-existing folder without vega-project.json:
+            # construct read-only metadata in memory without mutating disk files.
+            try:
+                mtime_iso = datetime.fromtimestamp(
+                    project_path.stat().st_mtime, tz=timezone.utc
+                ).isoformat()
+            except OSError:
+                mtime_iso = _utc_now()
+
+            board_override = self.persistence.get_project_board_override(
+                str(project_path)
             )
+            if board_override:
+                target = ProjectTarget(
+                    board=board_override["board"],
+                    arch=board_override["arch"],
+                    machine=board_override["machine"],
+                )
+            else:
+                target = ProjectTarget(
+                    board="VEGA_ARIES_V3",
+                    arch="rv32i_zicsr",
+                    machine="THEJAS32",
+                )
+
+            has_makefile = (project_path / detected_makefile).is_file()
+            metadata = VegaProjectMetadata(
+                schemaVersion=PROJECT_SCHEMA_VERSION,
+                name=project_path.name or str(project_path),
+                description="",
+                template="minimal" if has_makefile else "empty",
+                target=target,
+                build=ProjectBuildConfig(
+                    makefile=detected_makefile,
+                    sourceDir=detected_src,
+                    includeDir=detected_inc,
+                ),
+                createdAt=mtime_iso,
+                updatedAt=mtime_iso,
+            )
+            return metadata, True, [], entries, False, indicators
 
         try:
             resolved_meta = meta_path.resolve(strict=True)
@@ -229,6 +440,11 @@ class ProjectService:
 
         try:
             raw_text = resolved_meta.read_text(encoding="utf-8")
+        except PermissionError as exc:
+            raise ProjectServiceError(
+                f"Permission denied reading '{PROJECT_METADATA_FILENAME}': {exc}",
+                403,
+            ) from exc
         except (OSError, UnicodeDecodeError) as exc:
             raise ProjectServiceError(
                 f"Failed to read '{PROJECT_METADATA_FILENAME}': {exc}", 400
@@ -273,7 +489,7 @@ class ProjectService:
                 422,
             ) from exc
 
-        warnings: List[str] = []
+        warnings = []
         from app.services.board_service import _BOARD_CATALOGUE
 
         known_boards = {b.id for b in _BOARD_CATALOGUE}
@@ -303,23 +519,7 @@ class ProjectService:
                     f"Configured Makefile '{metadata.build.makefile}' was not found."
                 )
 
-        entries: List[ProjectEntrySummary] = []
-        try:
-            children = sorted(
-                project_path.iterdir(),
-                key=lambda p: (not p.is_dir(), p.name.lower()),
-            )
-            for child in children[:30]:
-                entries.append(
-                    ProjectEntrySummary(
-                        name=child.name,
-                        kind="dir" if child.is_dir() else "file",
-                    )
-                )
-        except OSError as exc:
-            warnings.append(f"Could not list directory entries: {exc}")
-
-        return metadata, len(warnings) == 0, warnings, entries
+        return metadata, len(warnings) == 0, warnings, entries, True, indicators
 
     def create_project(self, req: CreateProjectRequest) -> WorkspaceSummary:
         """Create a new portable VEGA Studio project safely without overwriting."""
@@ -395,6 +595,13 @@ class ProjectService:
             raise ProjectServiceError(
                 f"Refusing to overwrite existing path: {exc}", 409
             ) from exc
+        except PermissionError as exc:
+            if created_target and target_dir.exists():
+                shutil.rmtree(target_dir, ignore_errors=True)
+            raise ProjectServiceError(
+                f"Permission denied creating project inside '{parent_path}': {exc}",
+                403,
+            ) from exc
         except OSError as exc:
             if created_target and target_dir.exists():
                 shutil.rmtree(target_dir, ignore_errors=True)
@@ -405,13 +612,17 @@ class ProjectService:
         return self.open_project(str(target_dir))
 
     def load_project(self, raw_project_dir: str) -> WorkspaceSummary:
-        """Inspect and validate a VEGA project read-only without mutating active workspace state."""
+        """Inspect a workspace or VEGA project read-only without mutating active workspace state."""
         project_path = validate_directory_input(
             raw_project_dir, label="Project directory"
         )
         try:
             exists = project_path.exists()
             is_dir = project_path.is_dir()
+        except PermissionError as exc:
+            raise ProjectServiceError(
+                f"Permission denied accessing directory '{project_path}': {exc}", 403
+            ) from exc
         except OSError as exc:
             raise ProjectServiceError(
                 f"Cannot access project directory '{project_path}': {exc}", 403
@@ -424,25 +635,36 @@ class ProjectService:
             raise ProjectServiceError(
                 f"'{project_path}' is not a directory.", 400
             )
-        metadata, structure_valid, warnings, entries = (
-            self._inspect_project_directory(project_path)
-        )
+        (
+            metadata,
+            structure_valid,
+            warnings,
+            entries,
+            has_metadata,
+            detected_indicators,
+        ) = self._inspect_workspace_directory(project_path)
         return WorkspaceSummary(
             project=metadata,
             project_dir=str(project_path),
             structure_valid=structure_valid,
             warnings=warnings,
             top_level_entries=entries,
+            has_metadata=has_metadata,
+            detected_indicators=detected_indicators,
         )
 
     def open_project(self, raw_project_dir: str) -> WorkspaceSummary:
-        """Validate and open an existing VEGA Studio project without modifying it."""
+        """Open any accessible directory as a VEGA Studio workspace without mutating its files."""
         project_path = validate_directory_input(
             raw_project_dir, label="Project directory"
         )
         try:
             exists = project_path.exists()
             is_dir = project_path.is_dir()
+        except PermissionError as exc:
+            raise ProjectServiceError(
+                f"Permission denied accessing directory '{project_path}': {exc}", 403
+            ) from exc
         except OSError as exc:
             raise ProjectServiceError(
                 f"Cannot access project directory '{project_path}': {exc}", 403
@@ -456,9 +678,14 @@ class ProjectService:
                 f"'{project_path}' is not a directory.", 400
             )
 
-        metadata, structure_valid, warnings, entries = (
-            self._inspect_project_directory(project_path)
-        )
+        (
+            metadata,
+            structure_valid,
+            warnings,
+            entries,
+            has_metadata,
+            detected_indicators,
+        ) = self._inspect_workspace_directory(project_path)
 
         dir_str = str(project_path)
         self.persistence.set_active_project_dir(dir_str)
@@ -466,7 +693,7 @@ class ProjectService:
             project_dir=dir_str,
             name=metadata.name,
             board=metadata.target.board or "UNASSIGNED",
-            schema_version=metadata.schemaVersion,
+            schema_version=metadata.schemaVersion if has_metadata else "external",
         )
 
         return WorkspaceSummary(
@@ -475,6 +702,8 @@ class ProjectService:
             structure_valid=structure_valid,
             warnings=warnings,
             top_level_entries=entries,
+            has_metadata=has_metadata,
+            detected_indicators=detected_indicators,
         )
 
     def close_workspace(self) -> None:
@@ -502,7 +731,7 @@ class ProjectService:
                 exists = (
                     p.exists()
                     and p.is_dir()
-                    and (p / PROJECT_METADATA_FILENAME).is_file()
+                    and os.access(p, os.R_OK)
                 )
             except OSError:
                 exists = False
@@ -520,7 +749,7 @@ class ProjectService:
 
     def get_workspace_state(self) -> WorkspaceStateResponse:
         """Return active workspace (if valid) and recent projects list."""
-        default_dir = str(self._settings.get_default_projects_dir())
+        default_dir = str(self.get_default_projects_dir())
         active_dir = self.persistence.get_active_project_dir()
         active_summary: Optional[WorkspaceSummary] = None
         warning: Optional[str] = None
@@ -542,15 +771,22 @@ class ProjectService:
                         f"Previously opened workspace '{active_dir}' no longer exists.",
                         404,
                     )
-                metadata, structure_valid, warnings, entries = (
-                    self._inspect_project_directory(active_path)
-                )
+                (
+                    metadata,
+                    structure_valid,
+                    warnings,
+                    entries,
+                    has_metadata,
+                    detected_indicators,
+                ) = self._inspect_workspace_directory(active_path)
                 active_summary = WorkspaceSummary(
                     project=metadata,
                     project_dir=str(active_path),
                     structure_valid=structure_valid,
                     warnings=warnings,
                     top_level_entries=entries,
+                    has_metadata=has_metadata,
+                    detected_indicators=detected_indicators,
                 )
             except ProjectServiceError as exc:
                 self.persistence.set_active_project_dir(None)

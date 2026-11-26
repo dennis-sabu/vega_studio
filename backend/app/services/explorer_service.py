@@ -269,7 +269,7 @@ class ExplorerService:
         self._project_service = ProjectService(self._settings)
 
     def _resolve_project_root(self, raw_project_dir: str) -> Path:
-        """Verify project_dir exists and is a valid VEGA Studio project root."""
+        """Verify project_dir exists and is a readable accessible directory."""
         try:
             project_path = validate_directory_input(
                 raw_project_dir, label="Project directory"
@@ -277,20 +277,34 @@ class ExplorerService:
         except ProjectServiceError as exc:
             raise ExplorerServiceError(exc.message, exc.status_code) from exc
 
-        if not project_path.exists() or not project_path.is_dir():
+        try:
+            exists = project_path.exists()
+            is_dir = project_path.is_dir()
+        except OSError as exc:
+            raise ExplorerServiceError(
+                f"Cannot access project directory '{project_path}': {exc}", 403
+            ) from exc
+
+        if not exists or not is_dir:
             raise ExplorerServiceError(
                 f"Project directory '{project_path}' does not exist.", 404
             )
 
-        meta_path = project_path / PROJECT_METADATA_FILENAME
-        if not meta_path.is_file():
-            raise ExplorerServiceError(
-                f"Directory '{project_path}' is not an active VEGA Studio project.",
-                400,
-            )
-
         try:
-            return project_path.resolve(strict=True)
+            resolved = project_path.resolve(strict=True)
+            if not os.access(resolved, os.R_OK):
+                raise ExplorerServiceError(
+                    f"Permission denied accessing project directory '{resolved}'.",
+                    403,
+                )
+            return resolved
+        except ExplorerServiceError:
+            raise
+        except PermissionError as exc:
+            raise ExplorerServiceError(
+                f"Permission denied accessing project directory '{project_path}': {exc}",
+                403,
+            ) from exc
         except OSError as exc:
             raise ExplorerServiceError(
                 f"Unable to resolve project root: {exc}", 400

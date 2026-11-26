@@ -368,66 +368,74 @@ class BoardService:
         except ProjectServiceError as exc:
             raise BoardServiceError(exc.message, exc.status_code) from exc
 
-        meta_path = (project_path / PROJECT_METADATA_FILENAME).resolve(strict=True)
-        if meta_path.parent != project_path or not meta_path.is_file():
-            raise BoardServiceError(
-                f"Invalid '{PROJECT_METADATA_FILENAME}' path inside project.", 400
-            )
-
-        try:
-            raw_obj = json.loads(meta_path.read_text(encoding="utf-8"))
-            if not isinstance(raw_obj, dict):
-                raise BoardServiceError(
-                    f"Malformed '{PROJECT_METADATA_FILENAME}' root JSON object.",
-                    422,
-                )
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise BoardServiceError(
-                f"Unable to read '{PROJECT_METADATA_FILENAME}': {exc}", 400
-            ) from exc
-
+        meta_candidate = project_path / PROJECT_METADATA_FILENAME
         previous_board = metadata.target.board
-        raw_obj["target"] = {
-            "board": board.id,
-            "arch": board.isa,
-            "machine": board.machine,
-        }
-        raw_obj["updatedAt"] = _utc_now()
-        serialized = json.dumps(raw_obj, indent=2) + "\n"
+        if not meta_candidate.exists():
+            # External workspace without vega-project.json: save board preference
+            # locally in SQLite so the user's directory stays untouched.
+            self._projects.persistence.set_project_board_override(
+                str(project_path), board.id, board.isa, board.machine
+            )
+        else:
+            meta_path = meta_candidate.resolve(strict=True)
+            if meta_path.parent != project_path or not meta_path.is_file():
+                raise BoardServiceError(
+                    f"Invalid '{PROJECT_METADATA_FILENAME}' path inside project.", 400
+                )
 
-        tmp_path: Optional[Path] = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
-                newline="\n",
-                dir=project_path,
-                prefix=".vega-meta-",
-                suffix=".tmp",
-                delete=False,
-            ) as handle:
-                tmp_path = Path(handle.name)
-                handle.write(serialized)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(tmp_path, meta_path)
-            tmp_path = None
-        except PermissionError as exc:
-            raise BoardServiceError(
-                f"Permission denied updating '{PROJECT_METADATA_FILENAME}': {exc}",
-                403,
-            ) from exc
-        except OSError as exc:
-            raise BoardServiceError(
-                f"Failed to save board selection to '{PROJECT_METADATA_FILENAME}': {exc}",
-                500,
-            ) from exc
-        finally:
-            if tmp_path is not None:
-                try:
-                    tmp_path.unlink(missing_ok=True)
-                except OSError:
-                    pass
+            try:
+                raw_obj = json.loads(meta_path.read_text(encoding="utf-8"))
+                if not isinstance(raw_obj, dict):
+                    raise BoardServiceError(
+                        f"Malformed '{PROJECT_METADATA_FILENAME}' root JSON object.",
+                        422,
+                    )
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise BoardServiceError(
+                    f"Unable to read '{PROJECT_METADATA_FILENAME}': {exc}", 400
+                ) from exc
+
+            raw_obj["target"] = {
+                "board": board.id,
+                "arch": board.isa,
+                "machine": board.machine,
+            }
+            raw_obj["updatedAt"] = _utc_now()
+            serialized = json.dumps(raw_obj, indent=2) + "\n"
+
+            tmp_path: Optional[Path] = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    encoding="utf-8",
+                    newline="\n",
+                    dir=project_path,
+                    prefix=".vega-meta-",
+                    suffix=".tmp",
+                    delete=False,
+                ) as handle:
+                    tmp_path = Path(handle.name)
+                    handle.write(serialized)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(tmp_path, meta_path)
+                tmp_path = None
+            except PermissionError as exc:
+                raise BoardServiceError(
+                    f"Permission denied updating '{PROJECT_METADATA_FILENAME}': {exc}",
+                    403,
+                ) from exc
+            except OSError as exc:
+                raise BoardServiceError(
+                    f"Failed to save board selection to '{PROJECT_METADATA_FILENAME}': {exc}",
+                    500,
+                ) from exc
+            finally:
+                if tmp_path is not None:
+                    try:
+                        tmp_path.unlink(missing_ok=True)
+                    except OSError:
+                        pass
 
         try:
             workspace_summary = self._projects.open_project(str(project_path))

@@ -1,9 +1,8 @@
 "use client";
 
 import { type ComponentProps } from"react";
-import { PanelRightClose, Sparkles, TerminalSquare } from"lucide-react";
+import { PanelRightClose, Sparkles } from"lucide-react";
 import { NativeAiPanel } from"@/components/ai/NativeAiPanel";
-import { OpenCodePanel } from"@/components/opencode/OpenCodePanel";
 import { Tooltip } from"@/components/ui/Tooltip";
 import type { RightPanelTab } from"@/types/shell";
 
@@ -13,7 +12,6 @@ interface RightPanelProps {
   onSelectTab: (tab: RightPanelTab) => void;
   onCollapse: () => void;
   nativeAiProps?: ComponentProps<typeof NativeAiPanel>;
-  opencodeProps?: ComponentProps<typeof OpenCodePanel>;
 }
 
 export function RightPanel({
@@ -22,15 +20,14 @@ export function RightPanel({
   onSelectTab,
   onCollapse,
   nativeAiProps,
-  opencodeProps,
 }: RightPanelProps) {
   return (
     <aside
-      aria-label="Unified AI Workspace"
+      aria-label="VEGA Assistant Workspace"
       style={{ width: `${width}px` }}
       className="vega-panel-glass flex h-full min-h-0 shrink-0 flex-col border-l border-[#2D2D30] select-none"
     >
-      {/* Unified AI Workspace Switcher Header */}
+      {/* Header */}
       <div className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-[#2D2D30] bg-[#181818] px-2.5">
         <div
           role="tablist"
@@ -42,29 +39,10 @@ export function RightPanel({
             role="tab"
             aria-selected={activeTab === "native-ai"}
             onClick={() => onSelectTab("native-ai")}
-            className={`inline-flex h-6 items-center gap-1.5 rounded-[4px] px-2 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#7AA2FF]/50 ${
-              activeTab === "native-ai"
-                ? "bg-[#7AA2FF]/16 text-[#F4F4F5]"
-                : "text-[#B4B4BC] hover:bg-[#252527] hover:text-[#F4F4F5]"
-            }`}
+            className="inline-flex h-6 items-center gap-1.5 rounded-[4px] bg-[#7AA2FF]/16 px-2 text-[11px] font-medium text-[#F4F4F5] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#7AA2FF]/50"
           >
           <Sparkles className="h-3 w-3 text-[#7AA2FF]" />
             <span>VEGA Assistant</span>
-          </button>
-
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "opencode"}
-            onClick={() => onSelectTab("opencode")}
-            className={`inline-flex h-6 items-center gap-1.5 rounded-[4px] px-2 text-[11px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#7AA2FF]/50 ${
-              activeTab === "opencode"
-                ? "bg-[#7AA2FF]/16 text-[#F4F4F5]"
-                : "text-[#B4B4BC] hover:bg-[#252527] hover:text-[#F4F4F5]"
-            }`}
-          >
-          <TerminalSquare className="h-3 w-3 text-[#7AA2FF]" />
-            <span>OpenCode</span>
           </button>
         </div>
 
@@ -86,17 +64,7 @@ export function RightPanel({
 
       {/* Body */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {activeTab === "opencode" ? (
-          opencodeProps ? (
-            <OpenCodePanel {...opencodeProps} />
-          ) : (
-          <div className="flex flex-1 items-center justify-center p-4">
-            <span className="text-xs text-[#B4B4BC]">
-                OpenCode loading…
-              </span>
-            </div>
-          )
-        ) : nativeAiProps ? (
+        {nativeAiProps ? (
           <NativeAiPanel {...nativeAiProps} />
         ) : (
         <div className="flex flex-1 items-center justify-center p-4">

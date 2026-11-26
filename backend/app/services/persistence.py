@@ -198,3 +198,63 @@ class AppPersistence:
         """Remove a key from app_state."""
         with self._connect() as conn:
             conn.execute("DELETE FROM app_state WHERE key = ?", (key,))
+
+    def get_default_projects_dir_override(self) -> Optional[str]:
+        """Return user-configured default parent directory for new projects, if any."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT value FROM app_state WHERE key = ?",
+                ("default_projects_dir",),
+            ).fetchone()
+            return str(row["value"]) if row else None
+
+    def set_default_projects_dir_override(self, projects_dir: Optional[str]) -> None:
+        """Persist or clear the user-configured default projects directory."""
+        if not projects_dir:
+            self.delete_state("default_projects_dir")
+            return
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO app_state (key, value, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = excluded.updated_at
+                """,
+                ("default_projects_dir", projects_dir, self._utc_now()),
+            )
+
+    def get_project_board_override(self, project_dir: str) -> Optional[dict[str, str]]:
+        """Return locally persisted board target selection for workspaces without vega-project.json."""
+        record = self.get_state_json("external_project_boards")
+        if not record or not isinstance(record[0], dict):
+            return None
+        entry = record[0].get(project_dir)
+        if not isinstance(entry, dict):
+            return None
+        board = entry.get("board")
+        arch = entry.get("arch")
+        machine = entry.get("machine")
+        if isinstance(board, str) and board.strip():
+            return {
+                "board": board.strip(),
+                "arch": str(arch or "rv32i_zicsr"),
+                "machine": str(machine or "THEJAS32"),
+            }
+        return None
+
+    def set_project_board_override(
+        self, project_dir: str, board: str, arch: str, machine: str
+    ) -> None:
+        """Store board selection in SQLite without writing vega-project.json into external repos."""
+        record = self.get_state_json("external_project_boards")
+        mapping: dict[str, dict[str, str]] = (
+            dict(record[0]) if record and isinstance(record[0], dict) else {}
+        )
+        mapping[project_dir] = {
+            "board": board,
+            "arch": arch,
+            "machine": machine,
+        }
+        self.set_state_json("external_project_boards", mapping)

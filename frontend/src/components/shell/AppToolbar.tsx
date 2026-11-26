@@ -570,7 +570,7 @@ export function AppToolbar({
         />
       )}
       {/* Left: VEGA Brand, Compact VS Code Title Menu, Mode Pill & Project Chip */}
-      <div className="vega-no-drag flex min-w-0 shrink items-center gap-1.5">
+      <div className="flex min-w-0 shrink items-center gap-1.5">
         <div className="flex shrink-0 items-center gap-1.5 pr-0.5">
           <div className="flex h-6 w-6 items-center justify-center rounded-[6px] border border-[#7AA2FF]/35 bg-[#7AA2FF]/16 text-[#7AA2FF]">
             <Cpu className="h-3.5 w-3.5" />
@@ -581,7 +581,7 @@ export function AppToolbar({
         </div>
 
         {/* Integrated Compact Menus anchored per button */}
-        <div ref={menuContainerRef} className="relative hidden items-center gap-0.5 sm:flex">
+        <div ref={menuContainerRef} className="vega-no-drag relative hidden items-center gap-0.5 sm:flex">
           {(["file","view","build","tools"] as TitleMenuId[]).map((mId) => (
             <button
               key={mId}
@@ -616,11 +616,12 @@ export function AppToolbar({
           options={MODE_OPTIONS}
           value={activeMode}
           onChange={onModeChange}
+          className="vega-no-drag"
           liquid={false}
         />
 
         {activeProjectName ? (
-        <div className="hidden h-[26px] items-center gap-1 rounded-[6px] border border-[#2D2D30] bg-[#252527] px-2 text-[11.5px] text-[#F4F4F5] xl:inline-flex">
+        <div className="vega-no-drag hidden h-[26px] items-center gap-1 rounded-[6px] border border-[#2D2D30] bg-[#252527] px-2 text-[11.5px] text-[#F4F4F5] xl:inline-flex">
           <span className="max-w-[96px] truncate font-medium">
               {activeProjectName}
             </span>
@@ -636,7 +637,7 @@ export function AppToolbar({
             </Tooltip>
           </div>
         ) : (
-        <div className="hidden items-center gap-0.5 lg:flex">
+        <div className="vega-no-drag hidden items-center gap-0.5 lg:flex">
             <Tooltip label="New VEGA Project">
               <button
                 type="button"
@@ -664,12 +665,12 @@ export function AppToolbar({
       </div>
 
       {/* Center: VS Code / Antigravity Command Center Bar + Compact Firmware Toolchain */}
-      <div className="vega-no-drag flex min-w-0 flex-1 items-center justify-center gap-1.5 px-1">
+      <div className="flex min-w-0 flex-1 items-center justify-center gap-1.5 px-1">
         <button
           type="button"
           onClick={onOpenCommandPalette}
           aria-label="Open VEGA Studio Command Center"
-          className="flex h-[26px] min-w-0 max-w-[340px] flex-1 items-center justify-between gap-2 overflow-hidden rounded-[7px] border border-[#2D2D30] bg-[#252527] px-2.5 text-left text-[11.5px] text-[#F4F4F5] transition-colors hover:border-[#7AA2FF]/55 hover:bg-[#2D2D31] hover:text-white"
+          className="vega-no-drag flex h-[26px] min-w-0 max-w-[340px] flex-1 items-center justify-between gap-2 overflow-hidden rounded-[7px] border border-[#2D2D30] bg-[#252527] px-2.5 text-left text-[11.5px] text-[#F4F4F5] transition-colors hover:border-[#7AA2FF]/55 hover:bg-[#2D2D31] hover:text-white"
         >
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
           <Search className="h-3 w-3 shrink-0 text-[#7AA2FF]" />
@@ -687,7 +688,7 @@ export function AppToolbar({
         {/* Compact Firmware Toolchain Strip */}
         <div
           aria-label="Toolchain and board actions"
-          className="hidden h-[26px] shrink-0 items-center gap-0.5 rounded-[7px] border border-[#2D2D30] bg-[#252527] px-0.5 md:flex"
+          className="vega-no-drag hidden h-[26px] shrink-0 items-center gap-0.5 rounded-[7px] border border-[#2D2D30] bg-[#252527] px-0.5 md:flex"
         >
           <Tooltip
             label={
@@ -873,11 +874,11 @@ export function AppToolbar({
       </div>
 
       {/* Right: Layout Toggles, Reset, AI Toggle, Settings & Linux Window Controls */}
-      <div className="vega-no-drag flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center gap-1">
         <div
           role="group"
           aria-label="Workspace layout controls"
-          className="flex items-center gap-0.5 rounded-[6px] border border-[#2D2D30] bg-[#252527] p-0.5"
+          className="vega-no-drag flex items-center gap-0.5 rounded-[6px] border border-[#2D2D30] bg-[#252527] p-0.5"
         >
           <Tooltip label="Toggle Sidebar" shortcut="Ctrl+\">
             <button
@@ -939,7 +940,7 @@ export function AppToolbar({
             <button
               type="button"
               onClick={handleResetClick}
-              className={`inline-flex h-[26px] items-center gap-1 rounded-[5px] border px-2 text-[11px] font-medium transition-colors ${
+              className={`vega-no-drag inline-flex h-[26px] items-center gap-1 rounded-[5px] border px-2 text-[11px] font-medium transition-colors ${
                 confirmReset
                   ? "border-red-400/50 bg-red-500/20 text-red-100"
                   : "border-[#2D2D30] bg-[#252527] text-[#F4F4F5] hover:bg-[#2D2D31] hover:text-white"
@@ -953,13 +954,13 @@ export function AppToolbar({
           </Tooltip>
         )}
 
-        <Tooltip label="Toggle Unified AI Workspace (VEGA Assistant & OpenCode)" side="bottom">
+        <Tooltip label="Toggle VEGA Assistant" side="bottom">
           <button
             type="button"
             onClick={onToggleRightPanel}
             aria-label="Toggle AI Assistant Panel"
             aria-pressed={rightPanelOpen && activeMode === "workspace"}
-            className={`inline-flex h-[26px] items-center gap-1 rounded-[6px] border px-2 text-[11.5px] font-medium transition-colors ${
+            className={`vega-no-drag inline-flex h-[26px] items-center gap-1 rounded-[6px] border px-2 text-[11.5px] font-medium transition-colors ${
               rightPanelOpen && activeMode === "workspace"
                 ? "border-[#7AA2FF]/55 bg-[#7AA2FF]/22 text-white"
                 : "border-[#2D2D30] bg-[#252527] text-[#F4F4F5] hover:bg-[#2D2D31] hover:text-white"
@@ -976,7 +977,7 @@ export function AppToolbar({
             onClick={onToggleSettings}
             aria-label="Appearance & Shell Settings"
             aria-pressed={settingsOpen}
-            className={`inline-flex h-[26px] w-[26px] items-center justify-center rounded-[5px] transition-colors ${
+            className={`vega-no-drag inline-flex h-[26px] w-[26px] items-center justify-center rounded-[5px] transition-colors ${
               settingsOpen
                 ? "bg-[#2C2C30] text-white"
                 : "text-[#F4F4F5] hover:bg-[#2D2D31] hover:text-white"
@@ -987,7 +988,7 @@ export function AppToolbar({
         </Tooltip>
 
         {winControlMode === "custom" && (
-        <div className="ml-1 flex h-[38px] items-center border-l border-[#2D2D30]">
+        <div className="vega-no-drag ml-1 flex h-[38px] items-center border-l border-[#2D2D30]">
             <button
               type="button"
               aria-label="Minimize window"

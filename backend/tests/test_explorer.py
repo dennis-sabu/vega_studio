@@ -225,12 +225,18 @@ async def test_explorer_protects_root_manifest_and_blocks_traversal(
         assert r_create.status_code == 400
         assert r_abs.status_code == 400
 
-        # Non-project directory rejected
-        r_non_proj = await client.get(
+        # Relative project root rejected while external directory without vega-project.json is browsable
+        r_rel_proj = await client.get(
+            "/api/explorer/tree",
+            params={"project_dir": "relative/outside", "path": ""},
+        )
+        assert r_rel_proj.status_code == 400
+        r_ext_proj = await client.get(
             "/api/explorer/tree",
             params={"project_dir": str(outside_dir), "path": ""},
         )
-        assert r_non_proj.status_code == 400
+        assert r_ext_proj.status_code == 200
+        assert [e["name"] for e in r_ext_proj.json()["entries"]] == ["secret.txt"]
 
         # Cannot rename or delete project root or vega-project.json
         r_del_root = await client.post(

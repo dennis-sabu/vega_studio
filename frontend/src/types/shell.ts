@@ -15,7 +15,7 @@ export type BottomPanelTab =
   | "upload"
   | "logs";
 
-export type RightPanelTab = "native-ai" | "opencode";
+export type RightPanelTab = "native-ai";
 
 export type CenterTabId =
   | "overview"

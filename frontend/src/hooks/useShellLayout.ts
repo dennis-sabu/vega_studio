@@ -61,7 +61,7 @@ const VALID_BOTTOM_TABS = new Set<BottomPanelTab>([
   "upload",
   "logs",
 ]);
-const VALID_RIGHT_TABS = new Set<RightPanelTab>(["native-ai", "opencode"]);
+const VALID_RIGHT_TABS = new Set<RightPanelTab>(["native-ai"]);
 const VALID_CENTER_TABS = new Set<CenterTabId>([
   "overview",
   "diagnostics",
@@ -357,6 +357,15 @@ export function useShellLayout() {
     });
   }, []);
 
+  const openSidebarSection = useCallback((section: PrimaryNavSection) => {
+    setLayout((prev) => ({
+      ...prev,
+      activeMode: "workspace",
+      activeNav: section,
+      sidebarOpen: true,
+    }));
+  }, []);
+
   const toggleSidebar = useCallback(() => {
     setLayout((prev) => ({
       ...prev,
@@ -525,6 +534,7 @@ export function useShellLayout() {
     isCustomized,
     setMode,
     selectNav,
+    openSidebarSection,
     toggleSidebar,
     setSidebarWidth,
     toggleBottomPanel,

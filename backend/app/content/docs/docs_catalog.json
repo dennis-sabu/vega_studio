@@ -153,25 +153,24 @@
       "badge": "ide_verified",
       "estimated_minutes": 4,
       "related_example_ids": [],
-      "related_slugs": ["project-structure-and-workflows", "native-ai-and-opencode"],
+      "related_slugs": ["project-structure-and-workflows", "native-ai-assistant"],
       "ide_actions": [
         { "label": "Open Source Control", "action_id": "open_git" }
       ],
       "external_links": []
     },
     {
-      "slug": "native-ai-and-opencode",
-      "title": "Native VEGA AI Assistant & OpenCode CLI",
+      "slug": "native-ai-assistant",
+      "title": "Native VEGA AI Assistant",
       "category": "Version Control & AI",
-      "summary": "How VEGA Studio pairs a provider-independent Native AI assistant (OS keyring credentials) with permission-gated OpenCode CLI.",
-      "tags": ["ai", "opencode", "credentials", "security", "code-apply"],
+      "summary": "How VEGA Studio integrates Groq, OpenAI, and local OpenAI-compatible endpoints with OS keyring credentials and read-only tools.",
+      "tags": ["ai", "groq", "credentials", "security", "code-apply"],
       "badge": "ide_verified",
       "estimated_minutes": 5,
       "related_example_ids": ["minimal_c_entry"],
       "related_slugs": ["troubleshooting", "git-and-github"],
       "ide_actions": [
-        { "label": "Open Native VEGA AI", "action_id": "open_native_ai" },
-        { "label": "Open OpenCode Dock", "action_id": "open_opencode" }
+        { "label": "Open Native VEGA AI", "action_id": "open_native_ai" }
       ],
       "external_links": []
     },
@@ -298,7 +297,7 @@
     {
       "id": "guide-git-ai-workflow",
       "title": "3. Source Control, GitHub & Safe AI Assistance",
-      "description": "Manage commits cleanly and use Native VEGA AI + OpenCode without sacrificing workspace or credential safety.",
+      "description": "Manage commits cleanly and use Native VEGA AI without sacrificing workspace or credential safety.",
       "difficulty": "intermediate",
       "estimated_minutes": 6,
       "steps": [
@@ -312,16 +311,9 @@
         {
           "step_number": 2,
           "title": "Ask Native VEGA AI with Scoped Context",
-          "detail": "Configure OpenAI, Groq, or local Ollama in OS Credential Manager and attach selected code, compiler errors, or serial lines.",
-          "doc_slug": "native-ai-and-opencode",
+          "detail": "Configure Groq, OpenAI, or local Ollama in OS Credential Manager and attach selected code, compiler errors, or serial lines.",
+          "doc_slug": "native-ai-assistant",
           "ide_action": { "label": "Open Native AI", "action_id": "open_native_ai" }
-        },
-        {
-          "step_number": 3,
-          "title": "Use OpenCode CLI with Explicit Approvals",
-          "detail": "For multi-file tasks with OpenCode CLI, retain Ask Before Actions mode and inspect diffs cleanly.",
-          "doc_slug": "native-ai-and-opencode",
-          "ide_action": { "label": "Open OpenCode", "action_id": "open_opencode" }
         }
       ]
     }

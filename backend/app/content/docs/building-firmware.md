@@ -12,4 +12,4 @@ VEGA Studio builds firmware by invoking GNU Make inside your active project dire
 ## Unsaved Files & Diagnostics Navigation
 
 - Before compiling, VEGA Studio prompts you cleanly to save dirty Monaco tabs so Make compiles what you see in the editor.
-- Compiler errors and warnings (`file:line:col: error: ...`) are parsed automatically into the **Diagnostics** bottom tab. Click **Open** to jump straight to that line in Monaco, or **Ask Native AI** / **Ask OpenCode** to analyze the exact error.
+- Compiler errors and warnings (`file:line:col: error: ...`) are parsed automatically into the **Diagnostics** bottom tab. Click **Open** to jump straight to that line in Monaco, or **Ask Native AI** to analyze the exact error.

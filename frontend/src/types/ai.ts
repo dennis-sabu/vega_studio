@@ -34,7 +34,7 @@ export interface AICredentialStatus {
   provider_id: AIProviderId;
   has_api_key: boolean;
   key_hint: string | null;
-  persistence_mode: "os_keyring" | "session_memory" | "none";
+  persistence_mode: "os_keyring" | "session_memory" | "environment" | "none";
 }
 
 export interface AISecureStorageInfo {

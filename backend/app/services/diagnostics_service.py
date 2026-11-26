@@ -18,7 +18,6 @@ from app.services.ai_service import get_ai_service
 from app.services.board_service import BoardService
 from app.services.git_service import get_git_service
 from app.services.github_service import get_github_service
-from app.services.opencode_service import get_opencode_service
 from app.services.project_service import ProjectService
 from app.services.sdk_service import SdkService
 
@@ -34,7 +33,7 @@ _EXCLUDED_DIAGNOSTIC_ITEMS = [
     "API keys and credentials stored in OS Credential Store or session memory",
     "Environment files (.env, .env.*) and private SSH/PEM keys (.pem, .key, id_rsa, id_ed25519)",
     "Source code contents, uncommitted diffs, and project data files",
-    "AI Assistant and OpenCode chat transcripts, prompts, and attachments",
+    "VEGA Assistant chat transcripts, prompts, and attachments",
     "GitHub authentication tokens and embedded URL credentials",
 ]
 
@@ -258,20 +257,6 @@ def build_safe_diagnostics_bundle(
     except Exception as exc:
         github_info = _safe_err(exc)
 
-    # OpenCode CLI readiness (paths & errors scrubbed)
-    opencode_info: Dict[str, Any]
-    try:
-        oc_cfg = get_opencode_service().get_config_state()
-        opencode_info = {
-            "available": oc_cfg.info.available,
-            "version": oc_cfg.info.version,
-            "server_running": oc_cfg.info.server_running,
-            "executable_source": oc_cfg.info.executable_source,
-            "default_permission_mode": oc_cfg.config.default_permission_mode,
-        }
-    except Exception as exc:
-        opencode_info = _safe_err(exc)
-
     # AI Assistant non-secret readiness (never raw keys or chat data)
     ai_info: Dict[str, Any]
     try:
@@ -321,7 +306,6 @@ def build_safe_diagnostics_bundle(
         boards=boards_info,
         git=git_info,
         github=github_info,
-        opencode=opencode_info,
         ai=ai_info,
         recent_backend_logs=_read_redacted_log_tail(cfg, extra_secrets),
     )

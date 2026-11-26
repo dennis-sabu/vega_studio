@@ -51,7 +51,7 @@ const DEFAULT_AI_CONFIG: AIConfig = {
   active_provider: "openai",
   providers: {
     openai: { model: "gpt-4o-mini", base_url: null },
-    groq: { model: "llama-3.3-70b-versatile", base_url: null },
+    groq: { model: "openai/gpt-oss-20b", base_url: null },
     openai_compatible: {
       model: "qwen2.5-coder:7b",
       base_url: "http://127.0.0.1:11434/v1",
@@ -266,18 +266,22 @@ export function AiProviderSettingsPanel({
                   {activeStatus.credential.key_hint ?? "Configured"} (
                   {activeStatus.credential.persistence_mode === "session_memory"
                     ? "Session Only"
-                    : "OS Keyring"}
+                    : activeStatus.credential.persistence_mode === "environment"
+                      ? "Environment Variable"
+                      : "OS Keyring"}
                   )
                 </span>
-                <button
-                  type="button"
-                  disabled={!isBackendConnected || saving}
-                  onClick={() => void onRemoveCredential(activeId)}
-                  className="inline-flex h-6 items-center gap-1 rounded border border-red-400/30 bg-red-500/12 px-2 font-mono text-[10px] text-red-200 hover:bg-red-500/22 disabled:opacity-45"
-                >
-                <Trash2 className="h-2.5 w-2.5" />
-                  <span>Remove</span>
-                </button>
+                {activeStatus.credential.persistence_mode !== "environment" && (
+                  <button
+                    type="button"
+                    disabled={!isBackendConnected || saving}
+                    onClick={() => void onRemoveCredential(activeId)}
+                    className="inline-flex h-6 items-center gap-1 rounded border border-red-400/30 bg-red-500/12 px-2 font-mono text-[10px] text-red-200 hover:bg-red-500/22 disabled:opacity-45"
+                  >
+                  <Trash2 className="h-2.5 w-2.5" />
+                    <span>Remove</span>
+                  </button>
+                )}
               </div>
             ) : (
             <span className="font-mono text-[10px] text-[#B4B4BC]">

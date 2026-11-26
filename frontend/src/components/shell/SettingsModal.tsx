@@ -4,15 +4,15 @@ import type { ComponentProps } from"react";
 import { useEffect, useState } from"react";
 import {
   Bot,
+  FolderOpen,
   SlidersHorizontal,
-  Sparkles,
   Stethoscope,
   Terminal as TerminalIcon,
   Type,
   X,
 } from"lucide-react";
+import type { DirectoryPickerOutcome } from"@/hooks/useWorkspace";
 import { AiProviderSettingsPanel } from"@/components/ai/AiProviderSettingsPanel";
-import { OpenCodeSettingsPanel } from"@/components/opencode/OpenCodeSettingsPanel";
 import { SdkConfigForm } from"@/components/sdk/SdkConfigForm";
 import {
   SegmentedPill,
@@ -34,9 +34,21 @@ export type SettingsCategory =
   |"appearance"
   |"editor"
   |"terminal"
+  |"workspace"
   |"sdk"
-  |"ai"
-  |"opencode";
+  |"ai";
+
+export interface WorkspaceSettingsProps {
+  defaultProjectsDir: string;
+  hasElectronBrowse: boolean;
+  isBackendConnected: boolean;
+  pending: boolean;
+  onBrowseDirectory: (
+    title: string,
+    defaultPath?: string
+  ) => Promise<DirectoryPickerOutcome>;
+  onSaveDefaultProjectsDir: (dir: string | null) => Promise<unknown>;
+}
 
 interface SettingsModalProps {
   open: boolean;
@@ -45,9 +57,9 @@ interface SettingsModalProps {
   tweaks: AtmosphereTweaks;
   editorSettings: EditorSettings;
   terminalSettings?: TerminalSettings;
+  workspaceConfigProps?: WorkspaceSettingsProps;
   sdkConfigProps: ComponentProps<typeof SdkConfigForm>;
   aiConfigProps: ComponentProps<typeof AiProviderSettingsPanel>;
-  opencodeConfigProps: ComponentProps<typeof OpenCodeSettingsPanel>;
   onClose: () => void;
   onSpeciesChange: (species: SpeciesKey) => void;
   onTweaksChange: (partial: Partial<AtmosphereTweaks>) => void;
@@ -218,6 +230,162 @@ const GLASS_SLIDERS: SliderSpec[] = [
   },
 ];
 
+function WorkspaceSettingsPanel({
+  defaultProjectsDir,
+  hasElectronBrowse,
+  isBackendConnected,
+  pending,
+  onBrowseDirectory,
+  onSaveDefaultProjectsDir,
+}: WorkspaceSettingsProps) {
+  const [dirInput, setDirInput] = useState(defaultProjectsDir);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [browsing, setBrowsing] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (active) setDirInput(defaultProjectsDir);
+    });
+    return () => {
+      active = false;
+    };
+  }, [defaultProjectsDir]);
+
+  const handleBrowse = async () => {
+    setBrowsing(true);
+    setErrorMessage(null);
+    setStatusMessage(null);
+    try {
+      const outcome = await onBrowseDirectory(
+        "Select Default Projects Directory",
+        dirInput.trim() || defaultProjectsDir || undefined
+      );
+      if (!outcome.supported) {
+        setErrorMessage(
+          "Native folder picker requires Electron desktop mode. Enter an absolute directory path manually."
+        );
+      } else if (!outcome.canceled && outcome.path) {
+        setDirInput(outcome.path);
+      }
+    } catch (err: unknown) {
+      setErrorMessage(
+        err instanceof Error ? err.message : "Failed to open directory picker."
+      );
+    } finally {
+      setBrowsing(false);
+    }
+  };
+
+  const handleSave = async () => {
+    const trimmed = dirInput.trim();
+    if (!trimmed) {
+      setErrorMessage("Enter an absolute directory path or use Reset defaults.");
+      return;
+    }
+    setErrorMessage(null);
+    setStatusMessage(null);
+    try {
+      await onSaveDefaultProjectsDir(trimmed);
+      setStatusMessage("Default project creation location updated.");
+    } catch (err: unknown) {
+      setErrorMessage(
+        err instanceof Error
+          ? err.message
+          : "Failed to save default project location."
+      );
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-3 rounded-[8px] border border-[#2D2D30] bg-[#181818] p-4">
+        <div>
+          <div className="font-mono text-[10px] font-medium tracking-[0.06em] text-[#B4B4BC] uppercase">
+            Default Project Creation Location
+          </div>
+          <p className="mt-1 text-xs text-[#E4E4E7]">
+            Used as the initial folder when creating new projects or cloning
+            examples. You can always open or create projects anywhere on your
+            filesystem.
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          <input
+            type="text"
+            aria-label="Default projects directory"
+            value={dirInput}
+            onChange={(e) => {
+              setErrorMessage(null);
+              setStatusMessage(null);
+              setDirInput(e.target.value);
+            }}
+            placeholder="~/VEGA Studio Projects or /path/to/projects"
+            className="h-9 min-w-0 flex-1 rounded-[6px] border border-[#2D2D30] bg-[#121214] px-3 font-mono text-xs text-[#F4F4F5] placeholder:text-[#8E8E98] focus:border-[#7AA2FF]/50 focus:outline-none focus:ring-2 focus:ring-[#7AA2FF]/20"
+          />
+          <button
+            type="button"
+            disabled={browsing || pending}
+            onClick={() => void handleBrowse()}
+            title={
+              hasElectronBrowse
+                ? "Browse for default projects folder"
+                : "Native dialog available in Electron desktop mode"
+            }
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[6px] border border-[#2D2D30] bg-[#252527] px-3 text-xs font-medium text-[#F4F4F5] hover:bg-[#2D2D31] disabled:opacity-50"
+          >
+            <FolderOpen className="h-3.5 w-3.5 text-[#7AA2FF]" />
+            <span>{browsing ? "Opening..." : "Browse..."}</span>
+          </button>
+        </div>
+
+        {errorMessage && (
+          <p className="text-xs text-red-300">{errorMessage}</p>
+        )}
+        {statusMessage && (
+          <p className="text-xs text-emerald-300">{statusMessage}</p>
+        )}
+
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+          <button
+            type="button"
+            disabled={pending || !isBackendConnected}
+            onClick={() => {
+              setErrorMessage(null);
+              setStatusMessage(null);
+              void onSaveDefaultProjectsDir(null)
+                .then(() => {
+                  setStatusMessage("Reset to OS default projects location.");
+                })
+                .catch((err: unknown) => {
+                  setErrorMessage(
+                    err instanceof Error
+                      ? err.message
+                      : "Failed to reset default projects location."
+                  );
+                });
+            }}
+            className="inline-flex h-8 items-center rounded-[6px] border border-[#2D2D30] bg-[#252527] px-3 text-xs font-medium text-[#E4E4E7] hover:bg-[#2D2D31] disabled:opacity-50"
+          >
+            Use OS Default
+          </button>
+
+          <button
+            type="button"
+            disabled={pending || !isBackendConnected || !dirInput.trim()}
+            onClick={() => void handleSave()}
+            className="inline-flex h-8 items-center rounded-[6px] bg-[#7AA2FF] px-3.5 text-xs font-semibold text-[#0D0D0F] hover:bg-[#93B4FF] disabled:opacity-50"
+          >
+            {pending ? "Saving..." : "Save Location"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SettingsModal({
   open,
   initialCategory ="appearance",
@@ -225,9 +393,9 @@ export function SettingsModal({
   tweaks,
   editorSettings,
   terminalSettings = DEFAULT_TERMINAL_SETTINGS,
+  workspaceConfigProps,
   sdkConfigProps,
   aiConfigProps,
-  opencodeConfigProps,
   onClose,
   onSpeciesChange,
   onTweaksChange,
@@ -386,12 +554,12 @@ export function SettingsModal({
                   onResetEditorSettings();
                 } else if (activeCategory === "terminal") {
                   onResetTerminalSettings?.();
+                } else if (activeCategory === "workspace") {
+                  void workspaceConfigProps?.onSaveDefaultProjectsDir(null);
                 } else if (activeCategory === "sdk") {
                   void sdkConfigProps.onReset();
                 } else if (activeCategory === "ai") {
                   void aiConfigProps.onResetConfig();
-                } else if (activeCategory === "opencode") {
-                  void opencodeConfigProps.onReset();
                 } else {
                   onResetTweaks();
                 }
@@ -471,6 +639,24 @@ export function SettingsModal({
                 <span>Integrated Terminal</span>
               </button>
 
+              {workspaceConfigProps && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConfirmReset(false);
+                    setActiveCategory("workspace");
+                  }}
+                  className={`flex w-full items-center gap-2 rounded-[6px] px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+                    activeCategory === "workspace"
+                      ? "bg-[#2C2C30] text-[#F4F4F5]"
+                      : "text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
+                  }`}
+                >
+                  <FolderOpen className="h-3.5 w-3.5 text-[#7AA2FF]" />
+                  <span>Workspace &amp; Projects</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => {
@@ -502,22 +688,6 @@ export function SettingsModal({
               <Bot className="h-3.5 w-3.5 text-[#7AA2FF]" />
                 <span>VEGA Assistant</span>
               </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setConfirmReset(false);
-                  setActiveCategory("opencode");
-                }}
-                className={`flex w-full items-center gap-2 rounded-[6px] px-2.5 py-2 text-left text-xs font-medium transition-colors ${
-                  activeCategory === "opencode"
-                    ? "bg-[#2C2C30] text-[#F4F4F5]"
-                    : "text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
-                }`}
-              >
-              <Sparkles className="h-3.5 w-3.5 text-[#7AA2FF]" />
-                <span>OpenCode CLI</span>
-              </button>
             </div>
 
             <p className="px-2 font-mono text-[10px] leading-relaxed text-[#A1A1AA]">
@@ -525,9 +695,7 @@ export function SettingsModal({
                 ? "Applies immediately to all open code editor tabs."
                 : activeCategory === "terminal"
                   ? "Updates active xterm.js surfaces immediately."
-                  : activeCategory === "sdk" ||
-                      activeCategory === "ai" ||
-                      activeCategory === "opencode"
+                  : activeCategory === "sdk" || activeCategory === "ai"
                     ? "Persisted in local app storage across IDE restarts."
                     : "Double-click any slider name to reset it."}
             </p>
@@ -549,9 +717,11 @@ export function SettingsModal({
                   { id: "appearance", label: "Appearance" },
                   { id: "editor", label: "Editor" },
                   { id: "terminal", label: "Terminal" },
+                  ...(workspaceConfigProps
+                    ? ([{ id: "workspace", label: "Projects" }] as const)
+                    : []),
                   { id: "sdk", label: "SDK" },
                   { id: "ai", label: "VEGA AI" },
-                  { id: "opencode", label: "OpenCode" },
                 ] as const
               ).map((cat) => (
                 <button
@@ -575,8 +745,8 @@ export function SettingsModal({
             </div>
             {activeCategory === "ai" ? (
               <AiProviderSettingsPanel {...aiConfigProps} />
-            ) : activeCategory === "opencode" ? (
-              <OpenCodeSettingsPanel {...opencodeConfigProps} />
+            ) : activeCategory === "workspace" && workspaceConfigProps ? (
+              <WorkspaceSettingsPanel {...workspaceConfigProps} />
             ) : activeCategory === "terminal" ? (
             <div className="space-y-4">
               <div className="space-y-3.5 rounded-[8px] border border-[#2D2D30] bg-[#181818] p-4">
@@ -1043,9 +1213,7 @@ export function SettingsModal({
                   ? "VEGA SDK settings persist in application data directory"
                   : activeCategory === "ai"
                     ? "API keys are stored securely in OS Credential Store — never SQLite"
-                    : activeCategory === "opencode"
-                      ? "OpenCode configuration persists in application data directory"
-                      : hoveredHint ??
+                    : hoveredHint ??
                         "Hover a slider for details · Double-click a label to reset"}
           </span>
           <span>Saved locally</span>

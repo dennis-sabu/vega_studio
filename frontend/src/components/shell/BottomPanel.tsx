@@ -12,7 +12,6 @@ import {
   Maximize2,
   Minimize2,
   ScrollText,
-  Sparkles,
   Stethoscope,
   Terminal,
   Trash2,
@@ -46,7 +45,6 @@ interface BottomPanelProps {
     line: number,
     column?: number
   ) => void;
-  onExplainDiagnostic?: (diag: BuildDiagnostic) => void;
   onExplainDiagnosticNativeAi?: (diag: BuildDiagnostic) => void;
   onOpenSdkDoctor: () => void;
 }
@@ -125,7 +123,6 @@ export function BottomPanel({
   onCollapse,
   onClearLogs,
   onOpenDiagnosticLocation,
-  onExplainDiagnostic,
   onExplainDiagnosticNativeAi,
   onOpenSdkDoctor,
 }: BottomPanelProps) {
@@ -380,16 +377,6 @@ export function BottomPanel({
                         >
                         <Bot className="h-3 w-3 text-[#7AA2FF]" />
                           <span>Ask Native AI</span>
-                        </button>
-                      )}
-                      {onExplainDiagnostic && (
-                        <button
-                          type="button"
-                          onClick={() => onExplainDiagnostic(diag)}
-                          className="inline-flex h-6 items-center gap-1 rounded border border-[#2D2D30] bg-[#252527] px-2 font-sans text-[10.5px] font-medium text-[#F4F4F5] hover:bg-[#2D2D31]"
-                        >
-                        <Sparkles className="h-3 w-3 text-[#7AA2FF]" />
-                          <span>Ask OpenCode</span>
                         </button>
                       )}
                       {canNavigate && diag.relative_path && diag.line && (

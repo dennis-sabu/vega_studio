@@ -74,17 +74,22 @@ async function resolveSafeDefaultPath(
 ): Promise<string | undefined> {
   if (typeof rawPath !== 'string') return undefined;
   const trimmed = rawPath.trim();
-  if (!trimmed || trimmed.length > 512) return undefined;
+  if (!trimmed || trimmed.length > 4096) return undefined;
   // Avoid triggering SMB stalls via UNC paths
   if (trimmed.startsWith('\\\\')) return undefined;
-  const candidate = path.resolve(trimmed);
-  try {
-    const st = await fs.promises.stat(candidate);
-    if (requireDir && !st.isDirectory()) return undefined;
-    return candidate;
-  } catch {
-    return undefined;
+  let candidate = path.resolve(trimmed);
+  for (let depth = 0; depth < 8; depth++) {
+    try {
+      const st = await fs.promises.stat(candidate);
+      if (!requireDir || st.isDirectory()) return candidate;
+      return path.dirname(candidate);
+    } catch {
+      const parent = path.dirname(candidate);
+      if (parent === candidate) break;
+      candidate = parent;
+    }
   }
+  return undefined;
 }
 
 ipcMain.on('get-app-version', (event) => {

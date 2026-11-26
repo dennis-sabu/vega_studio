@@ -7,6 +7,7 @@ from app.models.project import (
     CreateProjectRequest,
     OpenProjectRequest,
     RemoveRecentRequest,
+    UpdateWorkspaceConfigRequest,
     WorkspaceStateResponse,
     WorkspaceSummary,
 )
@@ -40,6 +41,21 @@ async def close_workspace(
 ) -> WorkspaceStateResponse:
     service.close_workspace()
     return service.get_workspace_state()
+
+
+@router.put(
+    "/workspace/config",
+    response_model=WorkspaceStateResponse,
+    summary="Update workspace configuration such as default projects directory",
+)
+async def update_workspace_config(
+    payload: UpdateWorkspaceConfigRequest,
+    service: ProjectService = Depends(get_project_service),
+) -> WorkspaceStateResponse:
+    try:
+        return service.update_default_projects_dir(payload.default_projects_dir)
+    except ProjectServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
 
 
 @router.post(

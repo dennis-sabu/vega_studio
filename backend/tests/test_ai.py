@@ -647,3 +647,117 @@ def test_ai_fastapi_routes_and_websocket_streaming(tmp_path: Path):
     finally:
         svc.shutdown()
         app.dependency_overrides.pop(get_ai_service, None)
+
+
+@pytest.mark.asyncio
+async def test_groq_responses_api_streaming_tools_and_env_key(
+    tmp_path: Path, monkeypatch
+):
+    s = _make_settings(tmp_path)
+    proj_dir = _create_project(s, tmp_path / "projects", "groq_fw")
+    (Path(proj_dir) / "src" / "main.c").write_text("int groq_sensor = 7;\n", encoding="utf-8")
+
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_env_test_secret_987654")
+    creds = AICredentialManager(backend=UnavailableOSCredentialBackend("No keyring"))
+    recorded_bodies: List[Dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.groq.com" and request.url.path == "/openai/v1/models":
+            assert request.headers.get("Authorization") == "Bearer gsk_env_test_secret_987654"
+            return httpx.Response(404, json={"error": {"message": "Not implemented"}})
+        if request.url.host == "api.groq.com" and request.url.path == "/openai/v1/responses":
+            assert request.headers.get("Authorization") == "Bearer gsk_env_test_secret_987654"
+            body = json.loads(request.content.decode("utf-8"))
+            recorded_bodies.append(body)
+            if body.get("stream") is False:
+                return httpx.Response(200, json={"id": "resp_probe", "output_text": "pong"})
+            if len([b for b in recorded_bodies if b.get("stream")]) == 1:
+                return httpx.Response(
+                    200,
+                    headers={"Content-Type": "text/event-stream"},
+                    content=_sse_body([
+                        {
+                            "type": "response.output_item.added",
+                            "output_index": 0,
+                            "item": {
+                                "id": "fc_item_1",
+                                "type": "function_call",
+                                "call_id": "call_groq_1",
+                                "name": "read_project_file",
+                            },
+                        },
+                        {
+                            "type": "response.function_call_arguments.delta",
+                            "item_id": "fc_item_1",
+                            "output_index": 0,
+                            "delta": '{"relative_path": "src/main.c"}',
+                        },
+                        {
+                            "type": "response.completed",
+                            "response": {"id": "resp_1", "usage": {"input_tokens": 12, "output_tokens": 6, "total_tokens": 18}},
+                        },
+                    ]),
+                )
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "text/event-stream"},
+                content=_sse_body([
+                    {"type": "response.output_text.delta", "delta": "Fast models explain "},
+                    {"type": "response.output_text.delta", "delta": "groq_sensor=7 clearly."},
+                    {
+                        "type": "response.completed",
+                        "response": {"id": "resp_2", "usage": {"input_tokens": 25, "output_tokens": 9, "total_tokens": 34}},
+                    },
+                ]),
+            )
+        return httpx.Response(404)
+
+    svc = AIService(
+        s,
+        credential_manager=creds,
+        http_client_factory=lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    try:
+        state = svc.get_providers_state()
+        assert state.config.providers["groq"].model == "openai/gpt-oss-20b"
+        groq_info = next(p for p in state.providers if p.id == "groq")
+        assert groq_info.default_base_url == "https://api.groq.com/openai/v1"
+        assert groq_info.recommended_models[0] == "openai/gpt-oss-20b"
+        assert groq_info.credential.has_api_key is True
+        assert groq_info.credential.persistence_mode == "environment"
+
+        probe = await svc.test_connection(AIConnectionTestRequest(provider_id="groq"))
+        assert probe.ok is True
+        assert probe.model == "openai/gpt-oss-20b"
+
+        new_cfg = state.config.model_copy(update={"active_provider": "groq"})
+        svc.update_config(AIConfigUpdateRequest(**new_cfg.model_dump()))
+
+        conv = svc.create_conversation(AIConversationCreateRequest(project_dir=proj_dir))
+        await svc.send_message(
+            conv.conversation.conversation_id,
+            AISendMessageRequest(project_dir=proj_dir, prompt="Explain src/main.c"),
+        )
+        for _ in range(40):
+            detail = svc.get_conversation(conv.conversation.conversation_id)
+            if detail.conversation.status != "streaming":
+                break
+            await asyncio.sleep(0.05)
+
+        detail = svc.get_conversation(conv.conversation.conversation_id)
+        assert detail.conversation.status == "idle"
+        assistant_msg = detail.messages[-1]
+        assert assistant_msg.content == "Fast models explain groq_sensor=7 clearly."
+        assert assistant_msg.provider_id == "groq"
+        assert assistant_msg.model == "openai/gpt-oss-20b"
+        assert len(assistant_msg.tool_traces) == 1
+        assert assistant_msg.tool_traces[0].name == "read_project_file"
+        assert "gsk_env_test_secret_987654" not in assistant_msg.content
+
+        stream_calls = [b for b in recorded_bodies if b.get("stream")]
+        assert len(stream_calls) == 2
+        assert stream_calls[0]["model"] == "openai/gpt-oss-20b"
+        assert "instructions" in stream_calls[0]
+        assert any(item.get("type") == "function_call_output" and item.get("call_id") == "call_groq_1" for item in stream_calls[1]["input"])
+    finally:
+        svc.shutdown()

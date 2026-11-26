@@ -35,6 +35,12 @@ export interface WorkspaceSummary {
   structure_valid: boolean;
   warnings: string[];
   top_level_entries: ProjectEntrySummary[];
+  has_metadata?: boolean;
+  detected_indicators?: string[];
+}
+
+export interface UpdateWorkspaceConfigPayload {
+  default_projects_dir: string | null;
 }
 
 export interface RecentProjectEntry {

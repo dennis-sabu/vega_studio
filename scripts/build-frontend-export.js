@@ -24,6 +24,10 @@ function walkFiles(dir, acc = []) {
 }
 
 function main() {
+  const nextDir = path.join(FRONTEND_DIR, '.next');
+  if (fs.existsSync(nextDir)) {
+    fs.rmSync(nextDir, { recursive: true, force: true });
+  }
   if (fs.existsSync(OUT_DIR)) {
     fs.rmSync(OUT_DIR, { recursive: true, force: true });
   }

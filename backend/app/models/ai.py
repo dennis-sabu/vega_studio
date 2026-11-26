@@ -107,7 +107,7 @@ class AIConfig(BaseModel):
     providers: Dict[AIProviderId, AIProviderProfileConfig] = Field(
         default_factory=lambda: {
             "openai": AIProviderProfileConfig(model="gpt-4o-mini", base_url=None),
-            "groq": AIProviderProfileConfig(model="llama-3.3-70b-versatile", base_url=None),
+            "groq": AIProviderProfileConfig(model="openai/gpt-oss-20b", base_url=None),
             "openai_compatible": AIProviderProfileConfig(
                 model="qwen2.5-coder:7b",
                 base_url="http://127.0.0.1:11434/v1",
@@ -148,7 +148,7 @@ class AICredentialStatus(BaseModel):
     provider_id: AIProviderId
     has_api_key: bool
     key_hint: Optional[str] = None
-    persistence_mode: Literal["os_keyring", "session_memory", "none"] = "none"
+    persistence_mode: Literal["os_keyring", "session_memory", "environment", "none"] = "none"
 
 
 class AISecureStorageInfo(BaseModel):

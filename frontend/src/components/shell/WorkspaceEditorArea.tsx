@@ -65,7 +65,6 @@ import type {
 } from"@/types/editor";
 import type { OpenFileTab } from"@/types/explorer";
 import type { AIContextAttachment } from"@/types/ai";
-import type { OpenCodeContextAttachment } from"@/types/opencode";
 import type { WorkspaceSummary } from"@/types/project";
 import { formatBoardDisplayLabel } from"@/types/board";
 import type { CenterTabId, ShellLayoutState } from"@/types/shell";
@@ -110,10 +109,6 @@ interface WorkspaceEditorAreaProps {
   onToggleBottomPanel: () => void;
   onToggleRightPanel: () => void;
   onOpenHome: () => void;
-  onSendContextToAI?: (
-    ctx: OpenCodeContextAttachment,
-    suggestedPrompt?: string
-  ) => void;
   onAskNativeAi?: (
     ctx: AIContextAttachment,
     suggestedPrompt?: string
@@ -181,7 +176,6 @@ export function WorkspaceEditorArea({
   onToggleBottomPanel,
   onToggleRightPanel,
   onOpenHome,
-  onSendContextToAI,
   onAskNativeAi,
   onRegisterEditorHandle,
 }: WorkspaceEditorAreaProps) {
@@ -852,7 +846,6 @@ export function WorkspaceEditorArea({
                 onCursorChange={onCursorChange}
                 onSaveShortcut={(uid) => void onSaveFileTab(uid)}
                 onConsumeReveal={onConsumeReveal}
-                onSendContextToAI={onSendContextToAI}
                 onAskNativeAi={onAskNativeAi}
               />
               {activeFileTab.loading && (
@@ -978,7 +971,9 @@ export function WorkspaceEditorArea({
                       Manifest
                     </dt>
                     <dd className="mt-0.5 text-[#F4F4F5]">
-                      vega-project v{activeProject.project.schemaVersion}
+                      {activeProject.has_metadata === false
+                        ? "External Folder"
+                        : `vega-project v${activeProject.project.schemaVersion}`}
                     </dd>
                   </div>
                   <div>
@@ -1018,7 +1013,7 @@ export function WorkspaceEditorArea({
                     No Active VEGA Project
                   </h1>
                   <p className="mt-1 text-xs text-[#E4E4E7]">
-                    Create a portable VEGA ARIES V3 project or open an existing directory containing vega-project.json.
+                    Create a portable VEGA ARIES V3 project or open any existing project or firmware directory.
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
@@ -1113,7 +1108,7 @@ export function WorkspaceEditorArea({
                       </span>
                     </div>
                     <p className="mt-1 text-[11.5px] text-[#E4E4E7]">
-                      Native VEGA Assistant and OpenCode CLI coding agent.
+                      Native VEGA Assistant powered by Groq, OpenAI, or compatible endpoints.
                     </p>
                   </div>
                   <button
@@ -1307,7 +1302,7 @@ export function WorkspaceEditorArea({
                     </span>
                   </div>
                   <p className="max-w-xl text-xs leading-relaxed text-[#E4E4E7]">
-                    Exports a redacted JSON snapshot containing app version, OS/arch, SDK/board/Git/OpenCode/AI non-secret readiness, and the redacted backend log tail. Secrets, keys, source files, and transcripts are excluded.
+                    Exports a redacted JSON snapshot containing app version, OS/arch, SDK/board/Git/AI non-secret readiness, and the redacted backend log tail. Secrets, keys, source files, and transcripts are excluded.
                   </p>
                 </div>
                 <button

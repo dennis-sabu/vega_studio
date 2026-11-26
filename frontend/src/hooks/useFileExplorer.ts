@@ -67,10 +67,16 @@ export function useFileExplorer({
   const onLogRef = useRef(onLog);
   const onEntryRenamedRef = useRef(onEntryRenamed);
   const onEntryDeletedRef = useRef(onEntryDeleted);
+  const activeProjectDirRef = useRef(projectDir);
+  const expandedPathsRef = useRef(expandedPaths);
+  const childrenByPathRef = useRef(childrenByPath);
   useEffect(() => {
     onLogRef.current = onLog;
     onEntryRenamedRef.current = onEntryRenamed;
     onEntryDeletedRef.current = onEntryDeleted;
+    activeProjectDirRef.current = projectDir;
+    expandedPathsRef.current = expandedPaths;
+    childrenByPathRef.current = childrenByPath;
   });
 
   // Auto-dismiss transient success feedback after 3s
@@ -86,7 +92,8 @@ export function useFileExplorer({
       signal?: AbortSignal,
       hiddenFlag = showHidden
     ): Promise<FileNode[] | null> => {
-      if (!projectDir || !isBackendConnected) return null;
+      const targetProjectDir = projectDir;
+      if (!targetProjectDir || !isBackendConnected) return null;
       setLoadingPaths((prev) => {
         const next = new Set(prev);
         next.add(dirPath);
@@ -94,15 +101,22 @@ export function useFileExplorer({
       });
       try {
         const listing = await fetchDirectoryTree(
-          projectDir,
+          targetProjectDir,
           dirPath,
           hiddenFlag,
           signal
         );
-        setChildrenByPath((prev) => ({
-          ...prev,
-          [dirPath]: listing.entries,
-        }));
+        if (activeProjectDirRef.current !== targetProjectDir) {
+          return null;
+        }
+        setChildrenByPath((prev) => {
+          const next = {
+            ...prev,
+            [dirPath]: listing.entries,
+          };
+          childrenByPathRef.current = next;
+          return next;
+        });
         setDirErrors((prev) => {
           if (!(dirPath in prev)) return prev;
           const next = { ...prev };
@@ -121,6 +135,7 @@ export function useFileExplorer({
         return listing.entries;
       } catch (err: unknown) {
         if (err instanceof Error && err.name === "AbortError") return null;
+        if (activeProjectDirRef.current !== targetProjectDir) return null;
         const message =
           err instanceof Error ? err.message : "Failed to load directory.";
         setDirErrors((prev) => ({ ...prev, [dirPath]: message }));
@@ -141,12 +156,16 @@ export function useFileExplorer({
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
+    activeProjectDirRef.current = projectDir;
 
     queueMicrotask(() => {
       if (!active) return;
       if (!projectDir) {
+        childrenByPathRef.current = {};
+        expandedPathsRef.current = new Set();
         setChildrenByPath({});
         setExpandedPaths(new Set());
+        setLoadingPaths(new Set());
         setDirErrors({});
         setTruncatedDirs({});
         setSelectedPath(null);
@@ -154,18 +173,30 @@ export function useFileExplorer({
         return;
       }
 
+      childrenByPathRef.current = {};
+      expandedPathsRef.current = new Set();
       setChildrenByPath({});
       setDirErrors({});
       setTruncatedDirs({});
       setSelectedPath(null);
       setExpandedPaths(new Set());
 
-      if (!isBackendConnected) return;
+      if (!isBackendConnected) {
+        setLoadingPaths(new Set());
+        return;
+      }
 
-      fetchDirectoryTree(projectDir, "", showHidden, controller.signal)
+      setLoadingPaths(new Set([""]));
+      const requestedProjectDir = projectDir;
+
+      fetchDirectoryTree(requestedProjectDir, "", showHidden, controller.signal)
         .then((rootListing) => {
-          if (!active) return;
-          setChildrenByPath({ "": rootListing.entries });
+          if (!active || activeProjectDirRef.current !== requestedProjectDir) {
+            return;
+          }
+          const initialMap = { "": rootListing.entries };
+          childrenByPathRef.current = initialMap;
+          setChildrenByPath(initialMap);
           if (rootListing.truncated) {
             setTruncatedDirs({ "": rootListing.total_count });
           }
@@ -175,14 +206,34 @@ export function useFileExplorer({
             (e) => e.kind === "dir" && e.path === "src" && e.accessible
           );
           if (hasSrc) {
-            fetchDirectoryTree(projectDir, "src", showHidden, controller.signal)
+            fetchDirectoryTree(
+              requestedProjectDir,
+              "src",
+              showHidden,
+              controller.signal
+            )
               .then((srcListing) => {
-                if (!active) return;
-                setChildrenByPath((prev) => ({
-                  ...prev,
-                  src: srcListing.entries,
-                }));
-                setExpandedPaths(new Set(["src"]));
+                if (
+                  !active ||
+                  activeProjectDirRef.current !== requestedProjectDir
+                ) {
+                  return;
+                }
+                setChildrenByPath((prev) => {
+                  const next = {
+                    ...prev,
+                    src: srcListing.entries,
+                  };
+                  childrenByPathRef.current = next;
+                  return next;
+                });
+                setExpandedPaths((prev) => {
+                  if (prev.has("src")) return prev;
+                  const next = new Set(prev);
+                  next.add("src");
+                  expandedPathsRef.current = next;
+                  return next;
+                });
               })
               .catch(() => {
                 // Non-fatal if src auto-expand fails.
@@ -190,13 +241,24 @@ export function useFileExplorer({
           }
         })
         .catch((err: unknown) => {
-          if (!active) return;
+          if (!active || activeProjectDirRef.current !== requestedProjectDir) {
+            return;
+          }
           if (err instanceof Error && err.name === "AbortError") return;
           const msg =
             err instanceof Error
               ? err.message
               : "Failed to load project files.";
           setDirErrors({ "": msg });
+        })
+        .finally(() => {
+          if (!active) return;
+          setLoadingPaths((prev) => {
+            if (!prev.has("")) return prev;
+            const next = new Set(prev);
+            next.delete("");
+            return next;
+          });
         });
     });
 
@@ -208,47 +270,44 @@ export function useFileExplorer({
 
   const toggleExpand = useCallback(
     async (dirPath: string) => {
-      let expanding = false;
-      setExpandedPaths((prev) => {
-        const next = new Set(prev);
-        if (next.has(dirPath)) {
-          next.delete(dirPath);
-          expanding = false;
-        } else {
-          next.add(dirPath);
-          expanding = true;
-        }
-        return next;
-      });
-      if (expanding && !(dirPath in childrenByPath)) {
+      const expanding = !expandedPathsRef.current.has(dirPath);
+      const nextExpanded = new Set(expandedPathsRef.current);
+      if (expanding) {
+        nextExpanded.add(dirPath);
+      } else {
+        nextExpanded.delete(dirPath);
+      }
+      expandedPathsRef.current = nextExpanded;
+      setExpandedPaths(nextExpanded);
+
+      if (expanding && !(dirPath in childrenByPathRef.current)) {
         await loadDirectory(dirPath);
       }
     },
-    [childrenByPath, loadDirectory]
+    [loadDirectory]
   );
 
   const expandDirectory = useCallback(
     async (dirPath: string) => {
-      setExpandedPaths((prev) => {
-        if (prev.has(dirPath)) return prev;
-        const next = new Set(prev);
-        next.add(dirPath);
-        return next;
-      });
-      if (dirPath !== "" && !(dirPath in childrenByPath)) {
+      if (!expandedPathsRef.current.has(dirPath)) {
+        const nextExpanded = new Set(expandedPathsRef.current);
+        nextExpanded.add(dirPath);
+        expandedPathsRef.current = nextExpanded;
+        setExpandedPaths(nextExpanded);
+      }
+      if (dirPath !== "" && !(dirPath in childrenByPathRef.current)) {
         await loadDirectory(dirPath);
       }
     },
-    [childrenByPath, loadDirectory]
+    [loadDirectory]
   );
 
   const collapseDirectory = useCallback((dirPath: string) => {
-    setExpandedPaths((prev) => {
-      if (!prev.has(dirPath)) return prev;
-      const next = new Set(prev);
-      next.delete(dirPath);
-      return next;
-    });
+    if (!expandedPathsRef.current.has(dirPath)) return;
+    const next = new Set(expandedPathsRef.current);
+    next.delete(dirPath);
+    expandedPathsRef.current = next;
+    setExpandedPaths(next);
   }, []);
 
   const refreshAll = useCallback(async () => {

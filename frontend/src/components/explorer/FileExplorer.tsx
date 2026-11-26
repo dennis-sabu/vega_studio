@@ -78,7 +78,7 @@ interface InlineDraft {
   error: string | null;
 }
 
-const INVALID_CHARS = /[<>: "/\\|?*\x00-\x1f]/;
+const INVALID_CHARS = /[<>:"/\\|?*\x00-\x1f]/;
 const RESERVED_NAMES = new Set([
   "CON",
   "PRN",
@@ -112,8 +112,8 @@ function validateNameClient(raw: string): string | null {
     return"Name cannot contain '..' or '.' segments.";
   }
   if (INVALID_CHARS.test(name)) return"Invalid filesystem characters.";
-  if (name.endsWith(".") || name.endsWith("")) {
-    return"Name cannot end with a period or space.";
+  if (name.endsWith(".") || name.endsWith(" ")) {
+    return "Name cannot end with a period or space.";
   }
   if (RESERVED_NAMES.has(name.split(".")[0].toUpperCase())) {
     return `'${name}' is a reserved system name.`;

@@ -51,11 +51,21 @@ class ProjectBuildConfig(BaseModel):
     sourceDir: str = "src"
     includeDir: str = "include"
 
-    @field_validator("makefile", "sourceDir", "includeDir")
+    @field_validator("makefile")
     @classmethod
-    def _validate_relative(cls, value: str) -> str:
+    def _validate_makefile_path(cls, value: str) -> str:
         cleaned = value.strip()
         if not _is_safe_relative_path(cleaned):
+            raise ValueError(
+                f"Build path '{value}' must be a safe project-relative path."
+            )
+        return cleaned
+
+    @field_validator("sourceDir", "includeDir")
+    @classmethod
+    def _validate_dir_path(cls, value: str) -> str:
+        cleaned = value.strip()
+        if cleaned != "." and not _is_safe_relative_path(cleaned):
             raise ValueError(
                 f"Build path '{value}' must be a safe project-relative path."
             )
@@ -123,13 +133,21 @@ class ProjectEntrySummary(BaseModel):
 
 
 class WorkspaceSummary(BaseModel):
-    """Active opened project context returned to the frontend shell."""
+    """Active opened project or workspace directory context returned to the frontend shell."""
 
     project: VegaProjectMetadata
     project_dir: str
     structure_valid: bool
     warnings: List[str]
     top_level_entries: List[ProjectEntrySummary]
+    has_metadata: bool = True
+    detected_indicators: List[str] = Field(default_factory=list)
+
+
+class UpdateWorkspaceConfigRequest(BaseModel):
+    """Payload to update workspace preferences such as default project creation directory."""
+
+    default_projects_dir: Optional[str] = None
 
 
 class RecentProjectEntry(BaseModel):

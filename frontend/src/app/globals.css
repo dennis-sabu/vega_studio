@@ -132,7 +132,15 @@ body {
   app-region: drag;
 }
 
-.vega-no-drag {
+.vega-no-drag,
+.vega-drag-region button,
+.vega-drag-region a,
+.vega-drag-region input,
+.vega-drag-region select,
+.vega-drag-region textarea,
+.vega-drag-region [role="button"],
+.vega-drag-region [role="menuitem"],
+.vega-drag-region [role="radio"] {
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }

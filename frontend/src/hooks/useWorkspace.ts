@@ -7,10 +7,12 @@ import {
   fetchWorkspaceState,
   openProject,
   removeRecentProject,
+  updateWorkspaceConfig,
 } from "@/lib/api";
 import type {
   CreateProjectPayload,
   RecentProjectEntry,
+  WorkspaceStateResponse,
   WorkspaceSummary,
 } from "@/types/project";
 
@@ -46,8 +48,9 @@ export function useWorkspace({
   useEffect(() => {
     onLogRef.current = onLog;
   });
+  const backendDefaultInitializedRef = useRef(false);
 
-  // Detect Electron bridge capabilities & default projects directory safely.
+  // Detect Electron bridge capabilities & fallback default projects directory safely.
   useEffect(() => {
     let active = true;
     queueMicrotask(() => {
@@ -58,7 +61,7 @@ export function useWorkspace({
         bridge
           .getDefaultProjectsDir()
           .then((dir) => {
-            if (active && dir) {
+            if (active && dir && !backendDefaultInitializedRef.current) {
               setDefaultProjectsDir((prev) => prev || dir);
             }
           })
@@ -79,7 +82,8 @@ export function useWorkspace({
       setActiveProject(state.active_project);
       setRecentProjects(state.recent_projects);
       if (state.default_projects_dir) {
-        setDefaultProjectsDir((prev) => prev || state.default_projects_dir);
+        backendDefaultInitializedRef.current = true;
+        setDefaultProjectsDir(state.default_projects_dir);
       }
       setWarning(state.warning);
       if (state.warning) {
@@ -109,7 +113,8 @@ export function useWorkspace({
         setActiveProject(state.active_project);
         setRecentProjects(state.recent_projects);
         if (state.default_projects_dir) {
-          setDefaultProjectsDir((prev) => prev || state.default_projects_dir);
+          backendDefaultInitializedRef.current = true;
+          setDefaultProjectsDir(state.default_projects_dir);
         }
         setWarning(state.warning);
         if (state.warning) {
@@ -249,6 +254,38 @@ export function useWorkspace({
     }
   }, []);
 
+  const updateDefaultProjectsDir = useCallback(
+    async (dir: string | null): Promise<WorkspaceStateResponse> => {
+      setActionPending(true);
+      setError(null);
+      try {
+        const state = await updateWorkspaceConfig({ default_projects_dir: dir });
+        backendDefaultInitializedRef.current = true;
+        if (state.default_projects_dir) {
+          setDefaultProjectsDir(state.default_projects_dir);
+        }
+        onLogRef.current?.(
+          "info",
+          dir
+            ? `Default projects directory updated to ${state.default_projects_dir}`
+            : `Default projects directory reset to ${state.default_projects_dir}`
+        );
+        return state;
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Failed to update default projects directory.";
+        setError(message);
+        onLogRef.current?.("error", message);
+        throw err;
+      } finally {
+        setActionPending(false);
+      }
+    },
+    []
+  );
+
   const clearFeedback = useCallback(() => {
     setError(null);
     setWarning(null);
@@ -269,6 +306,7 @@ export function useWorkspace({
     openExistingProject,
     closeActiveWorkspace,
     forgetRecentProject,
+    updateDefaultProjectsDir,
     clearFeedback,
   };
 }

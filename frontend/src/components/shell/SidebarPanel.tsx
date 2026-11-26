@@ -69,7 +69,7 @@ const SECTION_META: Record<PrimaryNavSection, SectionConfig> = {
     title: "Explorer",
     heading: "No Project Open",
     description:
-      "Create a VEGA ARIES V3 firmware project or open an existing directory containing vega-project.json.",
+      "Create a VEGA ARIES V3 firmware project or open any existing project directory on your filesystem.",
     icon: Files,
   },
   git: {

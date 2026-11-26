@@ -25,7 +25,6 @@ import type {
 } from"@/types/editor";
 import type { OpenFileTab } from"@/types/explorer";
 import type { AICodeApplyMode, AIContextAttachment } from"@/types/ai";
-import type { OpenCodeContextAttachment } from"@/types/opencode";
 
 export interface MonacoEditorHandle {
   triggerFind: () => void;
@@ -49,10 +48,6 @@ interface MonacoEditorSurfaceProps {
   onCursorChange: (pos: EditorCursorPosition) => void;
   onSaveShortcut: (uid: string) => void;
   onConsumeReveal?: (nonce: number) => void;
-  onSendContextToAI?: (
-    ctx: OpenCodeContextAttachment,
-    suggestedPrompt?: string
-  ) => void;
   onAskNativeAi?: (
     ctx: AIContextAttachment,
     suggestedPrompt?: string
@@ -71,7 +66,6 @@ export const MonacoEditorSurface = forwardRef<
     onCursorChange,
     onSaveShortcut,
     onConsumeReveal,
-    onSendContextToAI,
     onAskNativeAi,
   },
   ref
@@ -91,7 +85,6 @@ export const MonacoEditorSurface = forwardRef<
   const onCursorChangeRef = useRef(onCursorChange);
   const onSaveShortcutRef = useRef(onSaveShortcut);
   const onConsumeRevealRef = useRef(onConsumeReveal);
-  const onSendContextToAIRef = useRef(onSendContextToAI);
   const onAskNativeAiRef = useRef(onAskNativeAi);
   useEffect(() => {
     activeTabRef.current = activeTab;
@@ -99,7 +92,6 @@ export const MonacoEditorSurface = forwardRef<
     onCursorChangeRef.current = onCursorChange;
     onSaveShortcutRef.current = onSaveShortcut;
     onConsumeRevealRef.current = onConsumeReveal;
-    onSendContextToAIRef.current = onSendContextToAI;
     onAskNativeAiRef.current = onAskNativeAi;
   });
 
@@ -259,63 +251,6 @@ export const MonacoEditorSurface = forwardRef<
         };
 
         actionDisposables.push(
-          editor.addAction({
-            id: "vega.opencode.explainSelection",
-            label: "Explain Selection in OpenCode",
-            precondition: "editorHasSelection",
-            contextMenuGroupId: "9_cutcopypaste",
-            contextMenuOrder: 10,
-            run: () => {
-              const ctx = buildSelectionAttachment();
-              if (ctx) {
-                onSendContextToAIRef.current?.(
-                  ctx,
-                  `Explain this selection from ${ctx.relative_path ?? ctx.title}:`
-                );
-              }
-            },
-          }),
-          editor.addAction({
-            id: "vega.opencode.fixSelection",
-            label: "Fix Selection in OpenCode",
-            precondition: "editorHasSelection",
-            contextMenuGroupId: "9_cutcopypaste",
-            contextMenuOrder: 11,
-            run: () => {
-              const ctx = buildSelectionAttachment();
-              if (ctx) {
-                onSendContextToAIRef.current?.(
-                  ctx,
-                  `Review and suggest a fix for this code in ${ctx.relative_path ?? ctx.title}:`
-                );
-              }
-            },
-          }),
-          editor.addAction({
-            id: "vega.opencode.sendFile",
-            label: "Send File to OpenCode",
-            contextMenuGroupId: "9_cutcopypaste",
-            contextMenuOrder: 12,
-            run: () => {
-              const tab = activeTabRef.current;
-              const model = editor.getModel();
-              if (!tab || !model) return;
-              const raw = model.getValue();
-              const truncated = raw.length > 4000;
-              const snippet = truncated ? raw.slice(0, 4000) : raw;
-              onSendContextToAIRef.current?.(
-                {
-                  kind: "file",
-                  title: tab.name,
-                  relative_path: tab.path,
-                  language: tab.monacoLanguage || tab.language || null,
-                  snippet,
-                  truncated,
-                },
-                `Inspect ${tab.path}:`
-              );
-            },
-          }),
           editor.addAction({
             id: "vega.nativeAi.explainSelection",
             label: "Explain Selection (Native VEGA AI)",

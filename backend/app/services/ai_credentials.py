@@ -440,14 +440,23 @@ class AICredentialManager:
             detail=detail,
         )
 
+    def _get_env_secret(self, provider_id: AIProviderId) -> Optional[str]:
+        if provider_id == "groq":
+            val = os.environ.get("GROQ_API_KEY", "").strip()
+            return val or None
+        return None
+
     def get_secret(self, provider_id: AIProviderId) -> Optional[str]:
         with self._lock:
             if provider_id in self._session_keys:
                 return self._session_keys[provider_id]
         try:
-            return self._backend.get_secret(provider_id)
+            stored = self._backend.get_secret(provider_id)
+            if stored:
+                return stored
         except CredentialStorageUnavailableError:
-            return None
+            pass
+        return self._get_env_secret(provider_id)
 
     def get_session_secrets(self) -> list[str]:
         with self._lock:
@@ -464,6 +473,9 @@ class AICredentialManager:
                     secrets.append(val)
             except CredentialStorageUnavailableError:
                 continue
+        env_groq = self._get_env_secret("groq")
+        if env_groq and env_groq not in secrets:
+            secrets.append(env_groq)
         return secrets
 
     def set_secret(
@@ -533,6 +545,14 @@ class AICredentialManager:
                 has_api_key=True,
                 key_hint=mask_key_hint(sec),
                 persistence_mode="os_keyring",
+            )
+        env_sec = self._get_env_secret(provider_id)
+        if env_sec:
+            return AICredentialStatus(
+                provider_id=provider_id,
+                has_api_key=True,
+                key_hint=mask_key_hint(env_sec),
+                persistence_mode="environment",
             )
         return AICredentialStatus(
             provider_id=provider_id,

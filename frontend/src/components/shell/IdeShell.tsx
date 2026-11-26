@@ -42,7 +42,6 @@ import { useGitIntegration } from"@/hooks/useGitIntegration";
 import { useGitHubIntegration } from"@/hooks/useGitHubIntegration";
 import { useLearning, type LearningSubTab } from"@/hooks/useLearning";
 import { useNativeAi } from"@/hooks/useNativeAi";
-import { useOpenCode } from"@/hooks/useOpenCode";
 import { useSdkDoctor } from"@/hooks/useSdkDoctor";
 import { useSerialMonitor } from"@/hooks/useSerialMonitor";
 import { useTerminalManager } from"@/hooks/useTerminalManager";
@@ -75,7 +74,6 @@ import type {
   ExampleFileContentResponse,
   IdeActionId,
 } from"@/types/learning";
-import type { OpenCodeContextAttachment } from"@/types/opencode";
 import type { CreateProjectPayload, WorkspaceSummary } from"@/types/project";
 import type { ShellLogEntry } from"@/types/shell";
 
@@ -126,6 +124,7 @@ export function IdeShell() {
     isCustomized,
     setMode,
     selectNav,
+    openSidebarSection,
     toggleSidebar,
     setSidebarWidth,
     toggleBottomPanel,
@@ -423,55 +422,6 @@ export function IdeShell() {
     },
     onLog: (message) => appendLog("SHELL","info", message),
   });
-
-  const openCodeAgent = useOpenCode({
-    projectDir: workspace.activeProject?.project_dir ?? null,
-    isBackendConnected: isConnected,
-    onLog: (level, message) => appendLog("SHELL", level, message),
-    onAfterSessionComplete: () => {
-      void explorer.refreshAll();
-      void gitIntegration.refreshAll();
-      for (const tab of editorTabs.openFileTabs) {
-        if (!tab.isDirty) {
-          void editorTabs.reloadTabFromDisk(tab.uid);
-        }
-      }
-    },
-  });
-
-  const sendContextToOpenCode = useCallback(
-    (ctx: OpenCodeContextAttachment, suggestedPrompt?: string) => {
-      openCodeAgent.addContext(ctx);
-      if (suggestedPrompt && !openCodeAgent.draftPrompt.trim()) {
-        openCodeAgent.setDraftPrompt(suggestedPrompt);
-      }
-      setComposerFocused(false);
-      setSettingsOpen(false);
-      setMode("workspace");
-      setRightTab("opencode");
-    },
-    [openCodeAgent, setMode, setRightTab]
-  );
-
-  const handleExplainDiagnostic = useCallback(
-    (diag: BuildDiagnostic) => {
-      const location = diag.relative_path
-        ? `${diag.relative_path}${diag.line ? `:${diag.line}` : ""}`
-        : "Build Diagnostic";
-      sendContextToOpenCode(
-        {
-          kind: "build_error",
-          title: `${diag.severity.toUpperCase()} in ${location}`,
-          relative_path: diag.relative_path,
-          start_line: diag.line,
-          end_line: diag.line,
-          snippet: diag.raw_line || diag.message,
-        },
-        `Explain and help fix this ${diag.severity}: ${diag.message}`
-      );
-    },
-    [sendContextToOpenCode]
-  );
 
   const nativeAi = useNativeAi({
     projectDir: workspace.activeProject?.project_dir ?? null,
@@ -954,9 +904,6 @@ export function IdeShell() {
       } else if (actionId === "open_native_ai") {
         setMode("workspace");
         setRightTab("native-ai");
-      } else if (actionId === "open_opencode") {
-        setMode("workspace");
-        setRightTab("opencode");
       } else if (actionId === "open_examples") {
         openExamplesLibrary("examples");
       }
@@ -1064,10 +1011,10 @@ export function IdeShell() {
       }
       await workspace.createNewProject(payload);
       editorTabs.resetFileTabs();
-      setMode("workspace");
+      openSidebarSection("explorer");
       openCenterTab("overview");
     },
-    [editorTabs, openCenterTab, setMode, workspace]
+    [editorTabs, openCenterTab, openSidebarSection, workspace]
   );
 
   const handleOpenProjectDir = useCallback(
@@ -1089,10 +1036,10 @@ export function IdeShell() {
       }
       await workspace.openExistingProject(projectDir);
       editorTabs.resetFileTabs();
-      setMode("workspace");
+      openSidebarSection("explorer");
       openCenterTab("overview");
     },
-    [editorTabs, openCenterTab, setMode, workspace]
+    [editorTabs, openCenterTab, openSidebarSection, workspace]
   );
 
   const handleCloseProject = useCallback(async () => {
@@ -1206,16 +1153,6 @@ export function IdeShell() {
         run: () => {
           setMode("workspace");
           setRightTab("native-ai");
-        },
-      },
-      {
-        id: "open-opencode",
-        category: "AI",
-        label: "Open OpenCode Autonomous Agent",
-        keywords: "agent cli coding",
-        run: () => {
-          setMode("workspace");
-          setRightTab("opencode");
         },
       },
       {
@@ -1803,7 +1740,6 @@ export function IdeShell() {
                   onToggleBottomPanel={toggleBottomPanel}
                   onToggleRightPanel={toggleRightPanel}
                   onOpenHome={() => setMode("home")}
-                  onSendContextToAI={sendContextToOpenCode}
                   onAskNativeAi={askNativeAiWithContext}
                   onRegisterEditorHandle={registerEditorHandle}
                 />
@@ -1976,7 +1912,6 @@ export function IdeShell() {
                     onCollapse={toggleBottomPanel}
                     onClearLogs={() => setLogs([])}
                     onOpenDiagnosticLocation={handleOpenDiagnosticLocation}
-                    onExplainDiagnostic={handleExplainDiagnostic}
                     onExplainDiagnosticNativeAi={handleExplainDiagnosticNativeAi}
                     onOpenSdkDoctor={openSdkDoctor}
                   />
@@ -2071,40 +2006,6 @@ export function IdeShell() {
                     },
                     onClearFeedback: nativeAi.clearFeedback,
                   }}
-                  opencodeProps={{
-                    activeProject: workspace.activeProject,
-                    isBackendConnected: isConnected,
-                    info: openCodeAgent.info,
-                    sessions: openCodeAgent.sessions,
-                    activeSessionId: openCodeAgent.activeSessionId,
-                    sessionDetail: openCodeAgent.sessionDetail,
-                    activeSessionSummary: openCodeAgent.activeSessionSummary,
-                    isCrossProjectSession: openCodeAgent.isCrossProjectSession,
-                    wsState: openCodeAgent.wsState,
-                    draftPrompt: openCodeAgent.draftPrompt,
-                    pendingContexts: openCodeAgent.pendingContexts,
-                    selectedModel: openCodeAgent.selectedModel,
-                    loading: openCodeAgent.loading,
-                    actionPending: openCodeAgent.actionPending,
-                    error: openCodeAgent.error,
-                    notice: openCodeAgent.notice,
-                    onDraftPromptChange: openCodeAgent.setDraftPrompt,
-                    onRemoveContext: openCodeAgent.removeContext,
-                    onSelectModel: openCodeAgent.setSelectedModel,
-                    onSelectSession: openCodeAgent.selectSession,
-                    onCreateSession: () => { void openCodeAgent.createSession(); },
-                    onSendPrompt: () => { void openCodeAgent.sendPrompt(); },
-                    onInterrupt: () => { void openCodeAgent.interruptSession(); },
-                    onReplyPermission: (reqId, decision) => {
-                      void openCodeAgent.replyPermission(reqId, decision);
-                    },
-                    onTerminateSession: (sessionId) => {
-                      void openCodeAgent.terminateSession(sessionId);
-                    },
-                    onRefresh: () => { void openCodeAgent.refreshInfoAndSessions(); },
-                    onOpenSettings: () => openSettingsCategory("opencode"),
-                    onClearFeedback: openCodeAgent.clearFeedback,
-                  }}
                 />
               </>
             )}
@@ -2168,6 +2069,14 @@ export function IdeShell() {
         tweaks={tweaks}
         editorSettings={editorSettings.settings}
         terminalSettings={terminalSettingsState.terminalSettings}
+        workspaceConfigProps={{
+          defaultProjectsDir: workspace.defaultProjectsDir,
+          hasElectronBrowse: workspace.isElectronBridge,
+          isBackendConnected: isConnected,
+          pending: workspace.actionPending,
+          onBrowseDirectory: workspace.browseDirectory,
+          onSaveDefaultProjectsDir: workspace.updateDefaultProjectsDir,
+        }}
         sdkConfigProps={{
           configState: sdkDoctor.configState,
           hasElectronBrowse: sdkDoctor.hasElectronBrowse,
@@ -2195,18 +2104,6 @@ export function IdeShell() {
           onSaveCredential: nativeAi.saveCredential,
           onRemoveCredential: nativeAi.removeCredential,
           onTestConnection: nativeAi.runConnectionTest,
-        }}
-        opencodeConfigProps={{
-          configState: openCodeAgent.configState,
-          hasElectronBrowse: sdkDoctor.hasElectronBrowse,
-          isBackendConnected: isConnected,
-          saving: openCodeAgent.savingConfig,
-          loading: openCodeAgent.loading,
-          error: openCodeAgent.error,
-          onBrowseFile: sdkDoctor.browseFile,
-          onRefresh: () => void openCodeAgent.refreshInfoAndSessions(),
-          onSave: openCodeAgent.saveConfig,
-          onReset: openCodeAgent.resetConfig,
         }}
         onClose={() => setSettingsOpen(false)}
         onSpeciesChange={handleSpeciesChange}
@@ -2296,6 +2193,9 @@ export function IdeShell() {
         onBrowseParent={(currentPath) =>
           workspace.browseDirectory("Select Project Location", currentPath)
         }
+        onSaveDefaultParentDir={async (dir) => {
+          await workspace.updateDefaultProjectsDir(dir);
+        }}
         onSubmit={handleCreateProject}
       />
 

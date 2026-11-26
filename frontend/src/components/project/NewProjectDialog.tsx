@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from"react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from"react";
 import {
   AlertCircle,
   Cpu,
@@ -21,11 +21,12 @@ interface NewProjectDialogProps {
   serverError: string | null;
   onClose: () => void;
   onBrowseParent: (currentPath: string) => Promise<DirectoryPickerOutcome>;
+  onSaveDefaultParentDir?: (dir: string) => Promise<void>;
   onSubmit: (payload: CreateProjectPayload) => Promise<void>;
 }
 
 const NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}$/;
-const INVALID_CHARS = /[<>: "/\\|?*\x00-\x1f]/;
+const INVALID_CHARS = /[<>:"/\\|?*\x00-\x1f]/;
 const RESERVED_NAMES = new Set([
   "CON",
   "PRN",
@@ -59,8 +60,8 @@ export function validateProjectNameClient(raw: string): string | null {
   if (INVALID_CHARS.test(name)) {
     return"Name contains invalid filesystem characters.";
   }
-  if (name.endsWith(".") || name.endsWith("")) {
-    return"Name cannot end with a period or space.";
+  if (name.endsWith(".") || name.endsWith(" ")) {
+    return "Name cannot end with a period or space.";
   }
   if (RESERVED_NAMES.has(name.split(".")[0].toUpperCase())) {
     return `'${name}' is a reserved device name.`;
@@ -80,6 +81,7 @@ export function NewProjectDialog({
   serverError,
   onClose,
   onBrowseParent,
+  onSaveDefaultParentDir,
   onSubmit,
 }: NewProjectDialogProps) {
   const [name, setName] = useState("");
@@ -88,6 +90,8 @@ export function NewProjectDialog({
   const [template, setTemplate] = useState<ProjectTemplate>("minimal");
   const [localError, setLocalError] = useState<string | null>(null);
   const [browsing, setBrowsing] = useState(false);
+  const [savingDefault, setSavingDefault] = useState(false);
+  const prevDefaultRef = useRef(defaultParentDir);
 
   useEffect(() => {
     if (!open) return;
@@ -97,16 +101,19 @@ export function NewProjectDialog({
         : null;
     queueMicrotask(() => {
       setLocalError(null);
-      if (!parentDir && defaultParentDir) {
-        setParentDir(defaultParentDir);
+      if (defaultParentDir) {
+        setParentDir((curr) =>
+          !curr || curr === prevDefaultRef.current ? defaultParentDir : curr
+        );
       }
+      prevDefaultRef.current = defaultParentDir;
     });
     return () => {
       queueMicrotask(() => {
         if (prev && prev.isConnected) prev.focus();
       });
     };
-  }, [open, defaultParentDir, parentDir]);
+  }, [open, defaultParentDir]);
 
   useEffect(() => {
     if (!open) return;
@@ -303,7 +310,7 @@ export function NewProjectDialog({
                   setLocalError(null);
                   setParentDir(e.target.value);
                 }}
-                placeholder="C:\Users\...\Documents\VEGA Studio Projects"
+                placeholder="~/VEGA Studio Projects or /path/to/projects"
                 className="h-10 min-w-0 flex-1 rounded-xl border border-[#2D2D30] bg-[#181818] px-3 font-mono text-xs text-[#F4F4F5] placeholder:text-[#8E8E98] focus:border-[#7AA2FF]/50 focus:outline-none focus:ring-2 focus:ring-[#7AA2FF]/20"
               />
               <button
@@ -321,9 +328,35 @@ export function NewProjectDialog({
                 <span>{browsing ? "Opening..." : "Browse..."}</span>
               </button>
             </div>
-            <p className="truncate font-mono text-[11px] text-[#A1A1AA]">
-              Target folder: {previewPath}
-            </p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="min-w-0 truncate font-mono text-[11px] text-[#A1A1AA]">
+                Target folder: {previewPath}
+              </p>
+              {onSaveDefaultParentDir &&
+                parentDir.trim() &&
+                parentDir.trim() !== defaultParentDir.trim() && (
+                  <button
+                    type="button"
+                    disabled={savingDefault || pending || !isBackendConnected}
+                    onClick={() => {
+                      setSavingDefault(true);
+                      setLocalError(null);
+                      void onSaveDefaultParentDir(parentDir.trim())
+                        .catch((err: unknown) => {
+                          setLocalError(
+                            err instanceof Error
+                              ? err.message
+                              : "Failed to save default location."
+                          );
+                        })
+                        .finally(() => setSavingDefault(false));
+                    }}
+                    className="shrink-0 font-mono text-[10.5px] text-[#7AA2FF] hover:underline disabled:opacity-50"
+                  >
+                    {savingDefault ? "Saving..." : "Set as default"}
+                  </button>
+                )}
+            </div>
           </div>
 
           {/* Template Selection */}

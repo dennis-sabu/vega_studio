@@ -98,7 +98,9 @@ export function OpenProjectDialog({
     setBrowsing(true);
     setLocalError(null);
     try {
-      const outcome = await onBrowseProject(defaultProjectsDir);
+      const outcome = await onBrowseProject(
+        manualPath.trim() || defaultProjectsDir || undefined
+      );
       if (!outcome.supported) {
         setLocalError(
           "Native folder picker requires Electron desktop mode. Enter the project folder path below."
@@ -148,10 +150,10 @@ export function OpenProjectDialog({
                 id="open-project-title"
                 className="text-sm font-medium text-[#F4F4F5]"
               >
-                Open VEGA Project
+                Open Project or Folder
               </h2>
               <p className="text-[11px] text-[#B4B4BC]">
-                Select a directory containing a valid vega-project.json file
+                Open any VEGA Studio project, SDK example, or firmware directory anywhere on disk
               </p>
             </div>
           </div>
@@ -213,7 +215,7 @@ export function OpenProjectDialog({
                 onClick={() => void handleBrowse()}
                 title={
                   isElectronBridge
-                    ? "Browse for a VEGA Studio project folder"
+                    ? "Browse for any project or firmware directory"
                     : "Native dialog available in Electron desktop mode"
                 }
                 className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-[#2D2D30] bg-[#252527] px-3.5 text-xs font-medium text-[#F4F4F5] transition-colors hover:bg-[#2D2D31] hover:text-[#F4F4F5] disabled:opacity-50"
@@ -271,6 +273,11 @@ export function OpenProjectDialog({
                         <span className="rounded border border-[#2D2D30] bg-[#252527] px-1.5 py-0.5 font-mono text-[9px] text-[#B4B4BC]">
                           {item.board}
                         </span>
+                        {item.schema_version === "external" && (
+                        <span className="rounded border border-[#7AA2FF]/25 bg-[#7AA2FF]/10 px-1.5 py-0.5 font-mono text-[9px] text-[#7AA2FF]">
+                            External
+                          </span>
+                        )}
                         {!item.exists && (
                         <span className="rounded border border-red-400/30 bg-red-500/15 px-1.5 py-0.5 font-mono text-[9px] text-red-300">
                             Missing
