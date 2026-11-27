@@ -203,6 +203,7 @@ npm run test:frontend
 
 | Document | Description |
 |----------|-------------|
+| [INSTALL.md](./INSTALL.md) | Quick installation guide for Linux & Windows |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | System design & layer responsibilities |
 | [docs/DESIGN_SYSTEM.md](./docs/DESIGN_SYSTEM.md) | Obsidian UI/UX design tokens & typography |
 | [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) | Full development workflow guide |
