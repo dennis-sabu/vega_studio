@@ -1,41 +1,31 @@
-# Installing VEGA Studio
+# Installing & Updating VEGA Studio
 
 VEGA Studio is a desktop IDE for developing, flashing, and debugging firmware on the **C-DAC VEGA ARIES V3 RISC-V** board.
 
-Choose the installation method that matches your operating system and setup.
-
 ---
 
-## Option 1: Install from GitHub Source (Ubuntu / Linux)
+## Option 1: Quick Install from GitHub Release (Ubuntu 24.04 `x86_64` — Recommended)
 
-### Prerequisites
-- **Git** (`2.40+`)
-- **Node.js** (`20+` LTS, `24` recommended) and **npm** (`10+`)
-- **Python** (`3.12`) with `venv` and `pip`
-- *(If building a `.deb` package)* `dpkg-deb` and `fakeroot`
-
-### 1. Clone and set up dependencies
+No Node.js or Python installation required. Run these commands in your terminal:
 
 ```bash
-git clone https://github.com/dennis-sabu/vega_studio.git
-cd vega_studio
-npm run setup
+U="https://github.com/dennis-sabu/vega_studio"
+U="$U/releases/latest/download"
+U="$U/vega-studio_0.1.0_amd64.deb"
+sudo curl -fLo /tmp/vega.deb "$U"
+sudo apt-get update
+sudo apt install -y /tmp/vega.deb
 ```
 
-### 2. Run or build the desktop app
+Or using GitHub CLI (`gh`):
 
-- **Run in development mode:**
-  ```bash
-  npm run dev
-  ```
+```bash
+gh release download --repo dennis-sabu/vega_studio --pattern "*.deb" -D /tmp
+sudo apt-get update
+sudo apt install -y /tmp/vega-studio_*.deb
+```
 
-- **Or build and install the Ubuntu `.deb` package:**
-  ```bash
-  bash scripts/build-linux-release.sh
-  sudo apt install ./release/vega-studio_0.1.0_amd64.deb
-  ```
-
-After installing the `.deb` package, launch VEGA Studio from the **Ubuntu Applications** menu or by running:
+Launch VEGA Studio from the **Ubuntu Applications** menu or by running:
 
 ```bash
 vega-studio
@@ -43,18 +33,33 @@ vega-studio
 
 ---
 
-## Option 2: Install from a Pre-built `.deb` Package (Ubuntu 24.04 LTS `x86_64`)
+## Updating an Existing Installation (Ubuntu)
 
-If you already have `vega-studio_<version>_amd64.deb` (no Node.js or Python required):
+Close VEGA Studio if it is running, then download and reinstall the latest `.deb` in place (your projects and settings are preserved):
 
 ```bash
+pkill -f "/opt/VEGA Studio/vega-studio" || true
+U="https://github.com/dennis-sabu/vega_studio"
+U="$U/releases/latest/download"
+U="$U/vega-studio_0.1.0_amd64.deb"
+sudo curl -fLo /tmp/vega.deb "$U"
 sudo apt-get update
-sudo apt install ./vega-studio_0.1.0_amd64.deb
+sudo apt install --reinstall -y /tmp/vega.deb
 ```
 
-Or double-click the `.deb` file in **Files** and open it with **App Center / Software Install**.
+If you are updating from a local source checkout you built yourself:
 
-To uninstall later without removing your projects or settings:
+```bash
+cd vega_studio
+git pull
+npm run setup
+VEGA_LINUX_TARGETS=deb bash scripts/build-linux-release.sh
+sudo apt install --reinstall -y ./release/*.deb
+```
+
+### Uninstall
+
+To remove VEGA Studio cleanly without deleting your projects or local user data:
 
 ```bash
 sudo apt remove vega-studio
@@ -62,7 +67,18 @@ sudo apt remove vega-studio
 
 ---
 
-## Option 3: Install from a Pre-built `AppImage` (Linux `x86_64`)
+## Option 2: Install from a Local `.deb` or `AppImage` File
+
+### `.deb` Package (Ubuntu 24.04 `x86_64`)
+
+```bash
+sudo apt-get update
+sudo apt install -y ./vega-studio_0.1.0_amd64.deb
+```
+
+Or double-click the `.deb` file in **Files** and open it with **App Center / Software Install**.
+
+### `AppImage` (Linux `x86_64`)
 
 ```bash
 chmod +x vega-studio_0.1.0_x86_64.AppImage
@@ -73,7 +89,35 @@ chmod +x vega-studio_0.1.0_x86_64.AppImage
 
 ---
 
-## Option 4: Install from GitHub Source (Windows PowerShell)
+## Option 3: Install & Run from GitHub Source (Ubuntu / Linux)
+
+### Prerequisites
+- **Git** (`2.40+`)
+- **Node.js** (`20+` LTS, `24` recommended) and **npm** (`10+`)
+- **Python** (`3.12`) with `venv` and `pip`
+- *(If building a `.deb` package)* `dpkg-deb` and `fakeroot`
+
+### Clone, set up, and run
+
+```bash
+git clone https://github.com/dennis-sabu/vega_studio.git
+cd vega_studio
+npm run setup
+```
+
+- **Run in development mode:**
+  ```bash
+  npm run dev
+  ```
+- **Build & install `.deb` locally:**
+  ```bash
+  bash scripts/build-linux-release.sh
+  sudo apt install --reinstall -y ./release/*.deb
+  ```
+
+---
+
+## Option 4: Install & Run from GitHub Source (Windows PowerShell)
 
 ### Prerequisites
 - **Git** (`2.40+`)
