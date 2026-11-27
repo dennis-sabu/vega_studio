@@ -367,12 +367,13 @@ async def test_lifespan_isolates_shutdown_exceptions(monkeypatch):
     monkeypatch.setattr(main_mod, "get_serial_service", lambda: OkSvc("serial"))
     monkeypatch.setattr(main_mod, "get_terminal_service", lambda: OkSvc("terminal"))
     monkeypatch.setattr(main_mod, "get_github_service", lambda: OkSvc("github"))
+    monkeypatch.setattr(main_mod, "get_opencode_service", lambda: OkSvc("opencode"))
     monkeypatch.setattr(main_mod, "get_ai_service", lambda: OkSvc("ai"))
 
     async with lifespan(main_mod.create_app()):
         pass
 
-    assert called == ["boom", "upload", "serial", "terminal", "github", "ai"]
+    assert called == ["boom", "upload", "serial", "terminal", "github", "opencode", "ai"]
 
 
 def test_redacted_logging_and_diagnostics_export(tmp_path: Path, monkeypatch):

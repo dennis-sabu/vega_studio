@@ -64,7 +64,7 @@ import type {
   EditorSettings,
 } from"@/types/editor";
 import type { OpenFileTab } from"@/types/explorer";
-import type { AIContextAttachment } from"@/types/ai";
+import type { OpenCodeContextAttachment } from"@/types/opencode";
 import type { WorkspaceSummary } from"@/types/project";
 import { formatBoardDisplayLabel } from"@/types/board";
 import type { CenterTabId, ShellLayoutState } from"@/types/shell";
@@ -109,8 +109,8 @@ interface WorkspaceEditorAreaProps {
   onToggleBottomPanel: () => void;
   onToggleRightPanel: () => void;
   onOpenHome: () => void;
-  onAskNativeAi?: (
-    ctx: AIContextAttachment,
+  onSendContextToAI?: (
+    ctx: OpenCodeContextAttachment,
     suggestedPrompt?: string
   ) => void;
   onRegisterEditorHandle?: (handle: MonacoEditorHandle | null) => void;
@@ -176,7 +176,7 @@ export function WorkspaceEditorArea({
   onToggleBottomPanel,
   onToggleRightPanel,
   onOpenHome,
-  onAskNativeAi,
+  onSendContextToAI,
   onRegisterEditorHandle,
 }: WorkspaceEditorAreaProps) {
   const monacoHandleRef = useRef<MonacoEditorHandle | null>(null);
@@ -846,7 +846,7 @@ export function WorkspaceEditorArea({
                 onCursorChange={onCursorChange}
                 onSaveShortcut={(uid) => void onSaveFileTab(uid)}
                 onConsumeReveal={onConsumeReveal}
-                onAskNativeAi={onAskNativeAi}
+                onSendContextToAI={onSendContextToAI}
               />
               {activeFileTab.loading && (
               <div className="absolute inset-0 z-20 flex items-center justify-center gap-2.5 bg-[#1F1F1F]/90 text-xs text-[#F4F4F5] backdrop-blur-sm">
@@ -1100,15 +1100,15 @@ export function WorkspaceEditorArea({
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 text-xs font-medium text-[#F4F4F5]">
                       <PanelRight className="h-3.5 w-3.5 text-[#7AA2FF]" />
-                      <span>Unified AI Workspace</span>
+                      <span>VEGA AI Workspace</span>
                       <span className="font-mono text-[11px] text-[#B4B4BC]">
                         {layout.rightPanelOpen
-                          ? `${layout.rightPanelWidth}px · ${layout.activeRightTab}`
+                          ? `${layout.rightPanelWidth}px · VEGA AI`
                           : "Hidden"}
                       </span>
                     </div>
                     <p className="mt-1 text-[11.5px] text-[#E4E4E7]">
-                      Native VEGA Assistant powered by Groq, OpenAI, or compatible endpoints.
+                      VEGA AI coding workspace powered by OpenCode CLI.
                     </p>
                   </div>
                   <button

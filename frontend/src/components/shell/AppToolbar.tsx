@@ -954,11 +954,11 @@ export function AppToolbar({
           </Tooltip>
         )}
 
-        <Tooltip label="Toggle VEGA Assistant" side="bottom">
+        <Tooltip label="Toggle VEGA AI" side="bottom">
           <button
             type="button"
             onClick={onToggleRightPanel}
-            aria-label="Toggle AI Assistant Panel"
+            aria-label="Toggle VEGA AI Panel"
             aria-pressed={rightPanelOpen && activeMode === "workspace"}
             className={`vega-no-drag inline-flex h-[26px] items-center gap-1 rounded-[6px] border px-2 text-[11.5px] font-medium transition-colors ${
               rightPanelOpen && activeMode === "workspace"

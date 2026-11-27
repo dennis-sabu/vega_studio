@@ -423,7 +423,7 @@ export function TerminalPanel({
                               getActiveHandle()?.getSelectionText().trim() ?? "";
                             if (!sel) {
                               setWsNotice(
-                                "Select terminal text first before analyzing in VEGA Assistant."
+                                "Select terminal text first before analyzing in VEGA AI."
                               );
                               return;
                             }

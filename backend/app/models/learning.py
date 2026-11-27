@@ -33,6 +33,7 @@ IdeActionId = Literal[
     "open_terminal",
     "open_git",
     "open_native_ai",
+    "open_opencode",
     "open_examples",
 ]
 

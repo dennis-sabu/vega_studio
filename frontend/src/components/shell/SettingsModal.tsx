@@ -12,7 +12,7 @@ import {
   X,
 } from"lucide-react";
 import type { DirectoryPickerOutcome } from"@/hooks/useWorkspace";
-import { AiProviderSettingsPanel } from"@/components/ai/AiProviderSettingsPanel";
+import { OpenCodeSettingsPanel } from"@/components/opencode/OpenCodeSettingsPanel";
 import { SdkConfigForm } from"@/components/sdk/SdkConfigForm";
 import {
   SegmentedPill,
@@ -36,7 +36,7 @@ export type SettingsCategory =
   |"terminal"
   |"workspace"
   |"sdk"
-  |"ai";
+  |"opencode";
 
 export interface WorkspaceSettingsProps {
   defaultProjectsDir: string;
@@ -59,7 +59,7 @@ interface SettingsModalProps {
   terminalSettings?: TerminalSettings;
   workspaceConfigProps?: WorkspaceSettingsProps;
   sdkConfigProps: ComponentProps<typeof SdkConfigForm>;
-  aiConfigProps: ComponentProps<typeof AiProviderSettingsPanel>;
+  opencodeConfigProps: ComponentProps<typeof OpenCodeSettingsPanel>;
   onClose: () => void;
   onSpeciesChange: (species: SpeciesKey) => void;
   onTweaksChange: (partial: Partial<AtmosphereTweaks>) => void;
@@ -395,7 +395,7 @@ export function SettingsModal({
   terminalSettings = DEFAULT_TERMINAL_SETTINGS,
   workspaceConfigProps,
   sdkConfigProps,
-  aiConfigProps,
+  opencodeConfigProps,
   onClose,
   onSpeciesChange,
   onTweaksChange,
@@ -558,8 +558,8 @@ export function SettingsModal({
                   void workspaceConfigProps?.onSaveDefaultProjectsDir(null);
                 } else if (activeCategory === "sdk") {
                   void sdkConfigProps.onReset();
-                } else if (activeCategory === "ai") {
-                  void aiConfigProps.onResetConfig();
+                } else if (activeCategory === "opencode") {
+                  void opencodeConfigProps.onReset();
                 } else {
                   onResetTweaks();
                 }
@@ -677,16 +677,16 @@ export function SettingsModal({
                 type="button"
                 onClick={() => {
                   setConfirmReset(false);
-                  setActiveCategory("ai");
+                  setActiveCategory("opencode");
                 }}
                 className={`flex w-full items-center gap-2 rounded-[6px] px-2.5 py-2 text-left text-xs font-medium transition-colors ${
-                  activeCategory === "ai"
+                  activeCategory === "opencode"
                     ? "bg-[#2C2C30] text-[#F4F4F5]"
                     : "text-[#E4E4E7] hover:bg-[#252527] hover:text-[#F4F4F5]"
                 }`}
               >
               <Bot className="h-3.5 w-3.5 text-[#7AA2FF]" />
-                <span>VEGA Assistant</span>
+                <span>VEGA AI</span>
               </button>
             </div>
 
@@ -695,7 +695,7 @@ export function SettingsModal({
                 ? "Applies immediately to all open code editor tabs."
                 : activeCategory === "terminal"
                   ? "Updates active xterm.js surfaces immediately."
-                  : activeCategory === "sdk" || activeCategory === "ai"
+                  : activeCategory === "sdk" || activeCategory === "opencode"
                     ? "Persisted in local app storage across IDE restarts."
                     : "Double-click any slider name to reset it."}
             </p>
@@ -721,7 +721,7 @@ export function SettingsModal({
                     ? ([{ id: "workspace", label: "Projects" }] as const)
                     : []),
                   { id: "sdk", label: "SDK" },
-                  { id: "ai", label: "VEGA AI" },
+                  { id: "opencode", label: "VEGA AI" },
                 ] as const
               ).map((cat) => (
                 <button
@@ -743,8 +743,8 @@ export function SettingsModal({
                 </button>
               ))}
             </div>
-            {activeCategory === "ai" ? (
-              <AiProviderSettingsPanel {...aiConfigProps} />
+            {activeCategory === "opencode" ? (
+              <OpenCodeSettingsPanel {...opencodeConfigProps} />
             ) : activeCategory === "workspace" && workspaceConfigProps ? (
               <WorkspaceSettingsPanel {...workspaceConfigProps} />
             ) : activeCategory === "terminal" ? (
@@ -1211,8 +1211,8 @@ export function SettingsModal({
                 ? "Terminal typography uses local static fonts and saves locally"
                 : activeCategory === "sdk"
                   ? "VEGA SDK settings persist in application data directory"
-                  : activeCategory === "ai"
-                    ? "API keys are stored securely in OS Credential Store — never SQLite"
+                  : activeCategory === "opencode"
+                    ? "VEGA AI configuration persists in application data directory"
                     : hoveredHint ??
                         "Hover a slider for details · Double-click a label to reset"}
           </span>

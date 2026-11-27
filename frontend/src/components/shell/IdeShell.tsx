@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from"react";
-import { AiCodeApplyModal } from"@/components/ai/AiCodeApplyModal";
 import type { MonacoEditorHandle } from"@/components/editor/MonacoEditorSurface";
 import { UnsavedChangesDialog } from"@/components/editor/UnsavedChangesDialog";
 import { GitConfirmDialog } from"@/components/git/GitConfirmDialog";
@@ -41,7 +40,7 @@ import { useFileExplorer } from"@/hooks/useFileExplorer";
 import { useGitIntegration } from"@/hooks/useGitIntegration";
 import { useGitHubIntegration } from"@/hooks/useGitHubIntegration";
 import { useLearning, type LearningSubTab } from"@/hooks/useLearning";
-import { useNativeAi } from"@/hooks/useNativeAi";
+import { useOpenCode } from"@/hooks/useOpenCode";
 import { useSdkDoctor } from"@/hooks/useSdkDoctor";
 import { useSerialMonitor } from"@/hooks/useSerialMonitor";
 import { useTerminalManager } from"@/hooks/useTerminalManager";
@@ -61,10 +60,6 @@ import {
   type AtmosphereTweaks,
   type SpeciesKey,
 } from"@/lib/glyphAnimalsEngine";
-import type {
-  AIContextAttachment,
-  PendingCodeApplyProposal,
-} from"@/types/ai";
 import type { BuildDiagnostic, BuildOperation } from"@/types/build";
 import { formatBoardDisplayLabel } from"@/types/board";
 import type {
@@ -74,6 +69,7 @@ import type {
   ExampleFileContentResponse,
   IdeActionId,
 } from"@/types/learning";
+import type { OpenCodeContextAttachment } from"@/types/opencode";
 import type { CreateProjectPayload, WorkspaceSummary } from"@/types/project";
 import type { ShellLogEntry } from"@/types/shell";
 
@@ -156,11 +152,6 @@ export function IdeShell() {
   const [openProjectOpen, setOpenProjectOpen] = useState(false);
   const [composerFocused, setComposerFocused] = useState(false);
   const [confirmUploadNonce, setConfirmUploadNonce] = useState(0);
-  const [pendingCodeApply, setPendingCodeApply] = useState<{
-    proposal: PendingCodeApplyProposal;
-    selectionText: string | null;
-    fileText: string | null;
-  } | null>(null);
 
   const [logs, setLogs] = useState<ShellLogEntry[]>(() => [
     createLogEntry(
@@ -423,36 +414,45 @@ export function IdeShell() {
     onLog: (message) => appendLog("SHELL","info", message),
   });
 
-  const nativeAi = useNativeAi({
+  const openCodeAgent = useOpenCode({
     projectDir: workspace.activeProject?.project_dir ?? null,
     isBackendConnected: isConnected,
     onLog: (level, message) => appendLog("SHELL", level, message),
+    onAfterSessionComplete: () => {
+      void explorer.refreshAll();
+      void gitIntegration.refreshAll();
+      for (const tab of editorTabs.openFileTabs) {
+        if (!tab.isDirty) {
+          void editorTabs.reloadTabFromDisk(tab.uid);
+        }
+      }
+    },
   });
 
   const registerEditorHandle = useCallback((h: MonacoEditorHandle | null) => {
     monacoBridgeRef.current = h;
   }, []);
 
-  const askNativeAiWithContext = useCallback(
-    (ctx: AIContextAttachment, suggestedPrompt?: string) => {
-      nativeAi.addAttachment(ctx);
-      if (suggestedPrompt && !nativeAi.draftPrompt.trim()) {
-        nativeAi.setDraftPrompt(suggestedPrompt);
+  const sendContextToVegaAi = useCallback(
+    (ctx: OpenCodeContextAttachment, suggestedPrompt?: string) => {
+      openCodeAgent.addContext(ctx);
+      if (suggestedPrompt && !openCodeAgent.draftPrompt.trim()) {
+        openCodeAgent.setDraftPrompt(suggestedPrompt);
       }
       setComposerFocused(false);
       setSettingsOpen(false);
       setMode("workspace");
-      setRightTab("native-ai");
+      setRightTab("opencode");
     },
-    [nativeAi, setMode, setRightTab]
+    [openCodeAgent, setMode, setRightTab]
   );
 
-  const handleExplainDiagnosticNativeAi = useCallback(
+  const handleExplainDiagnostic = useCallback(
     (diag: BuildDiagnostic) => {
       const location = diag.relative_path
         ? `${diag.relative_path}${diag.line ? `:${diag.line}` : ""}`
         : "Build Diagnostic";
-      askNativeAiWithContext(
+      sendContextToVegaAi(
         {
           kind: "build_error",
           title: `${diag.severity.toUpperCase()} in ${location}`,
@@ -464,15 +464,15 @@ export function IdeShell() {
         `Explain and help fix this ${diag.severity} for VEGA firmware: ${diag.message}`
       );
     },
-    [askNativeAiWithContext]
+    [sendContextToVegaAi]
   );
 
-  const handleDebugBuildNativeAi = useCallback(() => {
+  const handleDebugBuildAi = useCallback(() => {
     const diags = buildSystem.diagnostics
       .slice(0, 10)
       .map(
         (d) =>
-          `[${d.severity}] ${d.relative_path ?? d.file_path ?? "? "}:${d.line ?? "? "} ${d.message}`
+          `[${d.severity}] ${d.relative_path ?? d.file_path ?? "?"}:${d.line ?? "?"} ${d.message}`
       )
       .join("\n");
     const tailLog = buildSystem.logs
@@ -480,114 +480,43 @@ export function IdeShell() {
       .map((l) => l.text)
       .join("\n");
     const snippet = [diags, tailLog].filter(Boolean).join("\n\n---\n").slice(0, 6500);
-    askNativeAiWithContext(
+    sendContextToVegaAi(
       {
-        kind: "build_output",
+        kind: "build_error",
         title: `Build ${buildSystem.latestBuild?.status ?? "failure"} diagnostics`,
-        snippet: snippet ||"Build failed with no diagnostic lines captured.",
+        snippet: snippet || "Build failed with no diagnostic lines captured.",
       },
       "Analyze this VEGA firmware build failure and suggest what to check or fix."
     );
-  }, [askNativeAiWithContext, buildSystem.diagnostics, buildSystem.latestBuild, buildSystem.logs]);
+  }, [sendContextToVegaAi, buildSystem.diagnostics, buildSystem.latestBuild, buildSystem.logs]);
 
   const handleAnalyzeSerialAi = useCallback(
     (recentLinesText: string, portLabel: string) => {
-      askNativeAiWithContext(
+      sendContextToVegaAi(
         {
-          kind: "serial_output",
+          kind: "serial_note",
           title: `Serial (${portLabel})`,
           snippet: recentLinesText,
         },
         `Analyze this USB-UART serial output from ${portLabel} on VEGA ARIES V3:`
       );
     },
-    [askNativeAiWithContext]
+    [sendContextToVegaAi]
   );
 
   const handleAnalyzeTerminalAi = useCallback(
     (selectedText: string, sessionLabel: string) => {
-      askNativeAiWithContext(
+      sendContextToVegaAi(
         {
-          kind: "terminal_output",
+          kind: "selection",
           title: `Terminal: ${sessionLabel}`,
           snippet: selectedText,
         },
         "Analyze this selected terminal output in the context of our VEGA project: "
       );
     },
-    [askNativeAiWithContext]
+    [sendContextToVegaAi]
   );
-
-  const attachActiveFileToAi = useCallback(() => {
-    const tabPath = editorTabs.activeFileTabPath;
-    if (!tabPath) return;
-    const tab = editorTabs.openFileTabs.find((t) => t.path === tabPath);
-    const content = monacoBridgeRef.current?.getFullText() ?? tab?.savedContent ?? "";
-    const truncated = content.length > 6000;
-    nativeAi.addAttachment({
-      kind: "file",
-      title: tab?.name ?? tabPath,
-      relative_path: tabPath,
-      language: tab?.monacoLanguage || tab?.language || null,
-      snippet: truncated ? content.slice(0, 6000) : content,
-      truncated,
-    });
-  }, [editorTabs.activeFileTabPath, editorTabs.openFileTabs, nativeAi]);
-
-  const attachSelectionToAi = useCallback(() => {
-    const tabPath = editorTabs.activeFileTabPath;
-    const sel = monacoBridgeRef.current?.getSelectionSnippet();
-    if (!tabPath || !sel) return;
-    const tab = editorTabs.openFileTabs.find((t) => t.path === tabPath);
-    const truncated = sel.text.length > 6000;
-    nativeAi.addAttachment({
-      kind: "selection",
-      title: `${tab?.name ?? tabPath}:${sel.startLine}-${sel.endLine}`,
-      relative_path: tabPath,
-      start_line: sel.startLine,
-      end_line: sel.endLine,
-      language: tab?.monacoLanguage || tab?.language || null,
-      snippet: truncated ? sel.text.slice(0, 6000) : sel.text,
-      truncated,
-    });
-  }, [editorTabs.activeFileTabPath, editorTabs.openFileTabs, nativeAi]);
-
-  const attachBuildErrorsToAi = useCallback(() => {
-    const snippet = buildSystem.diagnostics
-      .slice(0, 12)
-      .map(
-        (d) =>
-          `[${d.severity}] ${d.relative_path ?? d.file_path ?? "? "}:${d.line ?? "? "} ${d.message}`
-      )
-      .join("\n");
-    if (!snippet) return;
-    nativeAi.addAttachment({
-      kind: "build_error",
-      title: `Build Diagnostics (${buildSystem.diagnostics.length})`,
-      snippet,
-    });
-  }, [buildSystem.diagnostics, nativeAi]);
-
-  const attachProjectSummaryToAi = useCallback(() => {
-    const proj = workspace.activeProject;
-    if (!proj) return;
-    const board = boardManager.projectBoardStatus?.board;
-    const summaryText = [
-      `Project: ${proj.project.name}`,
-      `Target: board=${proj.project.target.board ?? "unset"}, arch=${proj.project.target.arch}, machine=${proj.project.target.machine}`,
-      board
-        ? `Board Specs: ${board.name} (${board.core}, ${board.cpu_frequency_mhz}MHz, ${board.sram_kb}KB SRAM, sensors: ${board.sensors.join(",")})`
-        : "",
-      `SDK Overall: ${sdkDoctor.report?.overall_status ?? "not checked"}`,
-    ]
-      .filter(Boolean)
-      .join("\n");
-    nativeAi.addAttachment({
-      kind: "project_summary",
-      title: `${proj.project.name} Board & SDK`,
-      snippet: summaryText,
-    });
-  }, [boardManager.projectBoardStatus, nativeAi, sdkDoctor.report, workspace.activeProject]);
 
   const openSettingsCategory = useCallback((cat: SettingsCategory) => {
     setSettingsCategory(cat);
@@ -720,7 +649,6 @@ export function IdeShell() {
     newProjectOpen ||
     openProjectOpen ||
     Boolean(editorTabs.unsavedPrompt) ||
-    Boolean(pendingCodeApply) ||
     Boolean(gitIntegration.confirmDialog) ||
     Boolean(githubIntegration.confirmDialog) ||
     Boolean(learning.createModalExample);
@@ -735,7 +663,6 @@ export function IdeShell() {
       newProjectOpen ||
       openProjectOpen ||
       Boolean(editorTabs.unsavedPrompt) ||
-      Boolean(pendingCodeApply) ||
       Boolean(gitIntegration.confirmDialog) ||
       Boolean(githubIntegration.confirmDialog) ||
       Boolean(learning.createModalExample),
@@ -758,7 +685,6 @@ export function IdeShell() {
         newProjectOpen ||
         openProjectOpen ||
         Boolean(editorTabs.unsavedPrompt) ||
-        Boolean(pendingCodeApply) ||
         Boolean(gitIntegration.confirmDialog) ||
         Boolean(githubIntegration.confirmDialog) ||
         Boolean(learning.createModalExample),
@@ -901,9 +827,9 @@ export function IdeShell() {
         openTerminalPanel();
       } else if (actionId === "open_git") {
         openSourceControl();
-      } else if (actionId === "open_native_ai") {
+      } else if (actionId === "open_native_ai" || actionId === "open_opencode") {
         setMode("workspace");
-        setRightTab("native-ai");
+        setRightTab("opencode");
       } else if (actionId === "open_examples") {
         openExamplesLibrary("examples");
       }
@@ -943,7 +869,7 @@ export function IdeShell() {
         : "";
       const combined = `${header}${body}`;
       const truncated = combined.length > 5800;
-      askNativeAiWithContext(
+      sendContextToVegaAi(
         {
           kind: "file",
           title: fileContent
@@ -957,31 +883,31 @@ export function IdeShell() {
         `Explain how this VEGA firmware example works and how to adapt it safely for VEGA ARIES V3:`
       );
     },
-    [askNativeAiWithContext]
+    [sendContextToVegaAi]
   );
 
   const handleAskAiAboutDoc = useCallback(
     (detail: DocPageDetailResponse) => {
       const truncated = detail.markdown_content.length > 5800;
-      askNativeAiWithContext(
+      sendContextToVegaAi(
         {
-          kind: "project_summary",
+          kind: "file",
           title: `Docs: ${detail.doc.title}`,
           snippet: truncated
             ? detail.markdown_content.slice(0, 5800)
             : detail.markdown_content,
           truncated,
         },
-        `Summarize key takeaways from"${detail.doc.title}" and help apply it to my VEGA firmware project:`
+        `Summarize key takeaways from "${detail.doc.title}" and help apply it to my VEGA firmware project:`
       );
     },
-    [askNativeAiWithContext]
+    [sendContextToVegaAi]
   );
 
   const handleAskAiAboutSnippet = useCallback(
     (snippet: string, title: string, language?: string) => {
       const truncated = snippet.length > 5000;
-      askNativeAiWithContext(
+      sendContextToVegaAi(
         {
           kind: "selection",
           title,
@@ -992,7 +918,7 @@ export function IdeShell() {
         "Explain this code snippet from the VEGA Studio documentation: "
       );
     },
-    [askNativeAiWithContext]
+    [sendContextToVegaAi]
   );
 
   const handleCreateProject = useCallback(
@@ -1145,14 +1071,14 @@ export function IdeShell() {
         run: openSdkDoctor,
       },
       {
-        id: "open-native-ai",
+        id: "open-vega-ai",
         category: "AI",
-        label: "Open VEGA Assistant",
+        label: "Open VEGA AI",
         shortcut: "Ctrl+Shift+A",
-        keywords: "ai chat assistant",
+        keywords: "ai chat assistant opencode",
         run: () => {
           setMode("workspace");
-          setRightTab("native-ai");
+          setRightTab("opencode");
         },
       },
       {
@@ -1395,9 +1321,9 @@ export function IdeShell() {
               onAskAiPrompt={(prompt) => {
                 setComposerFocused(false);
                 setMode("workspace");
-                setRightTab("native-ai");
+                setRightTab("opencode");
                 if (prompt) {
-                  nativeAi.setDraftPrompt(prompt);
+                  openCodeAgent.setDraftPrompt(prompt);
                 }
               }}
             />
@@ -1740,7 +1666,7 @@ export function IdeShell() {
                   onToggleBottomPanel={toggleBottomPanel}
                   onToggleRightPanel={toggleRightPanel}
                   onOpenHome={() => setMode("home")}
-                  onAskNativeAi={askNativeAiWithContext}
+                  onSendContextToAI={sendContextToVegaAi}
                   onRegisterEditorHandle={registerEditorHandle}
                 />
               )}
@@ -1785,7 +1711,7 @@ export function IdeShell() {
                       onOpenDiagnosticsTab: () => setBottomTab("diagnostics"),
                       onOpenSdkDoctor: openSdkDoctor,
                       onOpenBoardManager: openBoardManager,
-                      onDebugWithNativeAi: handleDebugBuildNativeAi,
+                      onDebugWithNativeAi: handleDebugBuildAi,
                     }}
                     terminalPanelProps={{
                       isBackendConnected: isConnected,
@@ -1912,7 +1838,7 @@ export function IdeShell() {
                     onCollapse={toggleBottomPanel}
                     onClearLogs={() => setLogs([])}
                     onOpenDiagnosticLocation={handleOpenDiagnosticLocation}
-                    onExplainDiagnosticNativeAi={handleExplainDiagnosticNativeAi}
+                    onExplainDiagnostic={handleExplainDiagnostic}
                     onOpenSdkDoctor={openSdkDoctor}
                   />
                 </>
@@ -1937,74 +1863,39 @@ export function IdeShell() {
                   width={effectiveDimensions.rightPanelWidth}
                   onSelectTab={setRightTab}
                   onCollapse={toggleRightPanel}
-                  nativeAiProps={{
+                  opencodeProps={{
                     activeProject: workspace.activeProject,
-                    activeBoardId: boardManager.activeProjectBoardId,
-                    activeFilePath: editorTabs.activeFileTabPath,
-                    hasSelection: editorTabs.cursorPosition.selectionLength > 0,
-                    hasBuildDiagnostics: buildSystem.diagnostics.length > 0,
                     isBackendConnected: isConnected,
-                    providersState: nativeAi.providersState,
-                    activeProviderStatus: nativeAi.activeProviderStatus,
-                    conversations: nativeAi.conversations,
-                    activeConversationId: nativeAi.activeConversationId,
-                    conversationDetail: nativeAi.conversationDetail,
-                    activeConversation: nativeAi.activeConversation,
-                    isCrossProjectConversation: nativeAi.isCrossProjectConversation,
-                    wsState: nativeAi.wsState,
-                    draftPrompt: nativeAi.draftPrompt,
-                    pendingAttachments: nativeAi.pendingAttachments,
-                    contextPreview: nativeAi.contextPreview,
-                    loading: nativeAi.loading,
-                    actionPending: nativeAi.actionPending,
-                    error: nativeAi.error,
-                    notice: nativeAi.notice,
-                    onDraftPromptChange: nativeAi.setDraftPrompt,
-                    onSelectConversation: nativeAi.selectConversation,
-                    onCreateConversation: () => {
-                      void nativeAi.createNewConversation();
+                    info: openCodeAgent.info,
+                    sessions: openCodeAgent.sessions,
+                    activeSessionId: openCodeAgent.activeSessionId,
+                    sessionDetail: openCodeAgent.sessionDetail,
+                    activeSessionSummary: openCodeAgent.activeSessionSummary,
+                    isCrossProjectSession: openCodeAgent.isCrossProjectSession,
+                    wsState: openCodeAgent.wsState,
+                    draftPrompt: openCodeAgent.draftPrompt,
+                    pendingContexts: openCodeAgent.pendingContexts,
+                    selectedModel: openCodeAgent.selectedModel,
+                    loading: openCodeAgent.loading,
+                    actionPending: openCodeAgent.actionPending,
+                    error: openCodeAgent.error,
+                    notice: openCodeAgent.notice,
+                    onDraftPromptChange: openCodeAgent.setDraftPrompt,
+                    onRemoveContext: openCodeAgent.removeContext,
+                    onSelectModel: openCodeAgent.setSelectedModel,
+                    onSelectSession: openCodeAgent.selectSession,
+                    onCreateSession: () => { void openCodeAgent.createSession(); },
+                    onSendPrompt: () => { void openCodeAgent.sendPrompt(); },
+                    onInterrupt: () => { void openCodeAgent.interruptSession(); },
+                    onReplyPermission: (reqId, decision) => {
+                      void openCodeAgent.replyPermission(reqId, decision);
                     },
-                    onClearConversation: () => {
-                      void nativeAi.clearCurrentConversation();
+                    onTerminateSession: (sessionId) => {
+                      void openCodeAgent.terminateSession(sessionId);
                     },
-                    onDeleteConversation: (id) => {
-                      void nativeAi.removeConversation(id);
-                    },
-                    onToggleTools: (allow) => {
-                      void nativeAi.toggleConversationTools(allow);
-                    },
-                    onSendPrompt: () => {
-                      void nativeAi.sendPrompt();
-                    },
-                    onRetryLast: () => {
-                      void nativeAi.retryLastTurn();
-                    },
-                    onStopGeneration: () => {
-                      void nativeAi.stopGeneration();
-                    },
-                    onRemoveAttachment: nativeAi.removeAttachment,
-                    onAttachActiveFile: attachActiveFileToAi,
-                    onAttachSelection: attachSelectionToAi,
-                    onAttachBuildErrors: attachBuildErrorsToAi,
-                    onAttachProjectSummary: attachProjectSummaryToAi,
-                    onPreviewContext: () => {
-                      void nativeAi.loadContextPreview();
-                    },
-                    onDismissPreview: () => nativeAi.setContextPreview(null),
-                    onProposeCodeApply: (code, language, mode) => {
-                      const sel = monacoBridgeRef.current?.getSelectionSnippet();
-                      const full = monacoBridgeRef.current?.getFullText() ?? activeFileTab?.savedContent ?? null;
-                      setPendingCodeApply({
-                        proposal: { code, language, mode },
-                        selectionText: sel?.text ?? null,
-                        fileText: full,
-                      });
-                    },
-                    onOpenSettings: () => openSettingsCategory("ai"),
-                    onRefresh: () => {
-                      void nativeAi.refreshState();
-                    },
-                    onClearFeedback: nativeAi.clearFeedback,
+                    onRefresh: () => { void openCodeAgent.refreshInfoAndSessions(); },
+                    onOpenSettings: () => openSettingsCategory("opencode"),
+                    onClearFeedback: openCodeAgent.clearFeedback,
                   }}
                 />
               </>
@@ -2090,20 +1981,17 @@ export function IdeShell() {
           onSave: sdkDoctor.saveConfig,
           onReset: sdkDoctor.resetConfig,
         }}
-        aiConfigProps={{
-          providersState: nativeAi.providersState,
+        opencodeConfigProps={{
+          configState: openCodeAgent.configState,
+          hasElectronBrowse: sdkDoctor.hasElectronBrowse,
           isBackendConnected: isConnected,
-          saving: nativeAi.savingConfig,
-          testing: nativeAi.testingConnection,
-          loading: nativeAi.loading,
-          error: nativeAi.error,
-          testResult: nativeAi.testResult,
-          onRefresh: () => void nativeAi.refreshState(),
-          onSaveConfig: nativeAi.saveConfig,
-          onResetConfig: nativeAi.resetConfig,
-          onSaveCredential: nativeAi.saveCredential,
-          onRemoveCredential: nativeAi.removeCredential,
-          onTestConnection: nativeAi.runConnectionTest,
+          saving: openCodeAgent.savingConfig,
+          loading: openCodeAgent.loading,
+          error: openCodeAgent.error,
+          onBrowseFile: sdkDoctor.browseFile,
+          onRefresh: () => void openCodeAgent.refreshInfoAndSessions(),
+          onSave: openCodeAgent.saveConfig,
+          onReset: openCodeAgent.resetConfig,
         }}
         onClose={() => setSettingsOpen(false)}
         onSpeciesChange={handleSpeciesChange}
@@ -2123,30 +2011,6 @@ export function IdeShell() {
       />
 
       <UnsavedChangesDialog prompt={editorTabs.unsavedPrompt} />
-
-      <AiCodeApplyModal
-        proposal={pendingCodeApply?.proposal ?? null}
-        projectDir={workspace.activeProject?.project_dir ?? null}
-        activeFilePath={editorTabs.activeFileTabPath}
-        activeFileDirty={Boolean(activeFileTab?.isDirty)}
-        existingSelectionText={pendingCodeApply?.selectionText ?? null}
-        existingFileContent={pendingCodeApply?.fileText ?? null}
-        onCancel={() => setPendingCodeApply(null)}
-        onConfirmApply={(proposal) => {
-          const applied = monacoBridgeRef.current?.applyCodeEdit(
-            proposal.mode,
-            proposal.code
-          );
-          if (applied && activeFileTab) {
-            appendLog(
-              "SHELL",
-              "info",
-              `Applied Native AI suggestion (${proposal.mode}) to ${activeFileTab.path} buffer (unsaved).`
-            );
-          }
-          setPendingCodeApply(null);
-        }}
-      />
 
       <GitConfirmDialog
         dialog={gitIntegration.confirmDialog}

@@ -46,6 +46,17 @@ import type {
   ExampleValidationResponse,
 } from "@/types/learning";
 import type {
+  OpenCodeConfig,
+  OpenCodeConfigStateResponse,
+  OpenCodeContextAttachment,
+  OpenCodeInfoResponse,
+  OpenCodePermissionDecision,
+  OpenCodePermissionMode,
+  OpenCodeSessionDetailResponse,
+  OpenCodeSessionListResponse,
+  OpenCodeSessionSummary,
+} from "@/types/opencode";
+import type {
   GitBranchActionResponse,
   GitBranchesResponse,
   GitCommitDetailResponse,
@@ -1204,6 +1215,147 @@ export async function startGitHubPush(payload: {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+// ── Phase 14: VEGA AI (OpenCode CLI) ─────────────────────────────────────────
+
+export function getOpenCodeWsUrl(sessionId: string): string {
+  const baseUrl = getBackendUrl().replace(/\/+$/, "");
+  const wsBase = baseUrl.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:");
+  return `${wsBase}/api/opencode/ws/${encodeURIComponent(sessionId)}`;
+}
+
+export async function fetchOpenCodeInfo(
+  queryModels: boolean = false,
+  signal?: AbortSignal
+): Promise<OpenCodeInfoResponse> {
+  const params = new URLSearchParams();
+  if (queryModels) params.set("models", "true");
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<OpenCodeInfoResponse>(`/api/opencode/info${suffix}`, { signal });
+}
+
+export async function fetchOpenCodeConfig(
+  signal?: AbortSignal
+): Promise<OpenCodeConfigStateResponse> {
+  return apiFetch<OpenCodeConfigStateResponse>("/api/opencode/config", { signal });
+}
+
+export async function updateOpenCodeConfig(
+  config: OpenCodeConfig
+): Promise<OpenCodeConfigStateResponse> {
+  return apiFetch<OpenCodeConfigStateResponse>("/api/opencode/config", {
+    method: "PUT",
+    body: JSON.stringify(config),
+  });
+}
+
+export async function resetOpenCodeConfig(): Promise<OpenCodeConfigStateResponse> {
+  return apiFetch<OpenCodeConfigStateResponse>("/api/opencode/config/reset", {
+    method: "POST",
+  });
+}
+
+export async function fetchOpenCodeSessions(
+  projectDir?: string | null,
+  signal?: AbortSignal
+): Promise<OpenCodeSessionListResponse> {
+  const params = new URLSearchParams();
+  if (projectDir) params.set("project_dir", projectDir);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<OpenCodeSessionListResponse>(`/api/opencode/sessions${suffix}`, {
+    signal,
+  });
+}
+
+export async function createOpenCodeSession(payload: {
+  project_dir: string;
+  title?: string;
+  permission_mode?: OpenCodePermissionMode;
+  model?: string;
+}): Promise<OpenCodeSessionDetailResponse> {
+  return apiFetch<OpenCodeSessionDetailResponse>("/api/opencode/sessions", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchOpenCodeSession(
+  sessionId: string,
+  options?: { projectDir?: string | null; sync?: boolean; signal?: AbortSignal }
+): Promise<OpenCodeSessionDetailResponse> {
+  const params = new URLSearchParams();
+  if (options?.projectDir) params.set("project_dir", options.projectDir);
+  if (options?.sync === false) params.set("sync", "false");
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<OpenCodeSessionDetailResponse>(
+    `/api/opencode/sessions/${encodeURIComponent(sessionId)}${suffix}`,
+    { signal: options?.signal }
+  );
+}
+
+export async function promptOpenCodeSession(
+  sessionId: string,
+  payload: {
+    project_dir: string;
+    prompt: string;
+    model?: string;
+    contexts?: OpenCodeContextAttachment[];
+  }
+): Promise<OpenCodeSessionDetailResponse> {
+  return apiFetch<OpenCodeSessionDetailResponse>(
+    `/api/opencode/sessions/${encodeURIComponent(sessionId)}/prompt`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export async function interruptOpenCodeSession(
+  sessionId: string,
+  projectDir?: string | null
+): Promise<OpenCodeSessionSummary> {
+  return apiFetch<OpenCodeSessionSummary>(
+    `/api/opencode/sessions/${encodeURIComponent(sessionId)}/interrupt`,
+    {
+      method: "POST",
+      body: JSON.stringify(projectDir ? { project_dir: projectDir } : {}),
+    }
+  );
+}
+
+export async function replyOpenCodePermission(
+  sessionId: string,
+  requestId: string,
+  payload: {
+    project_dir?: string | null;
+    decision: OpenCodePermissionDecision;
+    message?: string;
+  }
+): Promise<OpenCodeSessionDetailResponse> {
+  return apiFetch<OpenCodeSessionDetailResponse>(
+    `/api/opencode/sessions/${encodeURIComponent(sessionId)}/permissions/${encodeURIComponent(requestId)}`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+}
+
+export async function terminateOpenCodeSession(
+  sessionId: string,
+  projectDir?: string | null
+): Promise<OpenCodeSessionSummary> {
+  const params = new URLSearchParams();
+  if (projectDir) params.set("project_dir", projectDir);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<OpenCodeSessionSummary>(
+    `/api/opencode/sessions/${encodeURIComponent(sessionId)}${suffix}`,
+    {
+      method: "DELETE",
+    }
+  );
 }
 
 // ── Phase 15: Native VEGA AI Assistant ────────────────────────────────────────

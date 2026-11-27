@@ -48,6 +48,7 @@ from app.services.ai_context import (
     OPENAI_READONLY_TOOLS,
     build_context_preview,
     build_vega_system_prompt,
+    prompt_requests_workspace_or_code,
     sanitize_attachments_and_format,
     validate_code_apply,
 )
@@ -871,11 +872,18 @@ class AIService:
     ) -> None:
         adapter = get_provider_adapter(provider_id)
         extra_secrets = tuple(self._credentials.get_all_known_secrets())
+        wants_workspace = prompt_requests_workspace_or_code(
+            latest_user_prompt,
+            has_attachments=bool(latest_formatted_attachments.strip()),
+        )
+        effective_allow_tools = bool(allow_tools and wants_workspace)
+        effective_include_ws = bool(include_workspace_summary and wants_workspace)
+
         sys_prompt, _, _, _ = build_vega_system_prompt(
             app_settings=self._settings,
             project_dir=project_dir,
-            include_workspace_summary=include_workspace_summary,
-            allow_tools=allow_tools,
+            include_workspace_summary=effective_include_ws,
+            allow_tools=effective_allow_tools,
             extra_secrets=extra_secrets,
         )
 
@@ -910,7 +918,7 @@ class AIService:
             project_dir=project_dir,
             extra_secrets=extra_secrets,
         )
-        tools_payload = OPENAI_READONLY_TOOLS if allow_tools else None
+        tools_payload = OPENAI_READONLY_TOOLS if effective_allow_tools else None
 
         collected_text = ""
         collected_traces: List[AIToolTraceItem] = []
@@ -979,7 +987,7 @@ class AIService:
                                 continue
                             raise
 
-                    if not tool_acc or not allow_tools or _round >= _MAX_TOOL_ROUNDS:
+                    if not tool_acc or not effective_allow_tools or _round >= _MAX_TOOL_ROUNDS:
                         break
 
                     # Record assistant tool-call turn and execute strictly read-only context tools

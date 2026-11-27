@@ -17,6 +17,7 @@ from app.routers import git as git_router
 from app.routers import github as github_router
 from app.routers import health as health_router
 from app.routers import learning as learning_router
+from app.routers import opencode as opencode_router
 from app.routers import projects as projects_router
 from app.routers import sdk as sdk_router
 from app.routers import serial as serial_router
@@ -26,6 +27,7 @@ from app.services.ai_service import get_ai_service
 from app.services.build_service import get_build_service
 from app.services.diagnostics_service import configure_backend_logging
 from app.services.github_service import get_github_service
+from app.services.opencode_service import get_opencode_service
 from app.services.serial_service import get_serial_service
 from app.services.terminal_service import get_terminal_service
 from app.services.upload_service import get_upload_service
@@ -50,6 +52,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         ("serial", get_serial_service),
         ("terminal", get_terminal_service),
         ("github", get_github_service),
+        ("opencode", get_opencode_service),
         ("ai", get_ai_service),
     ):
         try:
@@ -88,6 +91,7 @@ def create_app() -> FastAPI:
     application.include_router(terminal_router.router)
     application.include_router(git_router.router)
     application.include_router(github_router.router)
+    application.include_router(opencode_router.router)
     application.include_router(ai_router.router)
     application.include_router(learning_router.router)
 

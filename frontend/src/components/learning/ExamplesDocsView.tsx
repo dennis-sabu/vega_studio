@@ -503,7 +503,7 @@ export function ExamplesDocsView({
                         className="inline-flex items-center gap-1.5 rounded-xl border border-white/14 bg-[#252527] px-3 py-2 text-xs font-medium text-[#F4F4F5] transition-colors hover:bg-[#2D2D31]"
                       >
                       <Sparkles className="h-3.5 w-3.5 text-[#7AA2FF]" />
-                        <span>Ask Native AI</span>
+                        <span>Ask VEGA AI</span>
                       </button>
                     </div>
                   </div>
@@ -814,7 +814,7 @@ export function ExamplesDocsView({
                       className="inline-flex items-center gap-1.5 rounded-xl border border-[#7AA2FF]/35 bg-[#7AA2FF]/12 px-3 py-1.5 text-xs font-medium text-[#c5d8ff] transition-colors hover:bg-[#7AA2FF]/22"
                     >
                     <Sparkles className="h-3.5 w-3.5" />
-                      <span>Ask Native AI about Doc</span>
+                      <span>Ask VEGA AI about Doc</span>
                     </button>
                   </div>
 

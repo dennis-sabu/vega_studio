@@ -40,6 +40,7 @@ from app.services.ai_context import (
     MAX_TOTAL_CONTEXT_CHARS,
     build_vega_system_prompt,
     is_sensitive_relative_path,
+    prompt_requests_workspace_or_code,
 )
 from app.services.ai_credentials import (
     AICredentialManager,
@@ -491,7 +492,7 @@ async def test_streaming_tool_loop_retry_cancellation_timeout_and_persistence(tm
 
     # Timeout handling -> error status + retry capability
     call_state["mode"] = "timeout"
-    await svc.send_message(cid, AISendMessageRequest(project_dir=proj_dir, prompt="Trigger timeout"))
+    await svc.send_message(cid, AISendMessageRequest(project_dir=proj_dir, prompt="Check main.c timeout"))
     for _ in range(50):
         d = svc.get_conversation(cid)
         if d.conversation.status != "streaming":
@@ -759,5 +760,80 @@ async def test_groq_responses_api_streaming_tools_and_env_key(
         assert stream_calls[0]["model"] == "openai/gpt-oss-20b"
         assert "instructions" in stream_calls[0]
         assert any(item.get("type") == "function_call_output" and item.get("call_id") == "call_groq_1" for item in stream_calls[1]["input"])
+    finally:
+        svc.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_chatbot_mode_skips_workspace_until_code_or_workspace_requested(tmp_path: Path):
+    assert prompt_requests_workspace_or_code("hi") is False
+    assert prompt_requests_workspace_or_code("what is UART?") is False
+    assert prompt_requests_workspace_or_code("write code for LED blink") is True
+    assert prompt_requests_workspace_or_code("look into my workspace") is True
+    assert prompt_requests_workspace_or_code("hello", has_attachments=True) is True
+
+    s = _make_settings(tmp_path)
+    proj_dir = _create_project(s, tmp_path / "projects", "chat_mode_proj")
+    (Path(proj_dir) / "src" / "main.c").write_text("int main(void) { return 0; }\n", encoding="utf-8")
+
+    creds = AICredentialManager(backend=_MemoryCredentialBackend())
+    creds.set_secret("groq", "gsk_chat_mode_secret_123456")
+    recorded_bodies: List[Dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/openai/v1/responses":
+            body = json.loads(request.content.decode("utf-8"))
+            recorded_bodies.append(body)
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "text/event-stream"},
+                content=_sse_body([
+                    {"type": "response.output_text.delta", "delta": "Hello! How can I help?"},
+                    {"type": "response.completed", "response": {"id": "resp_chat"}},
+                ]),
+            )
+        return httpx.Response(404)
+
+    svc = AIService(
+        s,
+        credential_manager=creds,
+        http_client_factory=lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    try:
+        cfg = svc.get_providers_state().config.model_copy(update={"active_provider": "groq"})
+        svc.update_config(AIConfigUpdateRequest(**cfg.model_dump()))
+        conv = svc.create_conversation(AIConversationCreateRequest(project_dir=proj_dir))
+
+        # 1) Casual chat turn -> no tools and no project tree sent
+        await svc.send_message(
+            conv.conversation.conversation_id,
+            AISendMessageRequest(project_dir=proj_dir, prompt="hi, how are you?"),
+        )
+        for _ in range(40):
+            d = svc.get_conversation(conv.conversation.conversation_id)
+            if d.conversation.status != "streaming":
+                break
+            await asyncio.sleep(0.05)
+
+        assert len(recorded_bodies) == 1
+        assert "tools" not in recorded_bodies[0]
+        assert "Project Structure" not in recorded_bodies[0]["instructions"]
+        assert "NEVER jump straight into writing code" in recorded_bodies[0]["instructions"]
+
+        # 2) Explicit coding request -> workspace summary + tools enabled
+        await svc.send_message(
+            conv.conversation.conversation_id,
+            AISendMessageRequest(project_dir=proj_dir, prompt="Write code for LED blink in this project"),
+        )
+        for _ in range(40):
+            d = svc.get_conversation(conv.conversation.conversation_id)
+            if d.conversation.status != "streaming":
+                break
+            await asyncio.sleep(0.05)
+
+        assert len(recorded_bodies) == 2
+        assert "tools" in recorded_bodies[1]
+        assert len(recorded_bodies[1]["tools"]) == 5
+        assert "Project Structure" in recorded_bodies[1]["instructions"]
     finally:
         svc.shutdown()

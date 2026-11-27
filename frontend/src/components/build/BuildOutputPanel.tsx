@@ -272,7 +272,7 @@ export function BuildOutputPanel({
               currentStatus === "timed_out" ||
               (latestBuild?.error_count ?? 0) > 0) && (
               <Tooltip
-                label="Debug build failure with Native VEGA AI"
+                label="Debug build failure with VEGA AI"
                 side="top"
               >
                 <button

@@ -40,7 +40,7 @@ export const DEFAULT_SHELL_LAYOUT: ShellLayoutState = {
   activeBottomTab: "build",
   rightPanelOpen: false,
   rightPanelWidth: RIGHT_PANEL_DEFAULT_WIDTH,
-  activeRightTab: "native-ai",
+  activeRightTab: "opencode",
   openCenterTabs: ["overview", "diagnostics"],
   activeCenterTab: "overview",
 };
@@ -61,7 +61,7 @@ const VALID_BOTTOM_TABS = new Set<BottomPanelTab>([
   "upload",
   "logs",
 ]);
-const VALID_RIGHT_TABS = new Set<RightPanelTab>(["native-ai"]);
+const VALID_RIGHT_TABS = new Set<RightPanelTab>(["opencode"]);
 const VALID_CENTER_TABS = new Set<CenterTabId>([
   "overview",
   "diagnostics",

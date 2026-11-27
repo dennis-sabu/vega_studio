@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -195,6 +196,32 @@ def _format_board_summary(board_service: BoardService, project_dir: Optional[Pat
     return board_id, lines
 
 
+_WORKSPACE_OR_CODE_FILE_RE = re.compile(
+    r"(?:\b[\w\-./]+\.(?:c|h|cpp|hpp|cc|s|asm|py|ld|mk|sh|json|yaml|yml|md|txt|conf)\b|\bmakefile\b|\bcmakelists\b|\bprj\.conf\b|\bsrc/)",
+    re.IGNORECASE,
+)
+_WORKSPACE_OR_CODE_INTENT_RE = re.compile(
+    r"\b("
+    r"workspace|project|codebase|repo|repository|directory|folder|files?|build|compile|compiler|linker|"
+    r"diagnostics?|errors?|warnings?|git|branch|diff|sdk\s+doctor|board\s+config|upload|flash|"
+    r"write|code|coding|program|implement|create|generate|edit|modify|update|change|refactor|"
+    r"fix|debug|patch|review|inspect|check|read|look\s+into|look\s+at|analy[sz]e|"
+    r"summarize\s+this|explain\s+this|snippet|function|driver|firmware"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def prompt_requests_workspace_or_code(prompt: str, *, has_attachments: bool = False) -> bool:
+    """Return True only when the user explicitly attaches context or asks about code/workspace."""
+    if has_attachments:
+        return True
+    cleaned = (prompt or "").strip()
+    if not cleaned:
+        return False
+    return bool(_WORKSPACE_OR_CODE_FILE_RE.search(cleaned) or _WORKSPACE_OR_CODE_INTENT_RE.search(cleaned))
+
+
 def build_vega_system_prompt(
     *,
     app_settings: Settings,
@@ -210,83 +237,91 @@ def build_vega_system_prompt(
 
     proj_path: Optional[Path] = None
     proj_name: Optional[str] = None
+    board_id: Optional[str] = None
     summary_sections: List[str] = []
 
-    if project_dir:
-        try:
-            valid_dir = validate_directory_input(project_dir)
-            proj_path = valid_dir
-            summary = project_service.load_project(str(valid_dir))
-            proj_name = summary.project.name
-            summary_sections.append(
-                f"Active Project: {summary.project.name} (schema v{summary.project.schemaVersion}, "
-                f"arch={summary.project.target.arch}, machine={summary.project.target.machine}, "
-                f"board={summary.project.target.board or 'unset'})"
-            )
-        except Exception:
-            if proj_path is not None:
-                proj_name = proj_path.name
-                summary_sections.append(f"Workspace Directory: {proj_path.name}")
-
-    board_id, board_lines = _format_board_summary(board_service, proj_path)
-    summary_sections.extend(board_lines)
-
-    # SDK summary (no secrets)
-    try:
-        cfg_state = sdk_service.get_config_state()
-        report = sdk_service.get_diagnostics_state()
-        sdk_cfg = cfg_state.config
-        summary_sections.append(
-            f"SDK Toolchain Config: prefix={sdk_cfg.cross_compile_prefix}, "
-            f"target_arch={sdk_cfg.target_arch}, target_machine={sdk_cfg.target_machine}"
-        )
-        if report is not None:
-            summary_sections.append(
-                f"SDK Doctor Last Check: overall={report.overall_status} "
-                f"({report.summary.passed} pass, {report.summary.warning} warn, {report.summary.failed} fail)"
-            )
-    except Exception:
-        pass
-
-    tree_paths: List[str] = []
-    if include_workspace_summary and proj_path is not None and proj_path.is_dir():
-        tree_paths = _collect_bounded_tree(proj_path, max_depth=2, limit=_MAX_TREE_ENTRIES)
-        if tree_paths:
-            summary_sections.append("Project Structure (top 2 levels, sensitive files excluded): " + ", ".join(tree_paths[:35]))
-        if _detect_zephyr_hint(proj_path, tree_paths):
-            summary_sections.append("Project Indicator: Zephyr RTOS references detected in workspace.")
-
-        # Latest build diagnostics summary (if matching project)
-        try:
-            build_state = get_build_service().get_build_state()
-            latest = build_state.latest_build
-            if latest and Path(latest.project_dir).resolve(strict=False) == proj_path.resolve(strict=False):
+    if include_workspace_summary:
+        if project_dir:
+            try:
+                valid_dir = validate_directory_input(project_dir)
+                proj_path = valid_dir
+                summary = project_service.load_project(str(valid_dir))
+                proj_name = summary.project.name
                 summary_sections.append(
-                    f"Latest Build: {latest.operation} status={latest.status} exit={latest.exit_code} "
-                    f"errors={latest.error_count} warnings={latest.warning_count}"
+                    f"Active Project: {summary.project.name} (schema v{summary.project.schemaVersion}, "
+                    f"arch={summary.project.target.arch}, machine={summary.project.target.machine}, "
+                    f"board={summary.project.target.board or 'unset'})"
                 )
-                diags = build_state.diagnostics[:8]
-                if diags:
-                    diag_strs = [
-                        f"- [{d.severity}] {(d.relative_path or d.file_path or '?')}:{d.line or '?'} {d.message}"
-                        for d in diags
-                    ]
-                    summary_sections.append("Recent Build Diagnostics:\n" + "\n".join(diag_strs))
+            except Exception:
+                if proj_path is not None:
+                    proj_name = proj_path.name
+                    summary_sections.append(f"Workspace Directory: {proj_path.name}")
+
+        board_id, board_lines = _format_board_summary(board_service, proj_path)
+        summary_sections.extend(board_lines)
+
+        # SDK summary (no secrets)
+        try:
+            cfg_state = sdk_service.get_config_state()
+            report = sdk_service.get_diagnostics_state()
+            sdk_cfg = cfg_state.config
+            summary_sections.append(
+                f"SDK Toolchain Config: prefix={sdk_cfg.cross_compile_prefix}, "
+                f"target_arch={sdk_cfg.target_arch}, target_machine={sdk_cfg.target_machine}"
+            )
+            if report is not None:
+                summary_sections.append(
+                    f"SDK Doctor Last Check: overall={report.overall_status} "
+                    f"({report.summary.passed} pass, {report.summary.warning} warn, {report.summary.failed} fail)"
+                )
         except Exception:
             pass
+
+        tree_paths: List[str] = []
+        if proj_path is not None and proj_path.is_dir():
+            tree_paths = _collect_bounded_tree(proj_path, max_depth=2, limit=_MAX_TREE_ENTRIES)
+            if tree_paths:
+                summary_sections.append("Project Structure (top 2 levels, sensitive files excluded): " + ", ".join(tree_paths[:35]))
+            if _detect_zephyr_hint(proj_path, tree_paths):
+                summary_sections.append("Project Indicator: Zephyr RTOS references detected in workspace.")
+
+            # Latest build diagnostics summary (if matching project)
+            try:
+                build_state = get_build_service().get_build_state()
+                latest = build_state.latest_build
+                if latest and Path(latest.project_dir).resolve(strict=False) == proj_path.resolve(strict=False):
+                    summary_sections.append(
+                        f"Latest Build: {latest.operation} status={latest.status} exit={latest.exit_code} "
+                        f"errors={latest.error_count} warnings={latest.warning_count}"
+                    )
+                    diags = build_state.diagnostics[:8]
+                    if diags:
+                        diag_strs = [
+                            f"- [{d.severity}] {(d.relative_path or d.file_path or '?')}:{d.line or '?'} {d.message}"
+                            for d in diags
+                        ]
+                        summary_sections.append("Recent Build Diagnostics:\n" + "\n".join(diag_strs))
+            except Exception:
+                pass
 
     tools_note = (
         "Read-only workspace inspection tools are enabled (`list_project_files`, `read_project_file`, "
         "`get_board_and_sdk_status`, `get_recent_build_diagnostics`, `get_git_status_summary`). "
-        "Use `read_project_file` when you need exact C headers, linker scripts, Makefiles, or source lines before claiming implementation details."
+        "Because the user asked about code or the workspace, inspect relevant files with these tools before writing or suggesting code."
         if allow_tools
-        else "Workspace context tools are disabled for this turn; rely only on verified context summary and user-attached snippets."
+        else "Workspace context tools are disabled for this turn; act as a conversational chatbot and answer only what the user asked."
     )
 
     system_text = "\n".join(
         [
             "You are the Native VEGA AI Assistant integrated inside VEGA Studio.",
             "Specialization: VEGA ARIES V3 (C-DAC), VEGA ET1031 RISC-V 32-bit MCU, `rv32i_zicsr` ISA, `THEJAS32` machine configuration, `riscv32-vega-elf` GCC/Make toolchain, Zephyr RTOS when used in the project, bare-metal C firmware, linker/startup code, SRAM/stack constraints, USB-UART serial communication (`vega_xmodem.py`), peripheral bring-up, and embedded debugging.",
+            "",
+            "Chatbot Behavior & Permission Rules (CRITICAL):",
+            "1. Act as a helpful, concise conversational chatbot by default. Do ONLY what the user explicitly asks.",
+            "2. NEVER jump straight into writing code, generating firmware files, or inspecting the workspace unless the user explicitly asks you to write, edit, review, or debug code or inspect their project.",
+            "3. For greetings, general chat, or conceptual questions, reply conversationally in plain text without unsolicited code blocks or workspace assumptions.",
+            "4. When (and ONLY when) the user explicitly asks you to write or change code or inspect the project, look into the workspace first (using attached context or read-only tools if enabled) so your code matches the actual project.",
             "",
             "Accuracy & Grounding Rules (CRITICAL):",
             "1. NEVER invent undocumented VEGA SDK functions, HAL names, peripheral register addresses, bitfields, or hardware capabilities.",
@@ -298,7 +333,15 @@ def build_vega_system_prompt(
             f"Tools Policy: {tools_note}",
             "",
             "Verified IDE & Project Context:",
-            *([f"  {s}" for s in summary_sections] if summary_sections else ["  No active project selected."]),
+            *(
+                [f"  {s}" for s in summary_sections]
+                if summary_sections
+                else [
+                    "  Chat mode active (workspace files are inspected only when you ask to write, debug, or review code)."
+                    if not include_workspace_summary
+                    else "  No active project selected."
+                ]
+            ),
         ]
     )
     cleaned_prompt = scrub_ai_secrets(system_text, extra_secrets=extra_secrets)

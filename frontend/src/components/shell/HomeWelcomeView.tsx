@@ -127,8 +127,8 @@ export function HomeWelcomeView({
     if (trimmed && onAskAiPrompt) {
       items.push({
         id: "ask-vega-ai",
-        label: `Ask VEGA Assistant: "${trimmed}"`,
-        hint: "Native AI",
+        label: `Ask VEGA AI: "${trimmed}"`,
+        hint: "VEGA AI",
         action: () => onAskAiPrompt(trimmed),
       });
     }
@@ -398,7 +398,7 @@ export function HomeWelcomeView({
                 value={query}
                 onChange={(e) => handleTextareaChange(e.target.value)}
                 onKeyDown={handleTextareaKeyDown}
-                aria-label="Ask VEGA Assistant or search IDE actions"
+                aria-label="Ask VEGA AI or search IDE actions"
                 placeholder="Ask anything..."
                 className="vega-scroll max-h-[200px] min-h-[27px] w-full resize-none border-0 bg-transparent text-[17px] leading-[1.55] text-[#f5f7ff] placeholder:text-[#b6c3df] focus:outline-none"
                 style={{ fontFamily: "var(--font-composer)" }}

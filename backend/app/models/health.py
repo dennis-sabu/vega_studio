@@ -46,5 +46,6 @@ class DiagnosticsExportResponse(BaseModel):
     boards: Dict[str, Any]
     git: Dict[str, Any]
     github: Dict[str, Any]
+    opencode: Dict[str, Any]
     ai: Dict[str, Any]
     recent_backend_logs: List[str]

@@ -45,7 +45,7 @@ interface BottomPanelProps {
     line: number,
     column?: number
   ) => void;
-  onExplainDiagnosticNativeAi?: (diag: BuildDiagnostic) => void;
+  onExplainDiagnostic?: (diag: BuildDiagnostic) => void;
   onOpenSdkDoctor: () => void;
 }
 
@@ -123,7 +123,7 @@ export function BottomPanel({
   onCollapse,
   onClearLogs,
   onOpenDiagnosticLocation,
-  onExplainDiagnosticNativeAi,
+  onExplainDiagnostic,
   onOpenSdkDoctor,
 }: BottomPanelProps) {
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -369,14 +369,14 @@ export function BottomPanel({
                     </div>
 
                     <div className="flex shrink-0 items-center gap-1.5">
-                      {onExplainDiagnosticNativeAi && (
+                      {onExplainDiagnostic && (
                         <button
                           type="button"
-                          onClick={() => onExplainDiagnosticNativeAi(diag)}
+                          onClick={() => onExplainDiagnostic(diag)}
                           className="inline-flex h-6 items-center gap-1 rounded border border-[#7AA2FF]/30 bg-[#7AA2FF]/12 px-2 font-sans text-[10.5px] font-medium text-[#F4F4F5] hover:bg-[#7AA2FF]/22"
                         >
                         <Bot className="h-3 w-3 text-[#7AA2FF]" />
-                          <span>Ask Native AI</span>
+                          <span>Ask VEGA AI</span>
                         </button>
                       )}
                       {canNavigate && diag.relative_path && diag.line && (

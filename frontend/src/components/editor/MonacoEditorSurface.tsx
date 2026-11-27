@@ -24,7 +24,8 @@ import type {
   EditorSettings,
 } from"@/types/editor";
 import type { OpenFileTab } from"@/types/explorer";
-import type { AICodeApplyMode, AIContextAttachment } from"@/types/ai";
+import type { AICodeApplyMode } from"@/types/ai";
+import type { OpenCodeContextAttachment } from"@/types/opencode";
 
 export interface MonacoEditorHandle {
   triggerFind: () => void;
@@ -48,8 +49,8 @@ interface MonacoEditorSurfaceProps {
   onCursorChange: (pos: EditorCursorPosition) => void;
   onSaveShortcut: (uid: string) => void;
   onConsumeReveal?: (nonce: number) => void;
-  onAskNativeAi?: (
-    ctx: AIContextAttachment,
+  onSendContextToAI?: (
+    ctx: OpenCodeContextAttachment,
     suggestedPrompt?: string
   ) => void;
 }
@@ -66,7 +67,7 @@ export const MonacoEditorSurface = forwardRef<
     onCursorChange,
     onSaveShortcut,
     onConsumeReveal,
-    onAskNativeAi,
+    onSendContextToAI,
   },
   ref
 ) {
@@ -85,14 +86,14 @@ export const MonacoEditorSurface = forwardRef<
   const onCursorChangeRef = useRef(onCursorChange);
   const onSaveShortcutRef = useRef(onSaveShortcut);
   const onConsumeRevealRef = useRef(onConsumeReveal);
-  const onAskNativeAiRef = useRef(onAskNativeAi);
+  const onSendContextToAIRef = useRef(onSendContextToAI);
   useEffect(() => {
     activeTabRef.current = activeTab;
     onDirtyChangeRef.current = onDirtyChange;
     onCursorChangeRef.current = onCursorChange;
     onSaveShortcutRef.current = onSaveShortcut;
     onConsumeRevealRef.current = onConsumeReveal;
-    onAskNativeAiRef.current = onAskNativeAi;
+    onSendContextToAIRef.current = onSendContextToAI;
   });
 
   useImperativeHandle(
@@ -252,50 +253,50 @@ export const MonacoEditorSurface = forwardRef<
 
         actionDisposables.push(
           editor.addAction({
-            id: "vega.nativeAi.explainSelection",
-            label: "Explain Selection (Native VEGA AI)",
+            id: "vega.opencode.explainSelection",
+            label: "Explain Selection in VEGA AI",
             precondition: "editorHasSelection",
             contextMenuGroupId: "9_cutcopypaste",
-            contextMenuOrder: 14,
+            contextMenuOrder: 10,
             run: () => {
               const ctx = buildSelectionAttachment();
               if (ctx) {
-                onAskNativeAiRef.current?.(
+                onSendContextToAIRef.current?.(
                   ctx,
-                  `Explain this selection from ${ctx.relative_path ?? ctx.title} in the context of VEGA firmware:`
+                  `Explain this selection from ${ctx.relative_path ?? ctx.title}:`
                 );
               }
             },
           }),
           editor.addAction({
-            id: "vega.nativeAi.fixSelection",
-            label: "Review / Suggest Fix (Native VEGA AI)",
+            id: "vega.opencode.fixSelection",
+            label: "Fix Selection in VEGA AI",
             precondition: "editorHasSelection",
             contextMenuGroupId: "9_cutcopypaste",
-            contextMenuOrder: 15,
+            contextMenuOrder: 11,
             run: () => {
               const ctx = buildSelectionAttachment();
               if (ctx) {
-                onAskNativeAiRef.current?.(
+                onSendContextToAIRef.current?.(
                   ctx,
-                  `Review and suggest embedded C/RISC-V fixes for this selection in ${ctx.relative_path ?? ctx.title}:`
+                  `Review and suggest a fix for this code in ${ctx.relative_path ?? ctx.title}:`
                 );
               }
             },
           }),
           editor.addAction({
-            id: "vega.nativeAi.askFile",
-            label: "Ask Native VEGA AI about File",
+            id: "vega.opencode.sendFile",
+            label: "Send File to VEGA AI",
             contextMenuGroupId: "9_cutcopypaste",
-            contextMenuOrder: 16,
+            contextMenuOrder: 12,
             run: () => {
               const tab = activeTabRef.current;
               const model = editor.getModel();
               if (!tab || !model) return;
               const raw = model.getValue();
-              const truncated = raw.length > 6000;
-              const snippet = truncated ? raw.slice(0, 6000) : raw;
-              onAskNativeAiRef.current?.(
+              const truncated = raw.length > 4000;
+              const snippet = truncated ? raw.slice(0, 4000) : raw;
+              onSendContextToAIRef.current?.(
                 {
                   kind: "file",
                   title: tab.name,
@@ -304,7 +305,7 @@ export const MonacoEditorSurface = forwardRef<
                   snippet,
                   truncated,
                 },
-                `Analyze ${tab.path} for VEGA firmware development:`
+                `Inspect ${tab.path}:`
               );
             },
           })

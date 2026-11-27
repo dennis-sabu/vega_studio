@@ -92,9 +92,9 @@ export interface NativeAiPanelProps {
 }
 
 const STARTER_PROMPTS = [
-  "Summarize this VEGA ARIES V3 project structure, target config, and Makefile setup.",
-  "Review the active file for rv32i_zicsr / ET1031 embedded C safety and memory usage.",
-  "Explain the latest build diagnostics and suggest fixes.",
+  "Hi! What can you help me with?",
+  "Look into my workspace and summarize this project structure.",
+  "Check the latest build diagnostics and suggest fixes.",
 ];
 
 function ToolTracesBlock({ traces }: { traces: AIToolTraceItem[] }) {
@@ -387,7 +387,7 @@ export function NativeAiPanel({
             <button
               type="button"
               onClick={() => onToggleTools(!toolsEnabled)}
-              title="Toggle safe read-only workspace inspection tools"
+              title="Allow read-only workspace inspection when you ask to write, review, or debug code"
               className={`inline-flex items-center gap-1 rounded-[4px] border px-1.5 py-0.5 transition-colors ${
                 toolsEnabled
                   ? "border-[#7AA2FF]/35 bg-[#7AA2FF]/12 text-[#7AA2FF]"
@@ -459,58 +459,89 @@ export function NativeAiPanel({
           </div>
         )}
 
-        {/* Feedback / Cross-Project Warnings */}
+        {/* Feedback & Cross-Project Warnings */}
         {error && (
-        <div className="flex items-start justify-between gap-2 rounded-lg border border-red-400/30 bg-red-500/12 px-2.5 py-2 text-[11px] text-red-200">
-          <div className="flex min-w-0 items-start gap-1.5">
-            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span className="break-words">{error}</span>
-            </div>
-            <button
-              type="button"
-              onClick={onClearFeedback}
-              aria-label="Dismiss error"
-              className="rounded p-0.5 hover:bg-[#2D2D31]"
-            >
-            <X className="h-3 w-3" />
-            </button>
+        <div
+          role="alert"
+          className="flex items-start gap-2.5 rounded-[8px] border border-red-400/25 bg-[#181818] px-3 py-2.5 shadow-sm"
+        >
+          <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] border border-red-400/30 bg-red-500/12 text-red-300">
+            <AlertCircle className="h-3.5 w-3.5" />
           </div>
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <div className="font-mono text-[10px] font-semibold tracking-[0.06em] text-red-300 uppercase">
+              AI Error
+            </div>
+            <span className="block break-words text-[11.5px] leading-relaxed text-[#F4F4F5]">
+              {error}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onClearFeedback}
+            aria-label="Dismiss error"
+            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[5px] text-[#B4B4BC] transition-colors hover:bg-[#252527] hover:text-[#F4F4F5]"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
         )}
 
         {notice && !error && (
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-400/25 bg-emerald-500/10 px-2.5 py-1.5 text-[11px] text-emerald-200">
-          <span className="truncate">{notice}</span>
-            <button
-              type="button"
-              onClick={onClearFeedback}
-              aria-label="Dismiss notice"
-              className="rounded p-0.5 hover:bg-[#2D2D31]"
-            >
-            <X className="h-3 w-3" />
-            </button>
+        <div
+          role="status"
+          className="flex items-start gap-2.5 rounded-[8px] border border-emerald-400/25 bg-[#181818] px-3 py-2.5 shadow-sm"
+        >
+          <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] border border-emerald-400/30 bg-emerald-500/12 text-emerald-300">
+            <Sparkles className="h-3.5 w-3.5" />
           </div>
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <div className="font-mono text-[10px] font-semibold tracking-[0.06em] text-emerald-300 uppercase">
+              Notice
+            </div>
+            <span className="block break-words text-[11.5px] leading-relaxed text-[#F4F4F5]">
+              {notice}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onClearFeedback}
+            aria-label="Dismiss notice"
+            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[5px] text-[#B4B4BC] transition-colors hover:bg-[#252527] hover:text-[#F4F4F5]"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
         )}
 
         {isCrossProjectConversation && activeProject && activeConversation && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 py-2 text-[10.5px] text-amber-200">
-          <div className="flex items-start gap-1.5">
-            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>
-                This chat is bound to{""}
-                <span className="font-mono font-semibold">
+        <div className="space-y-2 rounded-[8px] border border-amber-400/30 bg-[#181818] p-3 text-[11.5px] shadow-sm">
+          <div className="flex items-start gap-2.5">
+            <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] border border-amber-400/30 bg-amber-500/12 text-amber-300">
+              <AlertTriangle className="h-3.5 w-3.5" />
+            </div>
+            <div className="min-w-0 flex-1 space-y-0.5">
+              <div className="font-mono text-[10px] font-semibold tracking-[0.06em] text-amber-300 uppercase">
+                Workspace Isolation
+              </div>
+              <span className="block leading-relaxed text-[#E4E4E7]">
+                This chat is bound to{" "}
+                <span className="font-mono font-semibold text-[#F4F4F5]">
                   {activeConversation.project_name}
                 </span>
                 .
               </span>
             </div>
-            <button
-              type="button"
-              onClick={onCreateConversation}
-              className="rounded border border-amber-300/40 bg-amber-400/20 px-2 py-0.5 font-mono text-[10px] font-medium hover:bg-amber-400/30"
-            >
-              New Chat for {activeProject.project.name}
-            </button>
           </div>
+          <button
+            type="button"
+            onClick={onCreateConversation}
+            className="inline-flex h-7 items-center gap-1.5 rounded-[6px] border border-[#7AA2FF]/40 bg-[#7AA2FF]/16 px-2.5 font-mono text-[10.5px] font-medium text-[#F4F4F5] hover:bg-[#7AA2FF]/26"
+          >
+            <Plus className="h-3 w-3 text-[#7AA2FF]" />
+            <span>New Chat for {activeProject.project.name}</span>
+          </button>
+        </div>
         )}
       </div>
 
@@ -520,38 +551,46 @@ export function NativeAiPanel({
         className="vega-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3"
       >
         {!providerReady && (
-        <div className="rounded-xl border border-amber-400/25 bg-[#1F1F1F] p-3.5 space-y-2">
-          <div className="flex items-center gap-2 text-xs font-medium text-[#F4F4F5]">
-            <AlertTriangle className="h-4 w-4 text-amber-300" />
-              <span>AI Provider Configuration Required</span>
+        <div className="space-y-2.5 rounded-[8px] border border-[#2D2D30] bg-[#181818] p-4">
+          <div className="flex items-start gap-2.5">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] border border-amber-400/30 bg-amber-500/12 text-amber-300">
+              <AlertTriangle className="h-4 w-4" />
             </div>
-            <p className="text-[11px] leading-relaxed text-[#E4E4E7]">
-              {activeProviderStatus?.status_reason ||
-                "Configure OpenAI, Groq, or an OpenAI-compatible local endpoint and store your key securely in the OS credential manager."}
-            </p>
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="text-xs font-medium text-[#F4F4F5]">
+                AI Provider Configuration Required
+              </div>
+              <p className="text-[11.5px] leading-relaxed text-[#B4B4BC]">
+                {activeProviderStatus?.status_reason ||
+                  "Configure OpenAI, Groq, or an OpenAI-compatible local endpoint and store your key securely in the OS credential manager."}
+              </p>
+            </div>
+          </div>
+          <div className="border-t border-[#2D2D30] pt-3">
             <button
               type="button"
               onClick={onOpenSettings}
-              className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-[#7AA2FF]/40 bg-[#7AA2FF]/18 px-3 font-mono text-[10.5px] text-[#F4F4F5] hover:bg-[#7AA2FF]/28"
+              className="inline-flex h-7 items-center gap-1.5 rounded-[6px] border border-[#7AA2FF]/45 bg-[#7AA2FF]/18 px-3 font-mono text-[10.5px] font-medium text-[#F4F4F5] hover:bg-[#7AA2FF]/28"
             >
-            <Settings className="h-3 w-3 text-[#7AA2FF]" />
+              <Settings className="h-3 w-3 text-[#7AA2FF]" />
               <span>Configure AI Provider</span>
             </button>
           </div>
+        </div>
         )}
 
         {messages.length === 0 ? (
         <div className="space-y-3">
           <div className="rounded-xl border border-[#2D2D30] bg-[#1F1F1F] p-3.5 space-y-1.5">
             <span className="font-mono text-[10px] font-semibold tracking-wider text-[#7AA2FF] uppercase">
-                Native VEGA Firmware Assistant
+                VEGA AI Chat Assistant
               </span>
               <p className="text-[11.5px] leading-relaxed text-[#E4E4E7]">
-                Grounded technical guidance for{""}
+                Chat normally or ask questions about{""}
                 <span className="font-mono text-[#F4F4F5]">
-                  VEGA ARIES V3 · ET1031 · rv32i_zicsr · THEJAS32
+                  VEGA ARIES V3 · ET1031 · rv32i_zicsr
                 </span>
-                . Attach files, selections, compiler errors, serial or terminal output, then review code suggestions before applying.
+                . Your workspace files are inspected only when you ask to write, debug, or review code (or attach context).
               </p>
             </div>
 
@@ -630,9 +669,10 @@ export function NativeAiPanel({
                 )}
 
                 {msg.error_message && (
-                <div className="mt-2 rounded-lg border border-red-400/30 bg-red-500/12 px-2.5 py-1.5 text-[11px] text-red-200">
-                    {msg.error_message}
-                  </div>
+                <div className="mt-2 flex items-start gap-2 rounded-[8px] border border-red-400/25 bg-[#181818] px-3 py-2 text-[11px] text-red-200">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-300" />
+                  <span className="break-words leading-relaxed">{msg.error_message}</span>
+                </div>
                 )}
 
                 {showRetry && (
@@ -836,7 +876,7 @@ export function NativeAiPanel({
             }}
             placeholder={
               providerReady
-                ? "Ask about VEGA ARIES V3, C firmware, Make, or errors…"
+                ? "Chat with AI, or ask to write code / inspect workspace…"
                 : "Configure an AI provider in Settings to start chatting…"
             }
             className="vega-scroll max-h-32 min-h-[42px] flex-1 resize-none bg-transparent px-1 text-xs text-[#F4F4F5] placeholder:text-[#8E8E98] focus:outline-none"
